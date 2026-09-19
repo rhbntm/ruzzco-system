@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  CASHIER
+  BARBER
+}
+
+enum PaymentMethod {
+  CASH
+  GCASH
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  role      Role     @default(BARBER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Barber {
+  id             String          @id @default(uuid())
+  fullName       String          @map("full_name")
+  commissionRate Decimal         @default(0.50) @db.Decimal(5, 2) @map("commission_rate")
+  isActive       Boolean         @default(true) @map("is_active")
+  transactions   Transaction[]
+  commissionLogs CommissionLog[]
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@map("barbers")
+}
+
+model Service {
+  id               String            @id @default(uuid())
+  name             String
+  standardPrice    Decimal           @db.Decimal(10, 2) @map("standard_price")
+  isActive         Boolean           @default(true) @map("is_active")
+  transactionItems TransactionItem[]
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  @@map("services")
+}
+
+model Transaction {
+  id                     String            @id // Client-generated UUID for offline idempotency
+  cashierId              String?           @map("cashier_id")
+  barberId               String            @map("barber_id")
+  barber                 Barber            @relation(fields: [barberId], references: [id])
+  totalAmount            Decimal           @db.Decimal(10, 2) @map("total_amount")
+  barberCommissionAmount Decimal           @db.Decimal(10, 2) @map("barber_commission_amount")
+  paymentMethod          PaymentMethod     @default(CASH) @map("payment_method")
+  paymentReference       String?           @map("payment_reference")
+  transactionTime        DateTime          @map("transaction_time") // Client recorded time
+  syncedAt               DateTime          @default(now()) @map("synced_at") // Server receipt time
+  items                  TransactionItem[]
+  commissionLogs         CommissionLog[]
+  createdAt              DateTime          @default(now()) @map("created_at")
+
+  @@index([barberId])
+  @@index([transactionTime])
+  @@map("transactions")
+}
+
+model TransactionItem {
+  id            String      @id @default(uuid())
+  transactionId String      @map("transaction_id")
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  serviceId     String      @map("service_id")
+  service       Service     @relation(fields: [serviceId], references: [id])
+  priceAtSale   Decimal     @db.Decimal(10, 2) @map("price_at_sale")
+
+  @@index([transactionId])
+  @@index([serviceId])
+  @@map("transaction_items")
+}
+
+model CommissionLog {
+  id            String      @id @default(uuid())
+  barberId      String      @map("barber_id")
+  barber        Barber      @relation(fields: [barberId], references: [id])
+  transactionId String      @map("transaction_id")
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  amount        Decimal     @db.Decimal(10, 2)
+  loggedAt      DateTime    @default(now()) @map("logged_at")
+
+  @@index([barberId])
+  @@index([transactionId])
+  @@map("commission_logs")
+}
+
+model DailyRevenueForecast {
+  id                   BigInt   @id @default(autoincrement())
+  forecastDate         DateTime @db.Date @map("forecast_date")
+  predictedRevenue     Decimal  @db.Decimal(10, 2) @map("predicted_revenue")
+  confidenceLowerBound Decimal? @db.Decimal(10, 2) @map("confidence_lower_bound")
+  confidenceUpperBound Decimal? @db.Decimal(10, 2) @map("confidence_upper_bound")
+  predictedHeadcount   Int?     @map("predicted_headcount")
+  generatedAt          DateTime @default(now()) @map("generated_at")
+
+  @@unique([forecastDate])
+  @@map("daily_revenue_forecasts")
+}
