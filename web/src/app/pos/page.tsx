@@ -69,7 +69,10 @@ export default function MobilePOSPage() {
   const localTransactions = useLiveQuery(
     async () => {
       if (typeof window === "undefined") return [];
-      return await db.transactions.reverse().sortBy("transactionTime");
+      // .orderBy() uses the index then .reverse() flips it — newest-first.
+      // .reverse().sortBy() was a no-op: sortBy collects ascending in memory,
+      // the .reverse() on the Collection object never applied.
+      return await db.transactions.orderBy("transactionTime").reverse().toArray();
     },
     [],
     []

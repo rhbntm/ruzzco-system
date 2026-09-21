@@ -51,9 +51,22 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Calculate commission (default to 50% if barber commissionRate not found)
-      const commissionRate = barberRates.get(item.barberId) ?? 0.5;
+      // Reject unknown barber IDs — the client catalog cache always has valid IDs.
+      // Silently defaulting to 0.5 commission would produce incorrect commission records.
+      if (!barberRates.has(item.barberId)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Unknown barberId: "${item.barberId}". Refresh the POS catalog and retry.`,
+            invalidTransactionId: item.id,
+          },
+          { status: 400 }
+        );
+      }
+
+      const commissionRate = barberRates.get(item.barberId)!;
       const commissionAmount = Math.round(item.totalAmount * commissionRate * 100) / 100;
+
 
       // Insert transaction, line item, and commission log atomically
       await prisma.transaction.create({
