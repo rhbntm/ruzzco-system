@@ -30,14 +30,15 @@ model User {
 }
 
 model Barber {
-  id             String          @id @default(uuid())
-  fullName       String          @map("full_name")
-  commissionRate Decimal         @default(0.50) @db.Decimal(5, 2) @map("commission_rate")
-  isActive       Boolean         @default(true) @map("is_active")
-  transactions   Transaction[]
-  commissionLogs CommissionLog[]
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  id              String             @id @default(uuid())
+  fullName        String             @map("full_name")
+  commissionRate  Decimal            @default(0.50) @db.Decimal(5, 2) @map("commission_rate")
+  isActive        Boolean            @default(true) @map("is_active")
+  transactions    Transaction[]
+  commissionLogs  CommissionLog[]
+  deviceAssignments DeviceAssignment[]
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
 
   @@map("barbers")
 }
@@ -99,6 +100,34 @@ model CommissionLog {
   @@index([barberId])
   @@index([transactionId])
   @@map("commission_logs")
+}
+
+model DeviceAssignment {
+  id         String    @id @default(uuid())
+  deviceKey  String    @map("device_key") // localStorage UUID, not a secret
+  barberId   String    @map("barber_id")
+  barber     Barber    @relation(fields: [barberId], references: [id])
+  assignedAt DateTime  @default(now()) @map("assigned_at")
+  revokedAt  DateTime? @map("revoked_at") // null = active binding
+
+  @@index([deviceKey])
+  @@index([barberId])
+  @@map("device_assignments")
+}
+
+model ShiftReconciliation {
+  id                 BigInt   @id @default(autoincrement())
+  reconciliationDate DateTime @db.Date @map("reconciliation_date")
+  expectedCash       Decimal  @db.Decimal(10, 2) @map("expected_cash")
+  countedCash        Decimal  @db.Decimal(10, 2) @map("counted_cash")
+  variance           Decimal  @db.Decimal(10, 2)
+  gcashTotal         Decimal  @db.Decimal(10, 2) @map("gcash_total")
+  totalRevenue       Decimal  @db.Decimal(10, 2) @map("total_revenue")
+  note               String?  @db.Text
+  reconciledAt       DateTime @default(now()) @map("reconciled_at")
+
+  @@unique([reconciliationDate])
+  @@map("shift_reconciliations")
 }
 
 model DailyRevenueForecast {

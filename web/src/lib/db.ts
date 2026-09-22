@@ -29,10 +29,18 @@ export interface CachedService {
   isActive: boolean;
 }
 
+export interface LocalDeviceBinding {
+  deviceKey: string; // primary key — the localStorage UUID
+  barberId: string;
+  barberName: string;
+  assignedAt: string; // ISO datetime
+}
+
 export class RuzzcoPOSDatabase extends Dexie {
   transactions!: Table<LocalTransaction, string>;
   barbers!: Table<CachedBarber, string>;
   services!: Table<CachedService, string>;
+  deviceBindings!: Table<LocalDeviceBinding, string>;
 
   constructor() {
     super("RuzzcoPOSDB");
@@ -41,10 +49,31 @@ export class RuzzcoPOSDatabase extends Dexie {
       barbers: "id, fullName, isActive",
       services: "id, name, isActive",
     });
+    // v2: adds device binding persistence
+    this.version(2).stores({
+      transactions: "id, barberId, serviceId, transactionTime, synced",
+      barbers: "id, fullName, isActive",
+      services: "id, name, isActive",
+      deviceBindings: "deviceKey, barberId",
+    });
   }
 }
 
 export const db = new RuzzcoPOSDatabase();
+
+/**
+ * Returns the persistent device key for this browser. Creates and stores one
+ * on first call. This key is used for cashier attribution — it is not a secret.
+ */
+export function getOrCreateDeviceKey(): string {
+  const STORAGE_KEY = "ruzzco_device_key";
+  let key = localStorage.getItem(STORAGE_KEY);
+  if (!key) {
+    key = crypto.randomUUID();
+    localStorage.setItem(STORAGE_KEY, key);
+  }
+  return key;
+}
 
 // Default seed fallbacks matching database seed.ts
 export const DEFAULT_BARBERS: CachedBarber[] = [

@@ -34,6 +34,29 @@ export async function POST(request: NextRequest) {
       barbers.map((b) => [b.id, Number(b.commissionRate)])
     );
 
+    // Pre-build a deviceKey → cashierId map for keys present in this batch
+    const deviceKeys = [
+      ...new Set(
+        transactions
+          .map((t) => t.deviceKey)
+          .filter((k): k is string => typeof k === "string")
+      ),
+    ];
+    const deviceCashierMap = new Map<string, string>();
+    if (deviceKeys.length > 0) {
+      const assignments = await prisma.deviceAssignment.findMany({
+        where: { deviceKey: { in: deviceKeys }, revokedAt: null },
+        select: { deviceKey: true, barberId: true },
+        orderBy: { assignedAt: "desc" },
+      });
+      // Take the most recent active binding per deviceKey
+      for (const a of assignments) {
+        if (!deviceCashierMap.has(a.deviceKey)) {
+          deviceCashierMap.set(a.deviceKey, a.barberId);
+        }
+      }
+    }
+
     // Extract all IDs to check existing transactions in one query
     const incomingIds = transactions.map((t) => t.id);
     const existingTransactions = await prisma.transaction.findMany({
@@ -64,15 +87,48 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const commissionRate = barberRates.get(item.barberId)!;
-      const commissionAmount = Math.round(item.totalAmount * commissionRate * 100) / 100;
+      // Resolve authoritative barberId and cashierId from the device binding.
+      // When a device has an active server-side binding, the bound barberId is
+      // the authoritative source — the client payload is overridden. This closes
+      // the commission misattribution vector: a tampered client cannot claim a
+      // different barber's commission as long as the device key is bound.
+      let resolvedBarberId = item.barberId;
+      let cashierId: string | null = null;
 
+      if (item.deviceKey && deviceCashierMap.has(item.deviceKey)) {
+        const boundBarberId = deviceCashierMap.get(item.deviceKey)!;
+        cashierId = boundBarberId;
+        if (boundBarberId !== item.barberId) {
+          // Log discrepancy but always use the server-verified binding
+          console.warn(
+            `[sync] barberId mismatch for tx ${item.id}: client sent "${item.barberId}", ` +
+            `binding says "${boundBarberId}". Using binding.`
+          );
+        }
+        resolvedBarberId = boundBarberId;
+      }
+
+      // Re-validate resolvedBarberId in case the bound barber was removed
+      if (!barberRates.has(resolvedBarberId)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Resolved barberId "${resolvedBarberId}" is not a known active barber. Re-bind device and retry.`,
+            invalidTransactionId: item.id,
+          },
+          { status: 400 }
+        );
+      }
+
+      const resolvedCommissionRate = barberRates.get(resolvedBarberId)!;
+      const commissionAmount = Math.round(item.totalAmount * resolvedCommissionRate * 100) / 100;
 
       // Insert transaction, line item, and commission log atomically
       await prisma.transaction.create({
         data: {
           id: item.id,
-          barberId: item.barberId,
+          barberId: resolvedBarberId,
+          cashierId,
           totalAmount: item.totalAmount,
           barberCommissionAmount: commissionAmount,
           paymentMethod: item.paymentMethod,
@@ -87,7 +143,7 @@ export async function POST(request: NextRequest) {
           },
           commissionLogs: {
             create: {
-              barberId: item.barberId,
+              barberId: resolvedBarberId,
               amount: commissionAmount,
             },
           },
