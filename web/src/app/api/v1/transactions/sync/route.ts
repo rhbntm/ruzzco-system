@@ -99,11 +99,20 @@ export async function POST(request: NextRequest) {
         const boundBarberId = deviceCashierMap.get(item.deviceKey)!;
         cashierId = boundBarberId;
         if (boundBarberId !== item.barberId) {
-          // Log discrepancy but always use the server-verified binding
+          // Persist tamper evidence before proceeding. Awaited deliberately —
+          // this is the durable record; console.warn alone is lost on restart.
           console.warn(
             `[sync] barberId mismatch for tx ${item.id}: client sent "${item.barberId}", ` +
-            `binding says "${boundBarberId}". Using binding.`
+            `binding says "${boundBarberId}". Persisting to sync_mismatch_logs.`
           );
+          await prisma.syncMismatchLog.create({
+            data: {
+              transactionId: item.id,
+              deviceKey: item.deviceKey!, // always a string here: checked by outer if
+              claimedBarberId: item.barberId,
+              resolvedBarberId: boundBarberId,
+            },
+          });
         }
         resolvedBarberId = boundBarberId;
       }

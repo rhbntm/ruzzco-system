@@ -142,3 +142,19 @@ model DailyRevenueForecast {
   @@unique([forecastDate])
   @@map("daily_revenue_forecasts")
 }
+
+/// Persistent audit record written whenever the sync route overrides a client-supplied
+/// barberId with the server-authoritative device binding. console.warn alone is lost on
+/// restart; this table survives indefinitely and can be queried for tamper investigations.
+model SyncMismatchLog {
+  id               BigInt   @id @default(autoincrement())
+  transactionId    String   @map("transaction_id") // the tx whose barberId was overridden
+  deviceKey        String   @map("device_key")
+  claimedBarberId  String   @map("claimed_barber_id")  // what the client sent
+  resolvedBarberId String   @map("resolved_barber_id") // what the server binding says
+  detectedAt       DateTime @default(now()) @map("detected_at")
+
+  @@index([deviceKey])
+  @@index([transactionId])
+  @@map("sync_mismatch_logs")
+}

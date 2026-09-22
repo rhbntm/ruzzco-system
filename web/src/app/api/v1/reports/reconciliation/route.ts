@@ -7,6 +7,7 @@ const reconcileSchema = z.object({
   countedCash: z
     .number()
     .nonnegative("Counted cash cannot be negative")
+    .max(1_000_000, "Counted cash exceeds sanity limit (₱1,000,000)")
     .multipleOf(0.01),
   note: z.string().max(500).optional(),
 });
@@ -96,6 +97,19 @@ export async function POST(request: NextRequest) {
     }
 
     const { date, countedCash, note } = parsed.data;
+
+    // Server-side future-date guard. The UI has max={todayStr} but that's trivially
+    // bypassed. We compute "today" in PHT (UTC+8) so the boundary is correct for the
+    // shop's timezone regardless of where the request originates.
+    const phtNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    const todayPHT = phtNow.toISOString().slice(0, 10); // YYYY-MM-DD in PHT
+    if (date > todayPHT) {
+      return NextResponse.json(
+        { success: false, error: "Reconciliation date cannot be in the future" },
+        { status: 422 }
+      );
+    }
+
     const startOfDay = new Date(`${date}T00:00:00.000Z`);
     const endOfDay = new Date(`${date}T23:59:59.999Z`);
 
