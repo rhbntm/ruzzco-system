@@ -1,6 +1,6 @@
 # Ruzzco Barbers System (`ruzzco-system`)
 
-> **Offline-First Mobile POS & Revenue Forecasting Decision Support System**  
+> **Sales Management and Revenue Forecasting Decision Support System for Ruzzco Barbers Using Random Forest Regression**  
 > _Systems Plus Computer College (SPCC) — BSIT Capstone Project_
 
 ---
@@ -9,7 +9,7 @@
 
 - **Full-Stack Application (`web/`):** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, Prisma ORM, Dexie.js (IndexedDB).
 - **Database (`ruzzco-mysql`):** MySQL 8.0 running containerized on Docker (mapped to host port `3307`).
-- **ML Engine (`ml-service/`):** Python, FastAPI, Scikit-Learn (Random Forest time-series forecasting).
+- **ML Engine (`ml-service/`):** Python, FastAPI, Scikit-Learn (Random Forest Regression).
 
 ---
 
