@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0b0c10;
+  --foreground: #f1f5f9;
+  --brand-red: #dc2626;
+  --brand-red-dark: #991b1b;
+  --brand-blue: #2563eb;
+  --brand-surface: #12141a;
+  --brand-card: #161822;
+  --brand-border: #232734;
 }
 
 @theme inline {
@@ -10,17 +16,40 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-display: var(--font-oswald);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+/* Barber Shop Signature Barber Pole Striping */
+.bg-barber-pole {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #dc2626 0px,
+    #dc2626 12px,
+    #ffffff 12px,
+    #ffffff 24px,
+    #2563eb 24px,
+    #2563eb 36px,
+    #ffffff 36px,
+    #ffffff 48px
+  );
+}
+
+.bg-barber-pole-subtle {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(220, 38, 38, 0.45) 0px,
+    rgba(220, 38, 38, 0.45) 8px,
+    rgba(255, 255, 255, 0.25) 8px,
+    rgba(255, 255, 255, 0.25) 16px,
+    rgba(37, 99, 235, 0.45) 16px,
+    rgba(37, 99, 235, 0.45) 24px,
+    rgba(255, 255, 255, 0.25) 24px,
+    rgba(255, 255, 255, 0.25) 32px
+  );
 }

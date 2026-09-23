@@ -62,17 +62,48 @@ export class RuzzcoPOSDatabase extends Dexie {
 export const db = new RuzzcoPOSDatabase();
 
 /**
+ * Universally safe UUID generator.
+ * Works in secure (HTTPS / localhost) and non-secure (LAN HTTP on mobile devices) contexts.
+ */
+export function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // Standard UUID v4 via crypto.getRandomValues if available in non-secure contexts
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // Version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // Variant 10xx
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  // Math.random fallback
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
  * Returns the persistent device key for this browser. Creates and stores one
  * on first call. This key is used for cashier attribution — it is not a secret.
  */
 export function getOrCreateDeviceKey(): string {
   const STORAGE_KEY = "ruzzco_device_key";
-  let key = localStorage.getItem(STORAGE_KEY);
-  if (!key) {
-    key = crypto.randomUUID();
-    localStorage.setItem(STORAGE_KEY, key);
+  try {
+    let key = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+    if (!key) {
+      key = generateUUID();
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, key);
+      }
+    }
+    return key;
+  } catch {
+    return generateUUID();
   }
-  return key;
 }
 
 // Default seed fallbacks matching database seed.ts

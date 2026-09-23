@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { db, type LocalTransaction } from "@/lib/db";
 import { useLiveQuery } from "dexie-react-hooks";
+import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -124,17 +125,17 @@ export default function ShiftLogPage() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-400">
-        <RefreshCw className="w-5 h-5 animate-spin text-amber-500 mr-2" />
+      <div className="min-h-screen bg-[#0b0c10] flex items-center justify-center text-zinc-400">
+        <RefreshCw className="w-5 h-5 animate-spin text-red-500 mr-2" />
         <span>Loading shift log…</span>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased">
-      {/* Glow accent */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-48 bg-amber-500/8 blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white">
+      {/* Ambient Crimson Glow */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-48 bg-red-600/10 blur-3xl pointer-events-none" />
 
       <div className="relative max-w-3xl mx-auto px-4 py-4 space-y-5">
         {/* Header */}
@@ -144,14 +145,14 @@ export default function ShiftLogPage() {
             className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors py-1.5 pr-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>POS</span>
+            <span>POS Station</span>
           </Link>
 
-          <div className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center">
-              <Scissors className="w-3.5 h-3.5" />
-            </div>
-            <span className="font-bold tracking-tight text-sm text-white">SHIFT LOG</span>
+          <div className="flex items-center gap-2">
+            <RuzzcoLogoBadge size={28} showBorder={false} />
+            <span className="font-extrabold tracking-wider text-base text-white uppercase font-[family-name:var(--font-oswald)]">
+              RUZZCO SHIFT LOG
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -159,7 +160,7 @@ export default function ShiftLogPage() {
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
                 isOnline
                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                  : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                  : "bg-red-500/10 text-red-400 border-red-500/20"
               }`}
             >
               {isOnline ? (
@@ -172,11 +173,11 @@ export default function ShiftLogPage() {
               onClick={handleSync}
               disabled={isSyncing || !isOnline}
               title="Sync pending transactions"
-              className="relative p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-40 transition-all cursor-pointer"
+              className="relative p-2 rounded-lg bg-[#12141a] border border-[#232734] text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-40 transition-all cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-amber-400" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-red-400" : ""}`} />
               {(pendingCount ?? 0) > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-black text-[9px] font-extrabold flex items-center justify-center animate-pulse">
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-extrabold flex items-center justify-center animate-pulse">
                   {pendingCount}
                 </span>
               )}
@@ -186,8 +187,8 @@ export default function ShiftLogPage() {
 
         {/* Sync feedback */}
         {syncFeedback && (
-          <div className="p-2.5 rounded-lg bg-zinc-900/90 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
-            <Scissors className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <div className="p-2.5 rounded-lg bg-[#12141a] border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
+            <Scissors className="w-3.5 h-3.5 text-red-400 shrink-0" />
             {syncFeedback}
           </div>
         )}
@@ -204,7 +205,7 @@ export default function ShiftLogPage() {
             {
               label: "Total Revenue",
               value: `₱${(cashTotal + gcashTotal).toFixed(2)}`,
-              accent: "text-amber-400",
+              accent: "text-red-400 font-bold",
               sub: "all methods",
             },
             {
@@ -222,40 +223,42 @@ export default function ShiftLogPage() {
           ].map((card) => (
             <div
               key={card.label}
-              className="p-3 rounded-xl bg-zinc-900/70 border border-zinc-800/80 space-y-1"
+              className="p-3.5 rounded-xl bg-[#12141a] border border-[#232734] space-y-1 relative overflow-hidden"
             >
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
               <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
                 {card.label}
               </div>
-              <div className={`text-lg font-extrabold ${card.accent}`}>{card.value}</div>
-              <div className="text-[10px] text-zinc-600">{card.sub}</div>
+              <div className={`text-xl font-extrabold font-[family-name:var(--font-oswald)] ${card.accent}`}>{card.value}</div>
+              <div className="text-[10px] text-zinc-500">{card.sub}</div>
             </div>
           ))}
         </section>
 
         {/* Transaction Feed */}
-        <section className="space-y-2">
+        <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] flex items-center gap-1.5">
+              <BarberPoleIcon className="w-2.5 h-4" />
               All Transactions (This Device)
             </span>
-            <span className="text-[11px] text-zinc-500">{localTransactions?.length ?? 0} total</span>
+            <span className="text-[11px] text-zinc-500">{localTransactions?.length ?? 0} total cuts</span>
           </div>
 
           <div className="space-y-2">
             {(!localTransactions || localTransactions.length === 0) ? (
-              <div className="p-8 rounded-xl bg-zinc-900/30 border border-dashed border-zinc-800 text-center text-xs text-zinc-500 space-y-1">
+              <div className="p-8 rounded-xl bg-[#12141a]/60 border border-dashed border-[#232734] text-center text-xs text-zinc-500 space-y-1">
                 <p>No transactions logged on this device yet.</p>
-                <p className="text-[11px] text-zinc-600">Head back to the POS to record a cut.</p>
+                <p className="text-[11px] text-zinc-600">Head back to the POS station to record a cut.</p>
               </div>
             ) : (
               localTransactions.map((tx) => (
                 <div
                   key={tx.id}
-                  className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800/80 flex items-center justify-between gap-3 text-xs"
+                  className="p-3 rounded-xl bg-[#12141a] border border-[#232734] flex items-center justify-between gap-3 text-xs"
                 >
                   <div className="space-y-0.5 truncate min-w-0">
-                    <div className="font-medium text-zinc-200 truncate flex items-center gap-1.5">
+                    <div className="font-semibold text-zinc-200 truncate flex items-center gap-1.5">
                       <span>{tx.serviceName}</span>
                       <span className="text-[10px] text-zinc-500 shrink-0">• {tx.barberName}</span>
                     </div>
@@ -275,18 +278,18 @@ export default function ShiftLogPage() {
                   <div className="flex items-center gap-2.5 shrink-0">
                     {/* Payment method badge */}
                     {tx.paymentMethod === "GCASH" ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-semibold">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-semibold">
                         <Smartphone className="w-2.5 h-2.5" />
                         GCash
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-600/10 border border-red-500/20 text-red-400 text-[10px] font-semibold">
                         <Banknote className="w-2.5 h-2.5" />
                         Cash
                       </span>
                     )}
 
-                    <span className="font-bold text-sm text-zinc-100">
+                    <span className="font-bold text-base text-zinc-100 font-[family-name:var(--font-oswald)]">
                       ₱{Number(tx.totalAmount).toFixed(2)}
                     </span>
 
@@ -301,7 +304,7 @@ export default function ShiftLogPage() {
                     ) : (
                       <span
                         title="Pending sync"
-                        className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center text-[10px]"
+                        className="w-5 h-5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 flex items-center justify-center text-[10px]"
                       >
                         <Clock className="w-3 h-3" />
                       </span>
