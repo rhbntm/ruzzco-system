@@ -8,6 +8,13 @@ export interface LocalTransaction {
   serviceName: string;
   price: number;
   totalAmount: number;
+  listPrice?: number;
+  discountType?: "NONE" | "PERCENT" | "FIXED";
+  discountAmount?: number;
+  amountPaid?: number;
+  tipAmount?: number;
+  customAmount?: boolean;
+  customAmountNote?: string | null;
   paymentMethod: "CASH" | "GCASH" | "MAYA";
   paymentReference?: string | null;
   transactionTime: string; // ISO datetime string
@@ -116,7 +123,7 @@ export const DEFAULT_BARBERS: CachedBarber[] = [
   },
   {
     id: "00000000-0000-0000-0000-000000000002",
-    fullName: "Bayani Delo Santos",
+    fullName: "Bayani Delos Santos",
     commissionRate: 0.5,
     isActive: true,
   },

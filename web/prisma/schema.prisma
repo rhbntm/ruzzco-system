@@ -19,6 +19,17 @@ enum PaymentMethod {
   MAYA
 }
 
+enum DiscountType {
+  NONE
+  PERCENT
+  FIXED
+}
+
+enum CommissionBase {
+  LIST_PRICE
+  AMOUNT_PAID
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -62,7 +73,15 @@ model Transaction {
   barberId               String            @map("barber_id")
   barber                 Barber            @relation(fields: [barberId], references: [id])
   totalAmount            Decimal           @db.Decimal(10, 2) @map("total_amount")
+  listPrice              Decimal?          @db.Decimal(10, 2) @map("list_price")
+  discountType           DiscountType      @default(NONE) @map("discount_type")
+  discountAmount         Decimal           @default(0) @db.Decimal(10, 2) @map("discount_amount")
+  amountPaid             Decimal?          @db.Decimal(10, 2) @map("amount_paid")
+  tipAmount              Decimal           @default(0) @db.Decimal(10, 2) @map("tip_amount")
+  customAmount           Boolean           @default(false) @map("custom_amount")
+  customAmountNote       String?           @db.VarChar(255) @map("custom_amount_note")
   barberCommissionAmount Decimal           @db.Decimal(10, 2) @map("barber_commission_amount")
+  commissionBase         CommissionBase    @default(LIST_PRICE) @map("commission_base")
   paymentMethod          PaymentMethod     @default(CASH) @map("payment_method")
   paymentReference       String?           @map("payment_reference")
   transactionTime        DateTime          @map("transaction_time") // Client recorded time

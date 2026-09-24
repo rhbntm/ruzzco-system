@@ -10,7 +10,7 @@ async function main() {
     where: { email: "bayani@ruzzcobarbers.com" },
     update: {},
     create: {
-      name: "Bayani Delo Santos",
+      name: "Bayani Delos Santos",
       email: "bayani@ruzzcobarbers.com",
       role: Role.OWNER,
     },
@@ -33,7 +33,7 @@ async function main() {
     update: {},
     create: {
       id: "00000000-0000-0000-0000-000000000002",
-      fullName: "Bayani Delo Santos",
+      fullName: "Bayani Delos Santos",
       commissionRate: 0.50,
       isActive: true,
     },

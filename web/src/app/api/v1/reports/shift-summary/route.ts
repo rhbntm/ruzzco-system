@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
       },
       select: {
         totalAmount: true,
+        amountPaid: true,
         paymentMethod: true,
       },
     });
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
     let mayaTotal = 0;
 
     for (const tx of transactions) {
-      const amount = Number(tx.totalAmount);
+      const amount = Number(tx.amountPaid ?? tx.totalAmount);
       if (tx.paymentMethod === "CASH") {
         cashTotal += amount;
       } else if (tx.paymentMethod === "GCASH") {

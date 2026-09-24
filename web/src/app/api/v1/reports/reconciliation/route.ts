@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const [transactions, saved] = await Promise.all([
       prisma.transaction.findMany({
         where: { transactionTime: { gte: startOfDay, lte: endOfDay } },
-        select: { totalAmount: true, paymentMethod: true },
+        select: { totalAmount: true, amountPaid: true, paymentMethod: true, tipAmount: true },
       }),
       prisma.shiftReconciliation.findUnique({
         where: { reconciliationDate: new Date(dateParam) },
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     let gcashTotal = 0;
     let mayaTotal = 0;
     for (const tx of transactions) {
-      const amount = Number(tx.totalAmount);
+      const amount = Number(tx.amountPaid ?? tx.totalAmount);
       if (tx.paymentMethod === "CASH") expectedCash += amount;
       else if (tx.paymentMethod === "GCASH") gcashTotal += amount;
       else if (tx.paymentMethod === "MAYA") mayaTotal += amount;
@@ -123,14 +123,14 @@ export async function POST(request: NextRequest) {
     // Compute expected totals from synced transactions
     const transactions = await prisma.transaction.findMany({
       where: { transactionTime: { gte: startOfDay, lte: endOfDay } },
-      select: { totalAmount: true, paymentMethod: true },
+        select: { totalAmount: true, amountPaid: true, paymentMethod: true, tipAmount: true },
     });
 
     let expectedCash = 0;
     let gcashTotal = 0;
     let mayaTotal = 0;
     for (const tx of transactions) {
-      const amount = Number(tx.totalAmount);
+      const amount = Number(tx.amountPaid ?? tx.totalAmount);
       if (tx.paymentMethod === "CASH") expectedCash += amount;
       else if (tx.paymentMethod === "GCASH") gcashTotal += amount;
       else if (tx.paymentMethod === "MAYA") mayaTotal += amount;

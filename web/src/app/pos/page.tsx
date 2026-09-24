@@ -62,6 +62,10 @@ export default function MobilePOSPage() {
   const [barbers, setBarbers] = useState<CachedBarber[]>(DEFAULT_BARBERS);
   const [services, setServices] = useState<CachedService[]>(DEFAULT_SERVICES);
   const [selectedServiceId, setSelectedServiceId] = useState<string>(DEFAULT_SERVICES[0].id);
+  const [discountType, setDiscountType] = useState<"NONE" | "PERCENT" | "FIXED">("NONE");
+  const [customAmountInput, setCustomAmountInput] = useState("");
+  const [tipChoice, setTipChoice] = useState<"NONE" | "20" | "50" | "CUSTOM">("NONE");
+  const [customTipInput, setCustomTipInput] = useState("");
 
   // Device binding state
   const [binding, setBinding] = useState<LocalDeviceBinding | null>(null);
@@ -139,6 +143,13 @@ export default function MobilePOSPage() {
           barberId: t.barberId,
           serviceId: t.serviceId,
           totalAmount: t.totalAmount,
+          listPrice: t.listPrice ?? t.price,
+          discountType: t.discountType ?? "NONE",
+          discountAmount: t.discountAmount ?? 0,
+          amountPaid: t.amountPaid ?? t.totalAmount,
+          tipAmount: t.tipAmount ?? 0,
+          customAmount: t.customAmount ?? false,
+          customAmountNote: t.customAmountNote ?? null,
           paymentMethod: t.paymentMethod,
           paymentReference: t.paymentReference ?? null,
           transactionTime: t.transactionTime,
@@ -341,14 +352,32 @@ export default function MobilePOSPage() {
       const service = services.find((s) => s.id === selectedServiceId) || services[0];
       if (!service) return;
 
+      const listPrice = service.standardPrice;
+      const discountAmount = discountType === "PERCENT" ? Math.round(listPrice * 0.2 * 100) / 100 : 0;
+      const discountedPrice = Math.max(0, listPrice - discountAmount);
+      const parsedCustomAmount = Number(customAmountInput);
+      const amountPaid = customAmountInput.trim() && Number.isFinite(parsedCustomAmount) && parsedCustomAmount > 0
+        ? Math.round(parsedCustomAmount * 100) / 100
+        : Math.round(discountedPrice * 100) / 100;
+      const parsedCustomTip = Number(customTipInput);
+      const tipAmount = tipChoice === "20" ? 20 : tipChoice === "50" ? 50 : tipChoice === "CUSTOM" && Number.isFinite(parsedCustomTip) && parsedCustomTip >= 0 ? Math.round(parsedCustomTip * 100) / 100 : 0;
+      const isCustomAmount = customAmountInput.trim().length > 0;
+
       const newTransaction: LocalTransaction = {
         id: generateUUID(),
         barberId: binding.barberId,
         barberName: binding.barberName,
         serviceId: service.id,
         serviceName: service.name,
-        price: service.standardPrice,
-        totalAmount: service.standardPrice,
+        price: listPrice,
+        totalAmount: amountPaid,
+        listPrice,
+        discountType,
+        discountAmount,
+        amountPaid,
+        tipAmount,
+        customAmount: isCustomAmount,
+        customAmountNote: isCustomAmount ? "POS custom amount" : null,
         paymentMethod: method,
         paymentReference: reference ?? null,
         transactionTime: new Date().toISOString(),
@@ -360,7 +389,7 @@ export default function MobilePOSPage() {
 
       const methodLabel = method === "GCASH" ? "GCash" : method === "MAYA" ? "Maya" : "Cash";
       setLastActionToast({
-        message: `₱${service.standardPrice.toFixed(2)} ${methodLabel} — ${binding.barberName}`,
+        message: `₱${amountPaid.toFixed(2)} ${methodLabel}${tipAmount ? ` + ₱${tipAmount.toFixed(2)} tip` : ""} — ${binding.barberName}`,
         type: "success",
       });
       setTimeout(() => setLastActionToast(null), 3000);
@@ -369,7 +398,7 @@ export default function MobilePOSPage() {
         startTransition(() => { triggerSync(); });
       }
     },
-    [binding, services, selectedServiceId, triggerSync]
+    [binding, services, selectedServiceId, discountType, customAmountInput, tipChoice, customTipInput, triggerSync]
   );
 
   const handleCashCheckout = () => recordTransaction("CASH");
@@ -386,6 +415,10 @@ export default function MobilePOSPage() {
   // ── Derived values ──────────────────────────────────────────────────────────
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
+  const previewListPrice = selectedService?.standardPrice ?? 0;
+  const previewDiscount = discountType === "PERCENT" ? Math.round(previewListPrice * 0.2 * 100) / 100 : 0;
+  const previewAmount = customAmountInput.trim() && Number(customAmountInput) > 0 ? Number(customAmountInput) : previewListPrice - previewDiscount;
+  const previewTip = tipChoice === "20" ? 20 : tipChoice === "50" ? 50 : tipChoice === "CUSTOM" && Number(customTipInput) >= 0 ? Number(customTipInput) : 0;
   const digitalLabel = digitalMethod === "MAYA" ? "Maya" : "GCash";
   const digitalColor = digitalMethod === "MAYA" ? "emerald" : "blue";
 
@@ -691,7 +724,7 @@ export default function MobilePOSPage() {
           <section className="space-y-3 sm:col-span-1">
             <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] flex items-center gap-1.5">
               <Banknote className="w-3.5 h-3.5 text-red-500" />
-              Checkout — ₱{selectedService?.standardPrice.toFixed(2)}
+              Checkout — ₱{previewAmount.toFixed(2)}
             </span>
 
             {/* Barber attribution display */}
@@ -711,6 +744,23 @@ export default function MobilePOSPage() {
               </div>
             )}
 
+            <div className="p-3 rounded-xl bg-[#12141a] border border-[#232734] space-y-2.5">
+              <div className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Adjust total</div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setDiscountType("NONE")} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${discountType === "NONE" ? "bg-zinc-700 text-white border-zinc-500" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>No discount</button>
+                <button type="button" onClick={() => setDiscountType("PERCENT")} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${discountType === "PERCENT" ? "bg-red-600/30 text-red-200 border-red-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>Senior/PWD −20%</button>
+              </div>
+              <div className="flex gap-2">
+                {(["NONE", "20", "50"] as const).map((choice) => (
+                  <button key={choice} type="button" onClick={() => setTipChoice(choice)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${tipChoice === choice ? "bg-emerald-600/30 text-emerald-200 border-emerald-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>{choice === "NONE" ? "No tip" : `+₱${choice} tip`}</button>
+                ))}
+                <button type="button" onClick={() => setTipChoice("CUSTOM")} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${tipChoice === "CUSTOM" ? "bg-emerald-600/30 text-emerald-200 border-emerald-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>Custom tip</button>
+              </div>
+              {tipChoice === "CUSTOM" && <input type="number" min="0" step="0.01" inputMode="decimal" placeholder="Tip amount" value={customTipInput} onChange={(e) => setCustomTipInput(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm" />}
+              <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ₱${(previewListPrice - previewDiscount).toFixed(2)})`} value={customAmountInput} onChange={(e) => setCustomAmountInput(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm" />
+              <div className="flex justify-between text-[11px] text-zinc-500"><span>List ₱{previewListPrice.toFixed(2)} · discount ₱{previewDiscount.toFixed(2)}</span><span className="text-zinc-300">Paid ₱{previewAmount.toFixed(2)} · tip ₱{previewTip.toFixed(2)}</span></div>
+            </div>
+
             {/* Cash button */}
             <button
               onClick={handleCashCheckout}
@@ -720,7 +770,7 @@ export default function MobilePOSPage() {
             >
               <Banknote className="w-5 h-5 stroke-[2.5]" />
               <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
-                Cash — ₱{selectedService?.standardPrice.toFixed(2) ?? "0.00"}
+                Cash — ₱{previewAmount.toFixed(2)}
               </span>
             </button>
 
@@ -733,7 +783,7 @@ export default function MobilePOSPage() {
             >
               <Smartphone className="w-5 h-5 stroke-[2.5]" />
               <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
-                GCash — ₱{selectedService?.standardPrice.toFixed(2) ?? "0.00"}
+                GCash — ₱{previewAmount.toFixed(2)}
               </span>
             </button>
 
@@ -745,7 +795,7 @@ export default function MobilePOSPage() {
             >
               <Smartphone className="w-5 h-5 stroke-[2.5]" />
               <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
-                Maya — ₱{selectedService?.standardPrice.toFixed(2) ?? "0.00"}
+                Maya — ₱{previewAmount.toFixed(2)}
               </span>
             </button>
 

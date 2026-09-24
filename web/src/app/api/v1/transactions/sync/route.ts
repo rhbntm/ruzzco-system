@@ -130,7 +130,11 @@ export async function POST(request: NextRequest) {
       }
 
       const resolvedCommissionRate = barberRates.get(resolvedBarberId)!;
-      const commissionAmount = Math.round(item.totalAmount * resolvedCommissionRate * 100) / 100;
+      const listPrice = item.listPrice ?? item.totalAmount;
+      const amountPaid = item.amountPaid ?? item.totalAmount;
+      const tipAmount = item.tipAmount ?? 0;
+      const commissionBase = "LIST_PRICE" as const;
+      const commissionAmount = Math.round(listPrice * resolvedCommissionRate * 100) / 100;
 
       // Insert transaction, line item, and commission log atomically
       await prisma.transaction.create({
@@ -139,7 +143,15 @@ export async function POST(request: NextRequest) {
           barberId: resolvedBarberId,
           cashierId,
           totalAmount: item.totalAmount,
+          listPrice,
+          discountType: item.discountType,
+          discountAmount: item.discountAmount,
+          amountPaid,
+          tipAmount,
+          customAmount: item.customAmount,
+          customAmountNote: item.customAmountNote ?? null,
           barberCommissionAmount: commissionAmount,
+          commissionBase,
           paymentMethod: item.paymentMethod,
           paymentReference: item.paymentReference ?? null,
           transactionTime: new Date(item.transactionTime),
