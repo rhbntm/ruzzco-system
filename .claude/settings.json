@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./web/.env)",
+      "Read(./.env)",
+      "Read(./packed.md)",
+      "Read(./web/tsconfig.tsbuildinfo)"
+    ]
+  }
+}
