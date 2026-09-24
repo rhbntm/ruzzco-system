@@ -130,8 +130,9 @@ export async function POST(request: NextRequest) {
       }
 
       const resolvedCommissionRate = barberRates.get(resolvedBarberId)!;
-      const listPrice = item.listPrice ?? item.totalAmount;
       const amountPaid = item.amountPaid ?? item.totalAmount;
+      // Custom amount: list price is the entered amount (also fixes older queued payloads that carried the service price).
+      const listPrice = item.customAmount ? amountPaid : (item.listPrice ?? item.totalAmount);
       const tipAmount = item.tipAmount ?? 0;
       const commissionBase = "LIST_PRICE" as const;
       const commissionAmount = Math.round(listPrice * resolvedCommissionRate * 100) / 100;

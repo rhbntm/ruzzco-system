@@ -352,16 +352,16 @@ export default function MobilePOSPage() {
       const service = services.find((s) => s.id === selectedServiceId) || services[0];
       if (!service) return;
 
-      const listPrice = service.standardPrice;
-      const discountAmount = discountType === "PERCENT" ? Math.round(listPrice * 0.2 * 100) / 100 : 0;
-      const discountedPrice = Math.max(0, listPrice - discountAmount);
       const parsedCustomAmount = Number(customAmountInput);
-      const amountPaid = customAmountInput.trim() && Number.isFinite(parsedCustomAmount) && parsedCustomAmount > 0
-        ? Math.round(parsedCustomAmount * 100) / 100
-        : Math.round(discountedPrice * 100) / 100;
+      const isCustomAmount = customAmountInput.trim().length > 0 && Number.isFinite(parsedCustomAmount) && parsedCustomAmount > 0;
+      // A custom amount replaces the service price entirely: list price is the entered amount, with no discount.
+      const listPrice = isCustomAmount ? Math.round(parsedCustomAmount * 100) / 100 : service.standardPrice;
+      const effectiveDiscountType = isCustomAmount ? "NONE" : discountType;
+      const discountAmount = effectiveDiscountType === "PERCENT" ? Math.round(listPrice * 0.2 * 100) / 100 : 0;
+      const discountedPrice = Math.max(0, listPrice - discountAmount);
+      const amountPaid = Math.round(discountedPrice * 100) / 100;
       const parsedCustomTip = Number(customTipInput);
       const tipAmount = tipChoice === "20" ? 20 : tipChoice === "50" ? 50 : tipChoice === "CUSTOM" && Number.isFinite(parsedCustomTip) && parsedCustomTip >= 0 ? Math.round(parsedCustomTip * 100) / 100 : 0;
-      const isCustomAmount = customAmountInput.trim().length > 0;
 
       const newTransaction: LocalTransaction = {
         id: generateUUID(),
@@ -372,7 +372,7 @@ export default function MobilePOSPage() {
         price: listPrice,
         totalAmount: amountPaid,
         listPrice,
-        discountType,
+        discountType: effectiveDiscountType,
         discountAmount,
         amountPaid,
         tipAmount,
