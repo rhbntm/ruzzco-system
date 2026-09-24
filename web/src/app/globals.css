@@ -9,6 +9,9 @@
   --brand-surface: #12141a;
   --brand-card: #161822;
   --brand-border: #232734;
+  --font-geist-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-geist-mono: "Cascadia Code", Consolas, "Courier New", monospace;
+  --font-oswald: "Arial Narrow", "Franklin Gothic Medium", Arial, sans-serif;
 }
 
 @theme inline {
