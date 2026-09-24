@@ -16,6 +16,7 @@ enum Role {
 enum PaymentMethod {
   CASH
   GCASH
+  MAYA
 }
 
 model User {
@@ -122,6 +123,7 @@ model ShiftReconciliation {
   countedCash        Decimal  @db.Decimal(10, 2) @map("counted_cash")
   variance           Decimal  @db.Decimal(10, 2)
   gcashTotal         Decimal  @db.Decimal(10, 2) @map("gcash_total")
+  mayaTotal          Decimal  @default(0) @db.Decimal(10, 2) @map("maya_total")
   totalRevenue       Decimal  @db.Decimal(10, 2) @map("total_revenue")
   note               String?  @db.Text
   reconciledAt       DateTime @default(now()) @map("reconciled_at")

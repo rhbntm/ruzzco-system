@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 /**
  * GET /api/v1/reports/shift-summary?date=YYYY-MM-DD
  * Returns the EOD cash reconciliation totals for a given date.
- * Cash-on-hand equals cashTotal (GCash is digital, not in the drawer).
+ * Cash-on-hand equals cashTotal; GCash and Maya are digital, not in the drawer.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
 
     let cashTotal = 0;
     let gcashTotal = 0;
+    let mayaTotal = 0;
 
     for (const tx of transactions) {
       const amount = Number(tx.totalAmount);
@@ -40,10 +41,13 @@ export async function GET(request: NextRequest) {
         cashTotal += amount;
       } else if (tx.paymentMethod === "GCASH") {
         gcashTotal += amount;
+      } else if (tx.paymentMethod === "MAYA") {
+        mayaTotal += amount;
       }
     }
 
-    const totalRevenue = cashTotal + gcashTotal;
+    const digitalTotal = gcashTotal + mayaTotal;
+    const totalRevenue = cashTotal + digitalTotal;
 
     return NextResponse.json({
       success: true,
@@ -52,7 +56,9 @@ export async function GET(request: NextRequest) {
       totalRevenue: totalRevenue.toFixed(2),
       cashTotal: cashTotal.toFixed(2),
       gcashTotal: gcashTotal.toFixed(2),
-      // Cash on hand = cash collected — GCash goes straight to mobile wallet
+      mayaTotal: mayaTotal.toFixed(2),
+      digitalTotal: digitalTotal.toFixed(2),
+      // Cash on hand = cash collected; digital payments bypass the drawer.
       cashOnHand: cashTotal.toFixed(2),
     });
   } catch (error) {

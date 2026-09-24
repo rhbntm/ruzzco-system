@@ -70,10 +70,10 @@ export default function MobilePOSPage() {
   const [isBinding, setIsBinding] = useState(false);
   const [loadTimeout, setLoadTimeout] = useState(false);
 
-  // GCash modal state
-  const [showGCashModal, setShowGCashModal] = useState(false);
-  const [gcashRef, setGcashRef] = useState("");
-  const [isGCashSubmitting, setIsGCashSubmitting] = useState(false);
+  // Digital payment reference modal state
+  const [digitalMethod, setDigitalMethod] = useState<"GCASH" | "MAYA" | null>(null);
+  const [digitalRef, setDigitalRef] = useState("");
+  const [isDigitalSubmitting, setIsDigitalSubmitting] = useState(false);
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -336,7 +336,7 @@ export default function MobilePOSPage() {
   // ── Transaction recording ───────────────────────────────────────────────────
 
   const recordTransaction = useCallback(
-    async (method: "CASH" | "GCASH", reference?: string) => {
+    async (method: "CASH" | "GCASH" | "MAYA", reference?: string) => {
       if (!binding) return;
       const service = services.find((s) => s.id === selectedServiceId) || services[0];
       if (!service) return;
@@ -358,7 +358,7 @@ export default function MobilePOSPage() {
 
       await db.transactions.add(newTransaction);
 
-      const methodLabel = method === "GCASH" ? "GCash" : "Cash";
+      const methodLabel = method === "GCASH" ? "GCash" : method === "MAYA" ? "Maya" : "Cash";
       setLastActionToast({
         message: `₱${service.standardPrice.toFixed(2)} ${methodLabel} — ${binding.barberName}`,
         type: "success",
@@ -374,17 +374,20 @@ export default function MobilePOSPage() {
 
   const handleCashCheckout = () => recordTransaction("CASH");
 
-  const handleGCashConfirm = async () => {
-    setIsGCashSubmitting(true);
-    await recordTransaction("GCASH", gcashRef.trim() || undefined);
-    setIsGCashSubmitting(false);
-    setShowGCashModal(false);
-    setGcashRef("");
+  const handleDigitalConfirm = async () => {
+    if (!digitalMethod) return;
+    setIsDigitalSubmitting(true);
+    await recordTransaction(digitalMethod, digitalRef.trim() || undefined);
+    setIsDigitalSubmitting(false);
+    setDigitalMethod(null);
+    setDigitalRef("");
   };
 
   // ── Derived values ──────────────────────────────────────────────────────────
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
+  const digitalLabel = digitalMethod === "MAYA" ? "Maya" : "GCash";
+  const digitalColor = digitalMethod === "MAYA" ? "emerald" : "blue";
 
   // ── Loading screen ──────────────────────────────────────────────────────────
 
@@ -490,19 +493,19 @@ export default function MobilePOSPage() {
       {/* Ambient Crimson Glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-64 bg-red-600/10 blur-3xl pointer-events-none" />
 
-      {/* GCash Reference Modal */}
-      {showGCashModal && (
+      {/* Digital payment reference modal */}
+      {digitalMethod && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-[#12141a] border border-[#232734] rounded-2xl p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-blue-400" />
+                <Smartphone className={`w-5 h-5 ${digitalColor === "emerald" ? "text-emerald-400" : "text-blue-400"}`} />
                 <span className="font-bold text-white font-[family-name:var(--font-oswald)] uppercase tracking-wide">
-                  GCash Payment
+                  {digitalLabel} Payment
                 </span>
               </div>
               <button
-                onClick={() => { setShowGCashModal(false); setGcashRef(""); }}
+                onClick={() => { setDigitalMethod(null); setDigitalRef(""); }}
                 className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -510,7 +513,7 @@ export default function MobilePOSPage() {
             </div>
 
             <div>
-              <div className="text-3xl font-extrabold text-blue-400 text-center py-2 font-[family-name:var(--font-oswald)]">
+              <div className={`text-3xl font-extrabold text-center py-2 font-[family-name:var(--font-oswald)] ${digitalColor === "emerald" ? "text-emerald-400" : "text-blue-400"}`}>
                 ₱{selectedService?.standardPrice.toFixed(2)}
               </div>
               <p className="text-xs text-zinc-400 text-center mb-3">
@@ -521,31 +524,31 @@ export default function MobilePOSPage() {
               <input
                 type="text"
                 inputMode="numeric"
-                placeholder="GCash ref. no. (optional)"
-                value={gcashRef}
-                onChange={(e) => setGcashRef(e.target.value)}
+                placeholder={`${digitalLabel} ref. no. (optional)`}
+                value={digitalRef}
+                onChange={(e) => setDigitalRef(e.target.value)}
                 maxLength={20}
-                className="w-full px-3 py-2.5 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-blue-500 transition-colors"
+                className={`w-full px-3 py-2.5 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm placeholder:text-zinc-500 focus:outline-none transition-colors ${digitalColor === "emerald" ? "focus:border-emerald-500" : "focus:border-blue-500"}`}
                 autoFocus
               />
             </div>
 
             <div className="flex gap-2">
               <button
-                onClick={() => { setShowGCashModal(false); setGcashRef(""); }}
+                onClick={() => { setDigitalMethod(null); setDigitalRef(""); }}
                 className="flex-1 py-3 rounded-xl border border-[#232734] bg-[#181b24] text-zinc-300 font-semibold text-sm hover:bg-zinc-800 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                onClick={handleGCashConfirm}
-                disabled={isGCashSubmitting}
-                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 cursor-pointer shadow-lg shadow-blue-950/50"
+                onClick={handleDigitalConfirm}
+                disabled={isDigitalSubmitting}
+                className={`flex-1 py-3 rounded-xl active:scale-[0.98] text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 cursor-pointer shadow-lg ${digitalColor === "emerald" ? "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/50" : "bg-blue-600 hover:bg-blue-500 shadow-blue-950/50"}`}
               >
-                {isGCashSubmitting ? (
+                {isDigitalSubmitting ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
-                  <><Smartphone className="w-4 h-4" /> Confirm GCash</>
+                  <><Smartphone className="w-4 h-4" /> Confirm {digitalLabel}</>
                 )}
               </button>
             </div>
@@ -723,7 +726,7 @@ export default function MobilePOSPage() {
 
             {/* GCash button */}
             <button
-              onClick={() => { setGcashRef(""); setShowGCashModal(true); }}
+              onClick={() => { setDigitalRef(""); setDigitalMethod("GCASH"); }}
               disabled={!binding}
               type="button"
               className="w-full min-h-[60px] py-4 px-6 rounded-xl border-2 border-blue-500/60 bg-blue-600/15 hover:bg-blue-600/25 active:scale-[0.98] text-blue-300 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50 shadow-lg shadow-blue-950/30"
@@ -731,6 +734,18 @@ export default function MobilePOSPage() {
               <Smartphone className="w-5 h-5 stroke-[2.5]" />
               <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
                 GCash — ₱{selectedService?.standardPrice.toFixed(2) ?? "0.00"}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setDigitalRef(""); setDigitalMethod("MAYA"); }}
+              disabled={!binding}
+              type="button"
+              className="w-full min-h-[60px] py-4 px-6 rounded-xl border-2 border-emerald-500/60 bg-emerald-600/15 hover:bg-emerald-600/25 active:scale-[0.98] text-emerald-300 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50 shadow-lg shadow-emerald-950/30"
+            >
+              <Smartphone className="w-5 h-5 stroke-[2.5]" />
+              <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
+                Maya — ₱{selectedService?.standardPrice.toFixed(2) ?? "0.00"}
               </span>
             </button>
 
@@ -776,8 +791,8 @@ export default function MobilePOSPage() {
                       <span className="text-zinc-500 ml-1">• {tx.barberName}</span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {tx.paymentMethod === "GCASH" ? (
-                        <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center" title="GCash">
+                      {tx.paymentMethod === "GCASH" || tx.paymentMethod === "MAYA" ? (
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center ${tx.paymentMethod === "MAYA" ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400"}`} title={tx.paymentMethod === "MAYA" ? "Maya" : "GCash"}>
                           <Smartphone className="w-2.5 h-2.5" />
                         </span>
                       ) : (

@@ -68,6 +68,9 @@ export default function ShiftLogPage() {
   const gcashTotal = todayTransactions
     .filter((t) => t.paymentMethod === "GCASH")
     .reduce((s, t) => s + Number(t.totalAmount), 0);
+  const mayaTotal = todayTransactions
+    .filter((t) => t.paymentMethod === "MAYA")
+    .reduce((s, t) => s + Number(t.totalAmount), 0);
 
   const handleSync = useCallback(async () => {
     if (!navigator.onLine) return;
@@ -194,7 +197,7 @@ export default function ShiftLogPage() {
         )}
 
         {/* Today's Summary Cards */}
-        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <section className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
             {
               label: "Cuts Today",
@@ -204,7 +207,7 @@ export default function ShiftLogPage() {
             },
             {
               label: "Total Revenue",
-              value: `₱${(cashTotal + gcashTotal).toFixed(2)}`,
+              value: `₱${(cashTotal + gcashTotal + mayaTotal).toFixed(2)}`,
               accent: "text-red-400 font-bold",
               sub: "all methods",
             },
@@ -218,6 +221,12 @@ export default function ShiftLogPage() {
               label: "GCash",
               value: `₱${gcashTotal.toFixed(2)}`,
               accent: "text-blue-400",
+              sub: "digital",
+            },
+            {
+              label: "Maya",
+              value: `₱${mayaTotal.toFixed(2)}`,
+              accent: "text-emerald-400",
               sub: "digital",
             },
           ].map((card) => (
@@ -281,6 +290,11 @@ export default function ShiftLogPage() {
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-semibold">
                         <Smartphone className="w-2.5 h-2.5" />
                         GCash
+                      </span>
+                    ) : tx.paymentMethod === "MAYA" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
+                        <Smartphone className="w-2.5 h-2.5" />
+                        Maya
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-600/10 border border-red-500/20 text-red-400 text-[10px] font-semibold">

@@ -8,7 +8,7 @@ export interface LocalTransaction {
   serviceName: string;
   price: number;
   totalAmount: number;
-  paymentMethod: "CASH" | "GCASH";
+  paymentMethod: "CASH" | "GCASH" | "MAYA";
   paymentReference?: string | null;
   transactionTime: string; // ISO datetime string
   synced: number; // 0 = pending sync, 1 = synced

@@ -10,7 +10,7 @@ export const syncTransactionItemSchema = z.object({
   barberId: z.string().min(1, "Barber ID is required"),
   serviceId: z.string().min(1, "Service ID is required"),
   totalAmount: z.number().positive("Total amount must be greater than zero"),
-  paymentMethod: z.enum(["CASH", "GCASH"]).default("CASH"),
+  paymentMethod: z.enum(["CASH", "GCASH", "MAYA"]).default("CASH"),
   paymentReference: z.string().nullable().optional(),
   transactionTime: z.string().datetime({ message: "Invalid ISO datetime string" }),
   deviceKey: z.string().uuid().optional(),

@@ -17,6 +17,8 @@ import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
 interface ExpectedTotals {
   cashTotal: string;
   gcashTotal: string;
+  mayaTotal: string;
+  digitalTotal: string;
   totalRevenue: string;
   transactionCount: number;
 }
@@ -27,6 +29,8 @@ interface SavedRecord {
   countedCash: string;
   variance: string;
   gcashTotal: string;
+  mayaTotal: string;
+  digitalTotal: string;
   totalRevenue: string;
   note: string | null;
   reconciledAt: string;
@@ -175,10 +179,11 @@ export default function ReconciliationPage() {
             <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] flex items-center gap-1.5">
               Synced Totals From Register
             </span>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: "Cash Sales", value: `₱${expected.cashTotal}`, icon: Banknote, color: "text-emerald-400" },
                 { label: "GCash Sales", value: `₱${expected.gcashTotal}`, icon: Smartphone, color: "text-blue-400" },
+                { label: "Maya Sales", value: `₱${expected.mayaTotal}`, icon: Smartphone, color: "text-emerald-400" },
                 { label: "Total Revenue", value: `₱${expected.totalRevenue}`, icon: Scissors, color: "text-red-400 font-bold" },
               ].map((c) => (
                 <div key={c.label} className="p-3.5 rounded-xl bg-[#12141a] border border-[#232734] space-y-1 relative overflow-hidden">
@@ -301,6 +306,7 @@ export default function ReconciliationPage() {
                 { label: "Expected Cash", value: `₱${saved.expectedCash}` },
                 { label: "Counted Cash", value: `₱${saved.countedCash}` },
                 { label: "GCash Total", value: `₱${saved.gcashTotal}` },
+                { label: "Maya Total", value: `₱${saved.mayaTotal}` },
                 { label: "Total Revenue", value: `₱${saved.totalRevenue}` },
               ].map((r) => (
                 <div key={r.label} className="flex justify-between gap-2 text-xs p-2 rounded-lg bg-[#181b24] border border-[#232734]">

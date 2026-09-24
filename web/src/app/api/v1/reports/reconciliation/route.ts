@@ -44,12 +44,15 @@ export async function GET(request: NextRequest) {
 
     let expectedCash = 0;
     let gcashTotal = 0;
+    let mayaTotal = 0;
     for (const tx of transactions) {
       const amount = Number(tx.totalAmount);
       if (tx.paymentMethod === "CASH") expectedCash += amount;
-      else gcashTotal += amount;
+      else if (tx.paymentMethod === "GCASH") gcashTotal += amount;
+      else if (tx.paymentMethod === "MAYA") mayaTotal += amount;
     }
-    const totalRevenue = expectedCash + gcashTotal;
+    const digitalTotal = gcashTotal + mayaTotal;
+    const totalRevenue = expectedCash + digitalTotal;
 
     return NextResponse.json({
       success: true,
@@ -57,6 +60,8 @@ export async function GET(request: NextRequest) {
       expected: {
         cashTotal: expectedCash.toFixed(2),
         gcashTotal: gcashTotal.toFixed(2),
+        mayaTotal: mayaTotal.toFixed(2),
+        digitalTotal: digitalTotal.toFixed(2),
         totalRevenue: totalRevenue.toFixed(2),
         transactionCount: transactions.length,
       },
@@ -67,6 +72,8 @@ export async function GET(request: NextRequest) {
             countedCash: Number(saved.countedCash).toFixed(2),
             variance: Number(saved.variance).toFixed(2),
             gcashTotal: Number(saved.gcashTotal).toFixed(2),
+            mayaTotal: Number(saved.mayaTotal).toFixed(2),
+            digitalTotal: (Number(saved.gcashTotal) + Number(saved.mayaTotal)).toFixed(2),
             totalRevenue: Number(saved.totalRevenue).toFixed(2),
             note: saved.note,
             reconciledAt: saved.reconciledAt,
@@ -121,12 +128,15 @@ export async function POST(request: NextRequest) {
 
     let expectedCash = 0;
     let gcashTotal = 0;
+    let mayaTotal = 0;
     for (const tx of transactions) {
       const amount = Number(tx.totalAmount);
       if (tx.paymentMethod === "CASH") expectedCash += amount;
-      else gcashTotal += amount;
+      else if (tx.paymentMethod === "GCASH") gcashTotal += amount;
+      else if (tx.paymentMethod === "MAYA") mayaTotal += amount;
     }
-    const totalRevenue = expectedCash + gcashTotal;
+    const digitalTotal = gcashTotal + mayaTotal;
+    const totalRevenue = expectedCash + digitalTotal;
     const variance = countedCash - expectedCash;
 
     // Upsert — one record per date
@@ -138,6 +148,7 @@ export async function POST(request: NextRequest) {
         countedCash,
         variance,
         gcashTotal,
+        mayaTotal,
         totalRevenue,
         note: note ?? null,
       },
@@ -146,6 +157,7 @@ export async function POST(request: NextRequest) {
         countedCash,
         variance,
         gcashTotal,
+        mayaTotal,
         totalRevenue,
         note: note ?? null,
         reconciledAt: new Date(),
@@ -161,6 +173,8 @@ export async function POST(request: NextRequest) {
         countedCash: Number(record.countedCash).toFixed(2),
         variance: Number(record.variance).toFixed(2),
         gcashTotal: Number(record.gcashTotal).toFixed(2),
+        mayaTotal: Number(record.mayaTotal).toFixed(2),
+        digitalTotal: (Number(record.gcashTotal) + Number(record.mayaTotal)).toFixed(2),
         totalRevenue: Number(record.totalRevenue).toFixed(2),
         note: record.note,
         reconciledAt: record.reconciledAt,
