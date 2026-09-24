@@ -145,6 +145,8 @@ model ShiftReconciliation {
   gcashTotal         Decimal  @db.Decimal(10, 2) @map("gcash_total")
   mayaTotal          Decimal  @default(0) @db.Decimal(10, 2) @map("maya_total")
   totalRevenue       Decimal  @db.Decimal(10, 2) @map("total_revenue")
+  pettyCashAmount    Decimal  @default(0) @db.Decimal(10, 2) @map("petty_cash_amount")
+  pettyCashNote      String?  @db.VarChar(255) @map("petty_cash_note")
   note               String?  @db.Text
   reconciledAt       DateTime @default(now()) @map("reconciled_at")
 

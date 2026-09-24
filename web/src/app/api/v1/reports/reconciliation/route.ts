@@ -11,7 +11,14 @@ const reconcileSchema = z.object({
     .max(1_000_000, "Counted cash exceeds sanity limit (₱1,000,000)")
     .multipleOf(0.01),
   note: z.string().max(500).optional(),
+  pettyCashAmount: z.number().nonnegative().max(1_000_000).multipleOf(0.01).default(0),
+  pettyCashNote: z.string().max(255).optional(),
 });
+
+function dayBounds(date: string) {
+  const start = new Date(`${date}T00:00:00+08:00`);
+  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+}
 
 /**
  * GET /api/v1/reports/reconciliation?date=YYYY-MM-DD
@@ -29,11 +36,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const startOfDay = new Date(`${dateParam}T00:00:00.000Z`);
-  const endOfDay = new Date(`${dateParam}T23:59:59.999Z`);
+  const { start: startOfDay, end: endOfDay } = dayBounds(dateParam);
 
   try {
-    const [transactions, saved] = await Promise.all([
+    const [transactions, saved, payouts] = await Promise.all([
       prisma.transaction.findMany({
         where: { transactionTime: { gte: startOfDay, lte: endOfDay } },
         select: { totalAmount: true, amountPaid: true, paymentMethod: true, tipAmount: true },
@@ -41,18 +47,27 @@ export async function GET(request: NextRequest) {
       prisma.shiftReconciliation.findUnique({
         where: { reconciliationDate: new Date(dateParam) },
       }),
+      prisma.dailyPayoutLedger.aggregate({
+        where: { businessDate: new Date(dateParam) },
+        _sum: { cashPaid: true },
+      }),
     ]);
 
     let expectedCash = 0;
+    let cashTips = 0;
     let gcashTotal = 0;
     let mayaTotal = 0;
     for (const tx of transactions) {
       const amount = Number(tx.amountPaid ?? tx.totalAmount);
       if (tx.paymentMethod === "CASH") expectedCash += amount;
+      if (tx.paymentMethod === "CASH") cashTips += Number(tx.tipAmount ?? 0);
       else if (tx.paymentMethod === "GCASH") gcashTotal += amount;
       else if (tx.paymentMethod === "MAYA") mayaTotal += amount;
     }
     const digitalTotal = gcashTotal + mayaTotal;
+    const pettyCashAmount = Number(saved?.pettyCashAmount ?? 0);
+    const cashPayouts = Number(payouts._sum.cashPaid ?? 0);
+    const expectedDrawerCash = expectedCash + cashTips - cashPayouts - pettyCashAmount;
     const totalRevenue = expectedCash + digitalTotal;
 
     return NextResponse.json({
@@ -60,6 +75,10 @@ export async function GET(request: NextRequest) {
       date: dateParam,
       expected: {
         cashTotal: expectedCash.toFixed(2),
+        cashTips: cashTips.toFixed(2),
+        cashPayouts: cashPayouts.toFixed(2),
+        pettyCash: pettyCashAmount.toFixed(2),
+        expectedDrawerCash: expectedDrawerCash.toFixed(2),
         gcashTotal: gcashTotal.toFixed(2),
         mayaTotal: mayaTotal.toFixed(2),
         digitalTotal: digitalTotal.toFixed(2),
@@ -70,6 +89,8 @@ export async function GET(request: NextRequest) {
         ? {
             id: Number(saved.id),
             expectedCash: Number(saved.expectedCash).toFixed(2),
+            pettyCashAmount: Number(saved.pettyCashAmount).toFixed(2),
+            pettyCashNote: saved.pettyCashNote,
             countedCash: Number(saved.countedCash).toFixed(2),
             variance: Number(saved.variance).toFixed(2),
             gcashTotal: Number(saved.gcashTotal).toFixed(2),
@@ -105,7 +126,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { date, countedCash, note } = parsed.data;
+    const { date, countedCash, note, pettyCashAmount, pettyCashNote } = parsed.data;
 
     // Server-side future-date guard. The UI has max={todayStr} but that's trivially
     // bypassed. We compute "today" in PHT (UTC+8) so the boundary is correct for the
@@ -119,48 +140,61 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const startOfDay = new Date(`${date}T00:00:00.000Z`);
-    const endOfDay = new Date(`${date}T23:59:59.999Z`);
+    const { start: startOfDay, end: endOfDay } = dayBounds(date);
 
     // Compute expected totals from synced transactions
-    const transactions = await prisma.transaction.findMany({
+    const [transactions, payouts] = await Promise.all([
+      prisma.transaction.findMany({
       where: { transactionTime: { gte: startOfDay, lte: endOfDay } },
         select: { totalAmount: true, amountPaid: true, paymentMethod: true, tipAmount: true },
-    });
+      }),
+      prisma.dailyPayoutLedger.aggregate({
+        where: { businessDate: new Date(date) },
+        _sum: { cashPaid: true },
+      }),
+    ]);
 
     let expectedCash = 0;
+    let cashTips = 0;
     let gcashTotal = 0;
     let mayaTotal = 0;
     for (const tx of transactions) {
       const amount = Number(tx.amountPaid ?? tx.totalAmount);
       if (tx.paymentMethod === "CASH") expectedCash += amount;
+      if (tx.paymentMethod === "CASH") cashTips += Number(tx.tipAmount ?? 0);
       else if (tx.paymentMethod === "GCASH") gcashTotal += amount;
       else if (tx.paymentMethod === "MAYA") mayaTotal += amount;
     }
     const digitalTotal = gcashTotal + mayaTotal;
     const totalRevenue = expectedCash + digitalTotal;
-    const variance = countedCash - expectedCash;
+    const cashPayouts = Number(payouts._sum.cashPaid ?? 0);
+    const expectedDrawerCash = expectedCash + cashTips - cashPayouts - pettyCashAmount;
+    const variance = countedCash - expectedDrawerCash;
 
     // Upsert — one record per date
     const record = await prisma.shiftReconciliation.upsert({
       where: { reconciliationDate: new Date(date) },
       create: {
         reconciliationDate: new Date(date),
-        expectedCash,
+        expectedCash: expectedDrawerCash,
         countedCash,
         variance,
         gcashTotal,
         mayaTotal,
         totalRevenue,
+        pettyCashAmount,
+        pettyCashNote: pettyCashNote ?? null,
         note: note ?? null,
       },
       update: {
-        expectedCash,
+        expectedCash: expectedDrawerCash,
         countedCash,
         variance,
         gcashTotal,
         mayaTotal,
         totalRevenue,
+        pettyCashAmount,
+        pettyCashNote: pettyCashNote ?? null,
         note: note ?? null,
         reconciledAt: new Date(),
       },
@@ -172,6 +206,8 @@ export async function POST(request: NextRequest) {
         id: Number(record.id),
         date,
         expectedCash: Number(record.expectedCash).toFixed(2),
+        pettyCashAmount: Number(record.pettyCashAmount).toFixed(2),
+        pettyCashNote: record.pettyCashNote,
         countedCash: Number(record.countedCash).toFixed(2),
         variance: Number(record.variance).toFixed(2),
         gcashTotal: Number(record.gcashTotal).toFixed(2),
