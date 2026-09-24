@@ -46,6 +46,8 @@ export default function ReconciliationPage() {
   const [countedCash, setCountedCash] = useState("");
   const [note, setNote] = useState("");
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [ownerPin, setOwnerPin] = useState("");
+  const [showOwnerUnlock, setShowOwnerUnlock] = useState(false);
 
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -101,6 +103,11 @@ export default function ReconciliationPage() {
         body: JSON.stringify({ date, countedCash: parsed, note: note.trim() || undefined }),
       });
       const data = await res.json();
+      if (res.status === 401) {
+        setShowOwnerUnlock(true);
+        setFeedback({ msg: "Owner PIN required to save reconciliation.", ok: false });
+        return;
+      }
       if (data.success) {
         setSaved(data.record);
         setFeedback({ msg: "Reconciliation saved ✓", ok: true });
@@ -123,6 +130,15 @@ export default function ReconciliationPage() {
 
   return (
     <div className="min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white">
+      {showOwnerUnlock && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+          <form onSubmit={async (event) => { event.preventDefault(); const res = await fetch("/api/v1/owner/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: ownerPin }) }); if (res.ok) { setShowOwnerUnlock(false); setOwnerPin(""); setFeedback({ msg: "Owner access granted. Save again.", ok: true }); } else setFeedback({ msg: "Invalid owner PIN.", ok: false }); }} className="w-full max-w-sm p-5 rounded-2xl bg-[#12141a] border border-[#232734] space-y-3">
+            <h2 className="font-bold text-lg">Owner PIN required</h2>
+            <input autoFocus type="password" inputMode="numeric" value={ownerPin} onChange={(event) => setOwnerPin(event.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-[#181b24] border border-[#232734] text-white" placeholder="Owner PIN" />
+            <div className="flex gap-2"><button type="button" onClick={() => setShowOwnerUnlock(false)} className="flex-1 py-2 rounded-lg border border-[#232734] text-zinc-300">Cancel</button><button type="submit" className="flex-1 py-2 rounded-lg bg-red-600 text-white font-bold">Unlock</button></div>
+          </form>
+        </div>
+      )}
       {/* Ambient Crimson Glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-2xl h-48 bg-red-600/10 blur-3xl pointer-events-none" />
 

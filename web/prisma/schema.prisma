@@ -48,6 +48,7 @@ model Barber {
   isActive        Boolean            @default(true) @map("is_active")
   transactions    Transaction[]
   commissionLogs  CommissionLog[]
+  payoutLedgers   DailyPayoutLedger[]
   deviceAssignments DeviceAssignment[]
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
@@ -149,6 +150,25 @@ model ShiftReconciliation {
 
   @@unique([reconciliationDate])
   @@map("shift_reconciliations")
+}
+
+model DailyPayoutLedger {
+  id              BigInt   @id @default(autoincrement())
+  barberId        String   @map("barber_id")
+  barber          Barber   @relation(fields: [barberId], references: [id])
+  businessDate    DateTime @db.Date @map("business_date")
+  commissionTotal Decimal  @db.Decimal(10, 2) @map("commission_total")
+  tipTotal        Decimal  @db.Decimal(10, 2) @map("tip_total")
+  totalOwed       Decimal  @db.Decimal(10, 2) @map("total_owed")
+  cashPaid        Decimal  @default(0) @db.Decimal(10, 2) @map("cash_paid")
+  gcashPaid       Decimal  @default(0) @db.Decimal(10, 2) @map("gcash_paid")
+  paidAt          DateTime? @map("paid_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([barberId, businessDate])
+  @@index([businessDate])
+  @@map("daily_payout_ledgers")
 }
 
 model DailyRevenueForecast {

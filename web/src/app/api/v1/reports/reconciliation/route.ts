@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
 import { z } from "zod";
 
 const reconcileSchema = z.object({
@@ -92,6 +93,7 @@ export async function GET(request: NextRequest) {
  * variance against expected cash-on-hand from synced transactions.
  */
 export async function POST(request: NextRequest) {
+  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
   try {
     const body = await request.json();
     const parsed = reconcileSchema.safeParse(body);
