@@ -82,7 +82,7 @@ export default async function HomePage() {
                 </h1>
 
                 <p className="text-zinc-400 text-xs sm:text-sm max-w-xl leading-relaxed">
-                  Offline-First Mobile POS &amp; Revenue Forecasting Decision Support System for Bayani Delo Santos.
+                  Offline-First Mobile POS &amp; Revenue Forecasting Decision Support System for Bayani Delos Santos.
                   Engineered with Next.js, IndexedDB, Prisma, MySQL 8.0, and FastAPI.
                 </p>
               </div>
@@ -115,6 +115,15 @@ export default async function HomePage() {
               >
                 <ClipboardCheck className="w-4 h-4 text-zinc-400" />
                 <span>EOD Cash</span>
+              </Link>
+
+              <Link
+                href="/ledger"
+                className="inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-medium text-xs transition-colors"
+                title="Daily barber payout ledger"
+              >
+                <ClipboardCheck className="w-4 h-4 text-zinc-400" />
+                <span>Barber Ledger</span>
               </Link>
             </div>
           </div>
