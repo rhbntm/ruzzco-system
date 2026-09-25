@@ -44,8 +44,13 @@ import {
   syncNow,
   verifyCurrentAssignment,
 } from "@/lib/sync";
+import { createSubmitLock } from "@/lib/submit-lock";
 import { useLiveQuery } from "dexie-react-hooks";
 import { RuzzcoLogoBadge, MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
+
+// After a sale is saved, further payment taps are ignored this long, so a double tap
+// that lands after the (millisecond-fast) local write still records only one sale.
+const SALE_REPEAT_GUARD_MS = 800;
 
 // ─── Online status hooks ───────────────────────────────────────────────────────
 
@@ -84,7 +89,12 @@ export default function MobilePOSPage() {
   // Digital payment reference modal state
   const [digitalMethod, setDigitalMethod] = useState<"GCASH" | "MAYA" | null>(null);
   const [digitalRef, setDigitalRef] = useState("");
-  const [isDigitalSubmitting, setIsDigitalSubmitting] = useState(false);
+  // True while a sale is being written and for a short repeat guard after it (UX only;
+  // correctness comes from the synchronous lock).
+  const [isRecording, setIsRecording] = useState(false);
+  const [checkoutLock] = useState(() =>
+    createSubmitLock({ holdAfterSuccessMs: SALE_REPEAT_GUARD_MS, onChange: setIsRecording })
+  );
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -272,11 +282,12 @@ export default function MobilePOSPage() {
 
   // ── Transaction recording ───────────────────────────────────────────────────
 
-  const recordTransaction = useCallback(
-    async (method: "CASH" | "GCASH" | "MAYA", reference?: string) => {
-      if (!binding) return;
+  // Writes one sale to Dexie. Call only through recordTransaction, which holds the checkout lock.
+  const createSale = useCallback(
+    async (method: "CASH" | "GCASH" | "MAYA", reference?: string): Promise<boolean> => {
+      if (!binding) return false;
       const service = services.find((s) => s.id === selectedServiceId) || services[0];
-      if (!service) return;
+      if (!service) return false;
 
       const parsedCustomAmount = Number(customAmountInput);
       const isCustomAmount = customAmountInput.trim().length > 0 && Number.isFinite(parsedCustomAmount) && parsedCustomAmount > 0;
@@ -326,19 +337,39 @@ export default function MobilePOSPage() {
       if (navigator.onLine) {
         startTransition(() => { triggerSync(); });
       }
+      return true;
     },
     [binding, services, selectedServiceId, discountType, customAmountInput, tipChoice, customTipInput, triggerSync]
   );
 
-  const handleCashCheckout = () => recordTransaction("CASH");
+  // Every payment method records through here. The lock is checked synchronously before
+  // any await, so a second tap cannot generate a second transaction id (see lib/submit-lock.ts).
+  const recordTransaction = useCallback(
+    async (method: "CASH" | "GCASH" | "MAYA", reference?: string): Promise<"saved" | "skipped" | "busy" | "failed"> => {
+      const result = await checkoutLock.run(() => createSale(method, reference));
+      if (result.status === "busy") return "busy";
+      if (result.status === "failed") {
+        console.error("Error recording sale:", result.error);
+        setLastActionToast({ message: "Sale not saved. Try again.", type: "info" });
+        setTimeout(() => setLastActionToast(null), 3000);
+        return "failed";
+      }
+      return result.value ? "saved" : "skipped";
+    },
+    [checkoutLock, createSale]
+  );
+
+  const handleCashCheckout = () => { void recordTransaction("CASH"); };
 
   const handleDigitalConfirm = async () => {
     if (!digitalMethod) return;
-    setIsDigitalSubmitting(true);
-    await recordTransaction(digitalMethod, digitalRef.trim() || undefined);
-    setIsDigitalSubmitting(false);
-    setDigitalMethod(null);
-    setDigitalRef("");
+    const result = await recordTransaction(digitalMethod, digitalRef.trim() || undefined);
+    // A duplicate tap ("busy") leaves the modal to the tap that owns the sale;
+    // a failure keeps it open so the reference is not lost.
+    if (result === "saved" || result === "skipped") {
+      setDigitalMethod(null);
+      setDigitalRef("");
+    }
   };
 
   // ── Derived values ──────────────────────────────────────────────────────────
@@ -504,10 +535,10 @@ export default function MobilePOSPage() {
               </button>
               <button
                 onClick={handleDigitalConfirm}
-                disabled={isDigitalSubmitting}
+                disabled={isRecording}
                 className={`flex-1 py-3 rounded-xl active:scale-[0.98] text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-60 cursor-pointer shadow-lg ${digitalColor === "emerald" ? "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/50" : "bg-blue-600 hover:bg-blue-500 shadow-blue-950/50"}`}
               >
-                {isDigitalSubmitting ? (
+                {isRecording ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
                   <><Smartphone className="w-4 h-4" /> Confirm {digitalLabel}</>
@@ -693,7 +724,7 @@ export default function MobilePOSPage() {
             {/* Cash button */}
             <button
               onClick={handleCashCheckout}
-              disabled={!binding}
+              disabled={!binding || isRecording}
               type="button"
               className="w-full min-h-[60px] py-4 px-6 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 active:scale-[0.98] text-white font-extrabold text-base shadow-xl shadow-red-950/60 ring-1 ring-red-400/40 flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50"
             >
@@ -706,7 +737,7 @@ export default function MobilePOSPage() {
             {/* GCash button */}
             <button
               onClick={() => { setDigitalRef(""); setDigitalMethod("GCASH"); }}
-              disabled={!binding}
+              disabled={!binding || isRecording}
               type="button"
               className="w-full min-h-[60px] py-4 px-6 rounded-xl border-2 border-blue-500/60 bg-blue-600/15 hover:bg-blue-600/25 active:scale-[0.98] text-blue-300 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50 shadow-lg shadow-blue-950/30"
             >
@@ -718,7 +749,7 @@ export default function MobilePOSPage() {
 
             <button
               onClick={() => { setDigitalRef(""); setDigitalMethod("MAYA"); }}
-              disabled={!binding}
+              disabled={!binding || isRecording}
               type="button"
               className="w-full min-h-[60px] py-4 px-6 rounded-xl border-2 border-emerald-500/60 bg-emerald-600/15 hover:bg-emerald-600/25 active:scale-[0.98] text-emerald-300 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50 shadow-lg shadow-emerald-950/30"
             >

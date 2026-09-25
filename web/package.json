@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed:demo": "tsx prisma/seed-demo.ts",
-    "test:attribution": "tsx scripts/test-assignment-attribution.ts"
+    "test:attribution": "tsx scripts/test-assignment-attribution.ts",
+    "test:submit-lock": "tsx scripts/test-submit-lock.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
