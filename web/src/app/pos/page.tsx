@@ -15,6 +15,7 @@ import {
   RefreshCw,
   CheckCircle2,
   Clock,
+  TriangleAlert,
   User,
   Sparkles,
   Layers,
@@ -38,12 +39,18 @@ import {
   DEFAULT_SERVICES,
 } from "@/lib/db";
 import {
+  clearRejection,
+  countPending,
   createLocalAssignment,
   ensureAssignmentId,
+  isRejected,
+  listRejected,
   registerPendingAssignment,
+  summarizeSync,
   syncNow,
   verifyCurrentAssignment,
 } from "@/lib/sync";
+import { RejectedSales } from "@/components/RejectedSales";
 import { createSubmitLock } from "@/lib/submit-lock";
 import { useLiveQuery } from "dexie-react-hooks";
 import { RuzzcoLogoBadge, MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
@@ -118,13 +125,27 @@ export default function MobilePOSPage() {
     async () => {
       try {
         if (typeof window === "undefined") return 0;
-        return await db.transactions.where("synced").equals(0).count();
+        return await countPending();
       } catch {
         return 0;
       }
     },
     [],
     0
+  );
+
+  // Sales the server refused: kept on this device, not auto-retried, shown for attention
+  const rejectedSales = useLiveQuery(
+    async () => {
+      try {
+        if (typeof window === "undefined") return [];
+        return await listRejected();
+      } catch {
+        return [];
+      }
+    },
+    [],
+    [] as LocalTransaction[]
   );
 
   // Last 5 transactions for sidebar preview
@@ -155,16 +176,7 @@ export default function MobilePOSPage() {
       setIsSyncing(true);
       const outcome = await syncNow();
       if (outcome.bind.bindingCleared) requireRebind();
-      if (outcome.status === "failed") {
-        setSyncFeedback("Sync failed. Queued locally.");
-      } else if (outcome.status === "synced") {
-        const notSynced = outcome.held + outcome.rejected;
-        setSyncFeedback(`Synced ${outcome.processed} new, ${outcome.duplicates} verified${notSynced ? `, ${notSynced} still queued` : ""}`);
-      } else if (outcome.held > 0) {
-        setSyncFeedback(`${outcome.held} queued until barber assignment reaches the server`);
-      } else {
-        setSyncFeedback("All transactions are synced");
-      }
+      setSyncFeedback(outcome.status === "failed" ? "Sync failed. Queued locally." : summarizeSync(outcome));
       setTimeout(() => setSyncFeedback(null), 3000);
     } catch (err) {
       console.error("Auto-sync error:", err);
@@ -174,6 +186,12 @@ export default function MobilePOSPage() {
       setIsSyncing(false);
     }
   }, [requireRebind]);
+
+  // Explicit retry of a rejected sale: re-queue it unchanged, then run the normal sync.
+  const handleRetryRejected = useCallback(async (id: string) => {
+    await clearRejection(id);
+    await triggerSync();
+  }, [triggerSync]);
 
   // Full lifecycle for load and reconnect: register, sync, then recheck the binding.
   const reconcileWithServer = useCallback(async () => {
@@ -601,6 +619,11 @@ export default function MobilePOSPage() {
                   {pendingCount}
                 </span>
               )}
+              {(rejectedSales?.length ?? 0) > 0 && (
+                <span title="Sales needing attention" className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-black text-[9px] font-extrabold flex items-center justify-center">
+                  {rejectedSales?.length}
+                </span>
+              )}
             </button>
 
             {/* Re-bind ("Not you?") */}
@@ -622,6 +645,7 @@ export default function MobilePOSPage() {
               {syncFeedback}
             </div>
           )}
+          <RejectedSales sales={rejectedSales ?? []} busy={isSyncing} onRetry={handleRetryRejected} />
           {lastActionToast && (
             <div className="p-3 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-xs text-emerald-200 flex items-center gap-2 shadow-lg shadow-emerald-950/50">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -813,6 +837,8 @@ export default function MobilePOSPage() {
                       <span className="font-bold text-zinc-100 font-[family-name:var(--font-oswald)]">₱{Number(tx.totalAmount).toFixed(2)}</span>
                       {tx.synced === 1 ? (
                         <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      ) : isRejected(tx) ? (
+                        <span title="Needs attention"><TriangleAlert className="w-3 h-3 text-amber-400" /></span>
                       ) : (
                         <Clock className="w-3 h-3 text-red-400" />
                       )}

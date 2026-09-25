@@ -12,11 +12,13 @@ import {
   WifiOff,
   Banknote,
   Smartphone,
+  TriangleAlert,
 } from "lucide-react";
 import { db, type LocalTransaction } from "@/lib/db";
-import { syncNow } from "@/lib/sync";
+import { clearRejection, countPending, isRejected, listRejected, summarizeSync, syncNow } from "@/lib/sync";
 import { useLiveQuery } from "dexie-react-hooks";
 import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { RejectedSales } from "@/components/RejectedSales";
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -52,10 +54,20 @@ export default function ShiftLogPage() {
   const pendingCount = useLiveQuery(
     async () => {
       if (typeof window === "undefined") return 0;
-      return await db.transactions.where("synced").equals(0).count();
+      return await countPending();
     },
     [],
     0
+  );
+
+  // Sales the server refused: kept on this device, not auto-retried, shown for attention
+  const rejectedSales = useLiveQuery(
+    async () => {
+      if (typeof window === "undefined") return [];
+      return await listRejected();
+    },
+    [],
+    [] as LocalTransaction[]
   );
 
   // Daily summary
@@ -79,16 +91,7 @@ export default function ShiftLogPage() {
     try {
       // Same lifecycle as the POS: register the pending assignment, then sync.
       const outcome = await syncNow();
-      if (outcome.status === "failed") {
-        setSyncFeedback("Sync failed — queued locally");
-      } else if (outcome.status === "synced") {
-        const notSynced = outcome.held + outcome.rejected;
-        setSyncFeedback(`Synced ${outcome.processed} new, ${outcome.duplicates} verified${notSynced ? `, ${notSynced} still queued` : ""}`);
-      } else if (outcome.held > 0) {
-        setSyncFeedback(`${outcome.held} queued until barber assignment reaches the server`);
-      } else {
-        setSyncFeedback("All transactions are synced ✓");
-      }
+      setSyncFeedback(outcome.status === "failed" ? "Sync failed — queued locally" : summarizeSync(outcome));
       setTimeout(() => setSyncFeedback(null), 3000);
     } catch (err) {
       console.error("Sync error:", err);
@@ -98,6 +101,12 @@ export default function ShiftLogPage() {
       setIsSyncing(false);
     }
   }, []);
+
+  // Explicit retry of a rejected sale: re-queue it unchanged, then run the normal sync.
+  const handleRetryRejected = useCallback(async (id: string) => {
+    await clearRejection(id);
+    await handleSync();
+  }, [handleSync]);
 
   // Auto-sync on reconnect
   useEffect(() => {
@@ -163,6 +172,11 @@ export default function ShiftLogPage() {
                   {pendingCount}
                 </span>
               )}
+              {(rejectedSales?.length ?? 0) > 0 && (
+                <span title="Sales needing attention" className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-black text-[9px] font-extrabold flex items-center justify-center">
+                  {rejectedSales?.length}
+                </span>
+              )}
             </button>
           </div>
         </header>
@@ -174,6 +188,8 @@ export default function ShiftLogPage() {
             {syncFeedback}
           </div>
         )}
+
+        <RejectedSales sales={rejectedSales ?? []} busy={isSyncing} onRetry={handleRetryRejected} />
 
         {/* Today's Summary Cards */}
         <section className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -293,6 +309,13 @@ export default function ShiftLogPage() {
                         className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-[10px]"
                       >
                         <CheckCircle2 className="w-3 h-3" />
+                      </span>
+                    ) : isRejected(tx) ? (
+                      <span
+                        title="Needs attention"
+                        className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center text-[10px]"
+                      >
+                        <TriangleAlert className="w-3 h-3" />
                       </span>
                     ) : (
                       <span

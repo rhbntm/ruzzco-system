@@ -1,4 +1,4 @@
-import { db, generateUUID, getOrCreateDeviceKey, type LocalDeviceBinding } from "@/lib/db";
+import { db, generateUUID, getOrCreateDeviceKey, type LocalDeviceBinding, type LocalTransaction } from "@/lib/db";
 
 /**
  * Shared POS sync lifecycle, used by /pos and /shift-log.
@@ -15,6 +15,11 @@ import { db, generateUUID, getOrCreateDeviceKey, type LocalDeviceBinding } from 
  *
  * Only one pending bind is kept: the current assignment. Older assignments need no queue,
  * because each queued sale carries everything needed to register its own assignment.
+ *
+ * Per-sale results: the server answers each sale on its own. Sales in `syncedIds` are marked
+ * synced; sales in `rejected` stay in Dexie unchanged, get `syncError`, and are excluded from
+ * automatic sync until the user retries them (clearRejection). A rejected sale never blocks
+ * the others, and nothing about it (barber, assignment, amount, id) is ever rewritten.
  */
 
 const PENDING_KEY = "ruzzco_pending_bind";
@@ -122,14 +127,74 @@ export async function registerPendingAssignment(): Promise<RegisterResult> {
   }
 }
 
+const REJECT_LABELS: Record<string, string> = {
+  INVALID: "Invalid sale data",
+  UNKNOWN_BARBER: "Unknown barber",
+  DEVICE_MISMATCH: "Device/assignment mismatch",
+  ASSIGNMENT_UNAVAILABLE: "Barber assignment not found",
+};
+
+/** Understandable text for a stored rejection reason (unknown reasons are shown as-is). */
+export function rejectLabel(reason: string | undefined): string {
+  return (reason && REJECT_LABELS[reason]) || reason || "Rejected";
+}
+
+/** A mismatch can't be fixed by retrying: the assignment doesn't belong to this device. */
+export function needsReview(reason: string | undefined): boolean {
+  return reason === "DEVICE_MISMATCH";
+}
+
+/** Unsynced sale the server refused: kept, not auto-retried, shown to the user. */
+export function isRejected(tx: Pick<LocalTransaction, "synced" | "syncError">): boolean {
+  return tx.synced === 0 && !!tx.syncError;
+}
+
+/** Sales in the automatic sync queue (unsynced, not rejected). */
+export function countPending(): Promise<number> {
+  return db.transactions.where("synced").equals(0).filter((t) => !t.syncError).count();
+}
+
+/** Sales that need the user's attention, newest first. */
+export async function listRejected(): Promise<LocalTransaction[]> {
+  const rejected = await db.transactions.where("synced").equals(0).filter((t) => !!t.syncError).toArray();
+  return rejected.sort((a, b) => b.transactionTime.localeCompare(a.transactionTime));
+}
+
+/**
+ * Explicit retry, step 1: put a rejected sale back in the automatic queue. Only the
+ * rejection flag is cleared; the sale itself is untouched. The caller then runs syncNow(),
+ * and the server may reject it again (it stays visible if so).
+ */
+export async function clearRejection(id: string): Promise<boolean> {
+  const changed = await db.transactions.where("id").equals(id).modify((t) => {
+    if (t.synced === 0) delete t.syncError;
+  });
+  return changed > 0;
+}
+
+/** One line for the sync toast; mentions sales that need attention. */
+export function summarizeSync(outcome: SyncOutcome): string {
+  const parts: string[] = [];
+  if (outcome.status === "synced") {
+    parts.push(`Synced ${outcome.processed} new, ${outcome.duplicates} verified`);
+  } else if (outcome.attention === 0 && outcome.held === 0) {
+    parts.push("All transactions are synced");
+  }
+  if (outcome.held > 0) parts.push(`${outcome.held} queued until barber assignment reaches the server`);
+  if (outcome.attention > 0) parts.push(`${outcome.attention} need attention`);
+  return parts.join(" · ");
+}
+
 export type SyncOutcome = {
   status: "offline" | "empty" | "synced" | "failed";
   processed: number;
   duplicates: number;
   /** Queued under the current assignment, waiting for /bind to accept it. */
   held: number;
-  /** Refused by the server (e.g. device mismatch); still queued locally. */
+  /** Refused by the server in this run; now marked rejected locally. */
   rejected: number;
+  /** All rejected sales on this device after this run (including earlier ones). */
+  attention: number;
   bind: RegisterResult;
 };
 
@@ -141,6 +206,7 @@ export async function syncNow(): Promise<SyncOutcome> {
     duplicates: 0,
     held: 0,
     rejected: 0,
+    attention: 0,
     bind: { status: "none", bindingCleared: false },
   };
   if (typeof window === "undefined" || !navigator.onLine) return outcome;
@@ -150,9 +216,12 @@ export async function syncNow(): Promise<SyncOutcome> {
   // Re-read: step A may have cleared it. Whatever is still pending is the current
   // assignment, and its sales must not reach the server before its /bind does.
   const heldAssignmentId = readPendingBind()?.assignmentId;
-  const queued = await db.transactions.where("synced").equals(0).toArray();
+  const unsynced = await db.transactions.where("synced").equals(0).toArray();
+  // Rejected sales are not retried automatically; only an explicit retry re-queues them.
+  const queued = unsynced.filter((t) => !t.syncError);
   const toSend = queued.filter((t) => !(heldAssignmentId && t.assignmentId === heldAssignmentId));
   outcome.held = queued.length - toSend.length;
+  outcome.attention = unsynced.length - queued.length;
   if (toSend.length === 0) {
     outcome.status = "empty";
     return outcome;
@@ -190,15 +259,29 @@ export async function syncNow(): Promise<SyncOutcome> {
     if (!response.ok) throw new Error(`Sync failed: HTTP ${response.status}`);
     const result = await response.json();
     if (result.success && Array.isArray(result.syncedIds)) {
+      const rejections: { id: string; reason: string }[] = (Array.isArray(result.rejected) ? result.rejected : [])
+        .filter((r: { id?: unknown; reason?: unknown }) => typeof r?.id === "string" && typeof r?.reason === "string");
       await db.transaction("rw", db.transactions, async () => {
+        const syncedAt = new Date().toISOString();
         for (const id of result.syncedIds) {
-          await db.transactions.update(id, { synced: 1, syncedAt: new Date().toISOString() });
+          await db.transactions.where("id").equals(id).modify((t) => {
+            t.synced = 1;
+            t.syncedAt = syncedAt;
+            delete t.syncError;
+          });
+        }
+        // Keep the sale exactly as it is; only record why the server refused it.
+        for (const { id, reason } of rejections) {
+          await db.transactions.where("id").equals(id).modify((t) => {
+            if (t.synced === 0) t.syncError = reason;
+          });
         }
       });
       outcome.status = "synced";
       outcome.processed = result.processedCount ?? 0;
       outcome.duplicates = result.duplicatesSkipped ?? 0;
-      outcome.rejected = Array.isArray(result.rejected) ? result.rejected.length : 0;
+      outcome.rejected = rejections.length;
+      outcome.attention += rejections.length;
     } else {
       outcome.status = "failed";
     }

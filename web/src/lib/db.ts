@@ -24,6 +24,12 @@ export interface LocalTransaction {
   // Absent on sales queued before assignment ids existed.
   assignmentId?: string;
   deviceKey?: string;
+  // Set when the server refused this sale (a SyncRejectReason). State is derived, no index:
+  //   pending  = synced 0, no syncError       (in the automatic sync queue)
+  //   rejected = synced 0, has syncError      (kept, never auto-retried, shown to the user)
+  //   synced   = synced 1
+  // Only the retry action clears it. The sale's own fields are never rewritten.
+  syncError?: string;
 }
 
 export interface CachedBarber {

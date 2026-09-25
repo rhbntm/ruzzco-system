@@ -224,8 +224,13 @@ async function main() {
     JSON.stringify(t10.body)
   );
   check("T10: not inserted", (await stored(m1.id)) === null);
-  const t10b = await post("/api/v1/transactions/sync", { transactions: [{ ...sale({ barber: "A", assignmentId: idA }), deviceKey: undefined }] });
-  check("T10: assignmentId without deviceKey → 400", t10b.status === 400);
+  const noDevice = sale({ barber: "A", assignmentId: idA });
+  const t10b = await post("/api/v1/transactions/sync", { transactions: [{ ...noDevice, deviceKey: undefined }] });
+  check(
+    "T10: assignmentId without deviceKey → rejected INVALID for that sale only (per-item result)",
+    t10b.status === 200 && t10b.body.rejected?.some((r: { id: string; reason: string }) => r.id === noDevice.id && r.reason === "INVALID") && !t10b.body.syncedIds.includes(noDevice.id),
+    JSON.stringify(t10b.body)
+  );
 
   console.log("\nT11 revoked assignment still accepts historical sales");
   check("T11: A is revoked", (await assignment(idA))?.revokedAt !== null);
