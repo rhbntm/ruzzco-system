@@ -4,16 +4,19 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { commissionFor } from "@/lib/commission";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
+import { isBusinessDate, parseBusinessDate } from "@/lib/business-date";
 
 export const dynamic = "force-dynamic";
 
+const businessDate = z.string().refine(isBusinessDate, "date must be a real calendar date (YYYY-MM-DD)");
+
 const querySchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: businessDate,
   commissionBase: z.enum(["LIST_PRICE", "AMOUNT_PAID"]).default("LIST_PRICE"),
 });
 
 const paymentSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  date: businessDate,
   barberId: z.string().min(1),
   commissionBase: z.enum(["LIST_PRICE", "AMOUNT_PAID"]).default("LIST_PRICE"),
   cashPaid: z.number().nonnegative().multipleOf(0.01),
@@ -21,16 +24,9 @@ const paymentSchema = z.object({
   paid: z.boolean(),
 });
 
-function dayBounds(date: string) {
-  return {
-    start: new Date(`${date}T00:00:00+08:00`),
-    end: new Date(`${date}T00:00:00+08:00`).getTime() + 24 * 60 * 60 * 1000,
-  };
-}
-
-function dateValue(date: string) {
-  return new Date(`${date}T00:00:00.000Z`);
-}
+// Callers pass dates already validated by the schemas above.
+const businessDay = (date: string) => parseBusinessDate(date)!;
+const dateValue = (date: string) => businessDay(date).dateValue;
 
 type Base = "LIST_PRICE" | "AMOUNT_PAID";
 type BarberTotals = { commission: Prisma.Decimal; viewCommission: Prisma.Decimal; tips: Prisma.Decimal };
@@ -40,9 +36,9 @@ const ZERO = new Prisma.Decimal(0);
 // so a rate change cannot rewrite a past day. `commission` is the canonical LIST_PRICE total
 // (sum of barberCommissionAmount); `viewCommission` is the requested base, for display only.
 async function totalsForDate(date: string, commissionBase: Base) {
-  const bounds = dayBounds(date);
+  const day = businessDay(date);
   const transactions = await prisma.transaction.findMany({
-    where: { transactionTime: { gte: bounds.start, lt: new Date(bounds.end) } },
+    where: { transactionTime: { gte: day.start, lt: day.end } },
     select: {
       barberId: true,
       totalAmount: true,

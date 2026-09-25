@@ -10,6 +10,7 @@
     "seed:demo": "tsx prisma/seed-demo.ts",
     "test:attribution": "tsx scripts/test-assignment-attribution.ts",
     "test:commission": "tsx scripts/test-commission.ts",
+    "test:reconciliation": "tsx scripts/test-reconciliation.ts",
     "test:submit-lock": "tsx scripts/test-submit-lock.ts",
     "test:sync-rejections": "tsx scripts/test-sync-rejections.ts"
   },

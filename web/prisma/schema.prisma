@@ -145,9 +145,12 @@ model DeviceAssignment {
   @@map("device_assignments")
 }
 
+/// Append-only: each save is a new revision (1, 2, ...) for its business date, never an
+/// update. A row records what the owner counted and what the system expected at reconciledAt.
 model ShiftReconciliation {
   id                 BigInt   @id @default(autoincrement())
-  reconciliationDate DateTime @db.Date @map("reconciliation_date")
+  reconciliationDate DateTime @db.Date @map("reconciliation_date") // Manila business date
+  revision           Int      @default(1)
   expectedCash       Decimal  @db.Decimal(10, 2) @map("expected_cash")
   countedCash        Decimal  @db.Decimal(10, 2) @map("counted_cash")
   variance           Decimal  @db.Decimal(10, 2)
@@ -159,7 +162,7 @@ model ShiftReconciliation {
   note               String?  @db.Text
   reconciledAt       DateTime @default(now()) @map("reconciled_at")
 
-  @@unique([reconciliationDate])
+  @@unique([reconciliationDate, revision])
   @@map("shift_reconciliations")
 }
 

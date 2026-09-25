@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
+import { isBusinessDate, manilaToday, parseBusinessDate } from "@/lib/business-date";
+import {
+  computeExpected,
+  computeStaleness,
+  latestRevision,
+  serializeExpected,
+  serializeSaved,
+  serializeStaleness,
+} from "@/lib/reconciliation";
 import { z } from "zod";
 
 const reconcileSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD"),
+  date: z.string().refine(isBusinessDate, "date must be a real calendar date (YYYY-MM-DD)"),
   countedCash: z
     .number()
     .nonnegative("Counted cash cannot be negative")
@@ -15,92 +25,38 @@ const reconcileSchema = z.object({
   pettyCashNote: z.string().max(255).optional(),
 });
 
-function dayBounds(date: string) {
-  const start = new Date(`${date}T00:00:00+08:00`);
-  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+const MAX_REVISION_ATTEMPTS = 3;
+
+function isUniqueViolation(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 /**
  * GET /api/v1/reports/reconciliation?date=YYYY-MM-DD
- * Returns the expected totals (from synced transactions) and the saved
- * reconciliation record for that date if one exists.
+ * Returns the live expected totals for the Manila business date, the latest saved revision
+ * (a frozen snapshot) if any, and whether that revision is stale against the live state.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const dateParam = searchParams.get("date");
-
-  if (!dateParam || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+  const day = parseBusinessDate(new URL(request.url).searchParams.get("date") ?? "");
+  if (!day) {
     return NextResponse.json(
-      { success: false, error: "date query param required (YYYY-MM-DD)" },
+      { success: false, error: "date query param required (a real calendar date, YYYY-MM-DD)" },
       { status: 400 }
     );
   }
 
-  const { start: startOfDay, end: endOfDay } = dayBounds(dateParam);
-
   try {
-    const [transactions, saved, payouts] = await Promise.all([
-      prisma.transaction.findMany({
-        where: { transactionTime: { gte: startOfDay, lte: endOfDay } },
-        select: { totalAmount: true, amountPaid: true, paymentMethod: true, tipAmount: true },
-      }),
-      prisma.shiftReconciliation.findUnique({
-        where: { reconciliationDate: new Date(dateParam) },
-      }),
-      prisma.dailyPayoutLedger.aggregate({
-        where: { businessDate: new Date(dateParam) },
-        _sum: { cashPaid: true },
-      }),
-    ]);
-
-    let expectedCash = 0;
-    let cashTips = 0;
-    let gcashTotal = 0;
-    let mayaTotal = 0;
-    for (const tx of transactions) {
-      const amount = Number(tx.amountPaid ?? tx.totalAmount);
-      if (tx.paymentMethod === "CASH") expectedCash += amount;
-      if (tx.paymentMethod === "CASH") cashTips += Number(tx.tipAmount ?? 0);
-      else if (tx.paymentMethod === "GCASH") gcashTotal += amount;
-      else if (tx.paymentMethod === "MAYA") mayaTotal += amount;
-    }
-    const digitalTotal = gcashTotal + mayaTotal;
-    const pettyCashAmount = Number(saved?.pettyCashAmount ?? 0);
-    const cashPayouts = Number(payouts._sum.cashPaid ?? 0);
-    const expectedDrawerCash = expectedCash + cashTips - cashPayouts - pettyCashAmount;
-    const totalRevenue = expectedCash + digitalTotal;
+    const saved = await latestRevision(day);
+    // Live figures use the latest revision's petty cash: it is only recorded at reconciliation.
+    const live = await computeExpected(day, saved?.pettyCashAmount ?? 0);
+    const staleness = saved ? await computeStaleness(day, saved, live) : null;
 
     return NextResponse.json({
       success: true,
-      date: dateParam,
-      expected: {
-        cashTotal: expectedCash.toFixed(2),
-        cashTips: cashTips.toFixed(2),
-        cashPayouts: cashPayouts.toFixed(2),
-        pettyCash: pettyCashAmount.toFixed(2),
-        expectedDrawerCash: expectedDrawerCash.toFixed(2),
-        gcashTotal: gcashTotal.toFixed(2),
-        mayaTotal: mayaTotal.toFixed(2),
-        digitalTotal: digitalTotal.toFixed(2),
-        totalRevenue: totalRevenue.toFixed(2),
-        transactionCount: transactions.length,
-      },
-      saved: saved
-        ? {
-            id: Number(saved.id),
-            expectedCash: Number(saved.expectedCash).toFixed(2),
-            pettyCashAmount: Number(saved.pettyCashAmount).toFixed(2),
-            pettyCashNote: saved.pettyCashNote,
-            countedCash: Number(saved.countedCash).toFixed(2),
-            variance: Number(saved.variance).toFixed(2),
-            gcashTotal: Number(saved.gcashTotal).toFixed(2),
-            mayaTotal: Number(saved.mayaTotal).toFixed(2),
-            digitalTotal: (Number(saved.gcashTotal) + Number(saved.mayaTotal)).toFixed(2),
-            totalRevenue: Number(saved.totalRevenue).toFixed(2),
-            note: saved.note,
-            reconciledAt: saved.reconciledAt,
-          }
-        : null,
+      date: day.date,
+      expected: serializeExpected(live),
+      saved: saved ? serializeSaved(saved) : null,
+      staleness: staleness ? serializeStaleness(staleness) : null,
     });
   } catch (error) {
     console.error("[GET /api/v1/reports/reconciliation]", error);
@@ -110,8 +66,9 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/v1/reports/reconciliation
- * Saves (or overwrites) the physical drawer count for a date, computing the
- * variance against expected cash-on-hand from synced transactions.
+ * Records the physical drawer count for a date as a new revision (N+1). Earlier revisions
+ * are never modified: each one is what the owner counted and the system expected at its
+ * reconciledAt.
  */
 export async function POST(request: NextRequest) {
   if (!hasOwnerAccess(request)) return ownerRequiredResponse();
@@ -127,97 +84,59 @@ export async function POST(request: NextRequest) {
     }
 
     const { date, countedCash, note, pettyCashAmount, pettyCashNote } = parsed.data;
+    const day = parseBusinessDate(date)!;
 
-    // Server-side future-date guard. The UI has max={todayStr} but that's trivially
-    // bypassed. We compute "today" in PHT (UTC+8) so the boundary is correct for the
-    // shop's timezone regardless of where the request originates.
-    const phtNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
-    const todayPHT = phtNow.toISOString().slice(0, 10); // YYYY-MM-DD in PHT
-    if (date > todayPHT) {
+    // Server-side future-date guard: the UI's max is trivially bypassed.
+    if (date > manilaToday()) {
       return NextResponse.json(
         { success: false, error: "Reconciliation date cannot be in the future" },
         { status: 422 }
       );
     }
 
-    const { start: startOfDay, end: endOfDay } = dayBounds(date);
+    // Taken before reading, so a sale that syncs while this runs counts as late, not missed.
+    const reconciledAt = new Date();
+    const live = await computeExpected(day, String(pettyCashAmount));
+    const counted = new Prisma.Decimal(String(countedCash));
 
-    // Compute expected totals from synced transactions
-    const [transactions, payouts] = await Promise.all([
-      prisma.transaction.findMany({
-      where: { transactionTime: { gte: startOfDay, lte: endOfDay } },
-        select: { totalAmount: true, amountPaid: true, paymentMethod: true, tipAmount: true },
-      }),
-      prisma.dailyPayoutLedger.aggregate({
-        where: { businessDate: new Date(date) },
-        _sum: { cashPaid: true },
-      }),
-    ]);
-
-    let expectedCash = 0;
-    let cashTips = 0;
-    let gcashTotal = 0;
-    let mayaTotal = 0;
-    for (const tx of transactions) {
-      const amount = Number(tx.amountPaid ?? tx.totalAmount);
-      if (tx.paymentMethod === "CASH") expectedCash += amount;
-      if (tx.paymentMethod === "CASH") cashTips += Number(tx.tipAmount ?? 0);
-      else if (tx.paymentMethod === "GCASH") gcashTotal += amount;
-      else if (tx.paymentMethod === "MAYA") mayaTotal += amount;
+    // Two saves racing for the same revision number: the loser retries with the next one.
+    for (let attempt = 1; ; attempt++) {
+      const previous = await latestRevision(day);
+      try {
+        const record = await prisma.shiftReconciliation.create({
+          data: {
+            reconciliationDate: day.dateValue,
+            revision: (previous?.revision ?? 0) + 1,
+            expectedCash: live.expectedDrawerCash,
+            countedCash: counted,
+            variance: counted.sub(live.expectedDrawerCash),
+            gcashTotal: live.gcashTotal,
+            mayaTotal: live.mayaTotal,
+            totalRevenue: live.totalRevenue,
+            pettyCashAmount: live.pettyCash,
+            pettyCashNote: pettyCashNote ?? null,
+            note: note ?? null,
+            reconciledAt,
+          },
+        });
+        const staleness = await computeStaleness(day, record, live);
+        return NextResponse.json({
+          success: true,
+          date: day.date,
+          expected: serializeExpected(live),
+          saved: serializeSaved(record),
+          staleness: serializeStaleness(staleness),
+        });
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+        if (attempt >= MAX_REVISION_ATTEMPTS) {
+          return NextResponse.json(
+            { success: false, error: "Another reconciliation was saved at the same time. Reload and try again." },
+            { status: 409 }
+          );
+        }
+      }
     }
-    const digitalTotal = gcashTotal + mayaTotal;
-    const totalRevenue = expectedCash + digitalTotal;
-    const cashPayouts = Number(payouts._sum.cashPaid ?? 0);
-    const expectedDrawerCash = expectedCash + cashTips - cashPayouts - pettyCashAmount;
-    const variance = countedCash - expectedDrawerCash;
-
-    // Upsert — one record per date
-    const record = await prisma.shiftReconciliation.upsert({
-      where: { reconciliationDate: new Date(date) },
-      create: {
-        reconciliationDate: new Date(date),
-        expectedCash: expectedDrawerCash,
-        countedCash,
-        variance,
-        gcashTotal,
-        mayaTotal,
-        totalRevenue,
-        pettyCashAmount,
-        pettyCashNote: pettyCashNote ?? null,
-        note: note ?? null,
-      },
-      update: {
-        expectedCash: expectedDrawerCash,
-        countedCash,
-        variance,
-        gcashTotal,
-        mayaTotal,
-        totalRevenue,
-        pettyCashAmount,
-        pettyCashNote: pettyCashNote ?? null,
-        note: note ?? null,
-        reconciledAt: new Date(),
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      record: {
-        id: Number(record.id),
-        date,
-        expectedCash: Number(record.expectedCash).toFixed(2),
-        pettyCashAmount: Number(record.pettyCashAmount).toFixed(2),
-        pettyCashNote: record.pettyCashNote,
-        countedCash: Number(record.countedCash).toFixed(2),
-        variance: Number(record.variance).toFixed(2),
-        gcashTotal: Number(record.gcashTotal).toFixed(2),
-        mayaTotal: Number(record.mayaTotal).toFixed(2),
-        digitalTotal: (Number(record.gcashTotal) + Number(record.mayaTotal)).toFixed(2),
-        totalRevenue: Number(record.totalRevenue).toFixed(2),
-        note: record.note,
-        reconciledAt: record.reconciledAt,
-      },
-    });
   } catch (error) {
     console.error("[POST /api/v1/reports/reconciliation]", error);
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });

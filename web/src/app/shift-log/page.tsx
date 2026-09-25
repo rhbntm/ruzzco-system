@@ -19,6 +19,7 @@ import { clearRejection, countPending, isRejected, listRejected, summarizeSync, 
 import { useLiveQuery } from "dexie-react-hooks";
 import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { RejectedSales } from "@/components/RejectedSales";
+import { manilaToday, parseBusinessDate } from "@/lib/business-date";
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -71,10 +72,12 @@ export default function ShiftLogPage() {
   );
 
   // Daily summary
-  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
-  const todayTransactions = (localTransactions || []).filter((t) =>
-    t.transactionTime.startsWith(todayStr)
-  );
+  // Today's Manila business day, [start, end); transactionTime is a UTC ISO instant.
+  const today = parseBusinessDate(manilaToday())!;
+  const todayTransactions = (localTransactions || []).filter((t) => {
+    const at = new Date(t.transactionTime).getTime();
+    return at >= today.start.getTime() && at < today.end.getTime();
+  });
   const cashTotal = todayTransactions
     .filter((t) => t.paymentMethod === "CASH")
     .reduce((s, t) => s + Number(t.totalAmount), 0);

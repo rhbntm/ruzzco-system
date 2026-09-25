@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { manilaToday } from "@/lib/business-date";
 
 interface ExpectedTotals {
   cashTotal: string;
@@ -29,6 +30,7 @@ interface ExpectedTotals {
 
 interface SavedRecord {
   id: number;
+  revision: number;
   expectedCash: string;
   countedCash: string;
   variance: string;
@@ -42,11 +44,19 @@ interface SavedRecord {
   reconciledAt: string;
 }
 
+interface Staleness {
+  stale: boolean;
+  staleReasons: ("EXPECTED_CASH_CHANGED" | "LATE_SYNCED_TRANSACTIONS")[];
+  lateSyncedCount: number;
+  expectedCashDelta: string;
+}
+
 export default function ReconciliationPage() {
-  const todayStr = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
+  const todayStr = manilaToday(); // business date, whatever the device's timezone
   const [date, setDate] = useState(todayStr);
   const [expected, setExpected] = useState<ExpectedTotals | null>(null);
   const [saved, setSaved] = useState<SavedRecord | null>(null);
+  const [staleness, setStaleness] = useState<Staleness | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [countedCash, setCountedCash] = useState("");
@@ -66,6 +76,7 @@ export default function ReconciliationPage() {
       setIsLoading(true);
       setExpected(null);
       setSaved(null);
+      setStaleness(null);
       setFeedback(null);
       try {
         const res = await fetch(`/api/v1/reports/reconciliation?date=${date}`);
@@ -75,6 +86,7 @@ export default function ReconciliationPage() {
         if (data.success) {
           setExpected(data.expected);
           setSaved(data.saved);
+          setStaleness(data.staleness);
           if (data.saved) {
             setCountedCash(data.saved.countedCash);
             setNote(data.saved.note ?? "");
@@ -121,8 +133,10 @@ export default function ReconciliationPage() {
         return;
       }
       if (data.success) {
-        setSaved(data.record);
-        setFeedback({ msg: "Reconciliation saved ✓", ok: true });
+        setExpected(data.expected);
+        setSaved(data.saved);
+        setStaleness(data.staleness);
+        setFeedback({ msg: `Reconciliation saved as revision ${data.saved.revision} ✓`, ok: true });
       } else {
         setFeedback({ msg: data.error ?? "Save failed", ok: false });
       }
@@ -315,7 +329,7 @@ export default function ReconciliationPage() {
             {isSaving ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
-              <><ClipboardCheck className="w-4 h-4" /> Save End-Of-Day Reconciliation</>
+              <><ClipboardCheck className="w-4 h-4" /> {saved ? `Save As Revision ${saved.revision + 1}` : "Save End-Of-Day Reconciliation"}</>
             )}
           </button>
         </section>
@@ -342,8 +356,23 @@ export default function ReconciliationPage() {
         {saved && (
           <section className="p-4 rounded-xl bg-[#12141a] border border-[#232734] space-y-3">
             <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)]">
-              Saved Audit Record
+              Saved Audit Record · Revision {saved.revision}
             </span>
+            {staleness?.stale && (
+              <div className="flex items-start gap-2 p-2.5 rounded-lg text-xs border bg-amber-500/10 border-amber-500/30 text-amber-300">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold">Out of date: this record no longer matches the register.</p>
+                  {staleness.staleReasons.includes("LATE_SYNCED_TRANSACTIONS") && (
+                    <p>{staleness.lateSyncedCount} sale{staleness.lateSyncedCount === 1 ? "" : "s"} for this date synced after it was saved.</p>
+                  )}
+                  {staleness.staleReasons.includes("EXPECTED_CASH_CHANGED") && (
+                    <p>Expected drawer cash is now ₱{expected?.expectedDrawerCash} ({parseFloat(staleness.expectedCashDelta) > 0 ? "+" : ""}₱{staleness.expectedCashDelta}).</p>
+                  )}
+                  <p>The variance below was correct when saved. Count the drawer again and save a new revision.</p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2 text-sm">
               {[
                 { label: "Expected Cash", value: `₱${saved.expectedCash}` },
@@ -373,7 +402,7 @@ export default function ReconciliationPage() {
               ) : (
                 <AlertTriangle className="w-4 h-4" />
               )}
-              Variance: {variance !== null && variance > 0 ? "+" : ""}₱{saved.variance}{" "}
+              {staleness?.stale ? "Variance when saved" : "Variance"}: {variance !== null && variance > 0 ? "+" : ""}₱{saved.variance}{" "}
               {variance !== null && Math.abs(variance) < 0.01
                 ? "— Balanced"
                 : variance !== null && variance < 0
