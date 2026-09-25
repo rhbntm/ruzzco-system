@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { syncBatchSchema } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
+
+type RejectReason = "DEVICE_MISMATCH" | "ASSIGNMENT_UNAVAILABLE";
+
+function isUniqueViolation(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +32,8 @@ export async function POST(request: NextRequest) {
     let processedCount = 0;
     let duplicatesSkipped = 0;
     const syncedIds: string[] = [];
+    // Not inserted and not marked synced: the phone keeps them queued.
+    const rejected: { id: string; reason: RejectReason }[] = [];
 
     // Pre-fetch all barber commission rates to avoid multiple queries
     const barbers = await prisma.barber.findMany({
@@ -34,29 +43,6 @@ export async function POST(request: NextRequest) {
       barbers.map((b) => [b.id, Number(b.commissionRate)])
     );
 
-    // Pre-build a deviceKey → cashierId map for keys present in this batch
-    const deviceKeys = [
-      ...new Set(
-        transactions
-          .map((t) => t.deviceKey)
-          .filter((k): k is string => typeof k === "string")
-      ),
-    ];
-    const deviceCashierMap = new Map<string, string>();
-    if (deviceKeys.length > 0) {
-      const assignments = await prisma.deviceAssignment.findMany({
-        where: { deviceKey: { in: deviceKeys }, revokedAt: null },
-        select: { deviceKey: true, barberId: true },
-        orderBy: { assignedAt: "desc" },
-      });
-      // Take the most recent active binding per deviceKey
-      for (const a of assignments) {
-        if (!deviceCashierMap.has(a.deviceKey)) {
-          deviceCashierMap.set(a.deviceKey, a.barberId);
-        }
-      }
-    }
-
     // Extract all IDs to check existing transactions in one query
     const incomingIds = transactions.map((t) => t.id);
     const existingTransactions = await prisma.transaction.findMany({
@@ -65,9 +51,57 @@ export async function POST(request: NextRequest) {
     });
     const existingIdSet = new Set(existingTransactions.map((t) => t.id));
 
+    // Load every assignment the new sales reference, active or revoked. A sale is
+    // attributed to the assignment it was made under, never to the device's
+    // current binding, so a later rebind cannot move it.
+    const pending = transactions.filter((t) => !existingIdSet.has(t.id));
+    const referencedIds = [...new Set(pending.map((t) => t.assignmentId).filter((id): id is string => !!id))];
+    const assignmentSelect = { id: true, deviceKey: true, barberId: true } as const;
+    const assignments = new Map(
+      (await prisma.deviceAssignment.findMany({ where: { id: { in: referencedIds } }, select: assignmentSelect }))
+        .map((a) => [a.id, a])
+    );
+
+    // An assignment made offline and then superseded before it reached /bind is only
+    // known through its sales. Record it as historical (already revoked): sync never
+    // creates or disturbs the device's active binding.
+    const missing = new Map<string, { id: string; deviceKey: string; barberId: string }>();
+    for (const item of pending) {
+      if (item.assignmentId && item.deviceKey && !assignments.has(item.assignmentId) && !missing.has(item.assignmentId)) {
+        missing.set(item.assignmentId, { id: item.assignmentId, deviceKey: item.deviceKey, barberId: item.barberId });
+      }
+    }
+    if (missing.size > 0) {
+      for (const record of missing.values()) {
+        // Validated before the insert: skipDuplicates would otherwise swallow the FK error.
+        if (!barberRates.has(record.barberId)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Unknown barberId: "${record.barberId}". Refresh the POS catalog and retry.`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+      const revokedAt = new Date();
+      // skipDuplicates: a concurrent sync or bind may have created the same id; the
+      // existing row wins and everyone resolves against it after the re-read.
+      await prisma.deviceAssignment.createMany({
+        data: [...missing.values()].map((record) => ({ ...record, revokedAt })),
+        skipDuplicates: true,
+      });
+      const registered = await prisma.deviceAssignment.findMany({
+        where: { id: { in: [...missing.keys()] } },
+        select: assignmentSelect,
+      });
+      for (const a of registered) assignments.set(a.id, a);
+    }
+
     // Process each transaction with strict idempotency
     for (const item of transactions) {
-      // If already recorded in MySQL, treat as safely synced (idempotent skip)
+      // If already recorded in MySQL, treat as safely synced (idempotent skip).
+      // Its attribution is never recalculated.
       if (existingIdSet.has(item.id)) {
         duplicatesSkipped++;
         syncedIds.push(item.id);
@@ -87,42 +121,35 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Resolve authoritative barberId and cashierId from the device binding.
-      // When a device has an active server-side binding, the bound barberId is
-      // the authoritative source — the client payload is overridden. This closes
-      // the commission misattribution vector: a tampered client cannot claim a
-      // different barber's commission as long as the device key is bound.
+      // Resolve attribution. Assignment-backed sales take the barber of the assignment
+      // they were made under; the claimed barberId is only checked against it.
+      // Legacy sales (no assignmentId) keep their sale-time barberId and have no
+      // verified cashier; the device's current binding is never consulted.
       let resolvedBarberId = item.barberId;
       let cashierId: string | null = null;
+      let mismatch = false;
 
-      if (item.deviceKey && deviceCashierMap.has(item.deviceKey)) {
-        const boundBarberId = deviceCashierMap.get(item.deviceKey)!;
-        cashierId = boundBarberId;
-        if (boundBarberId !== item.barberId) {
-          // Persist tamper evidence before proceeding. Awaited deliberately —
-          // this is the durable record; console.warn alone is lost on restart.
-          console.warn(
-            `[sync] barberId mismatch for tx ${item.id}: client sent "${item.barberId}", ` +
-            `binding says "${boundBarberId}". Persisting to sync_mismatch_logs.`
-          );
-          await prisma.syncMismatchLog.create({
-            data: {
-              transactionId: item.id,
-              deviceKey: item.deviceKey!, // always a string here: checked by outer if
-              claimedBarberId: item.barberId,
-              resolvedBarberId: boundBarberId,
-            },
-          });
+      if (item.assignmentId) {
+        const assignment = assignments.get(item.assignmentId);
+        if (!assignment) {
+          rejected.push({ id: item.id, reason: "ASSIGNMENT_UNAVAILABLE" });
+          continue;
         }
-        resolvedBarberId = boundBarberId;
+        if (assignment.deviceKey !== item.deviceKey) {
+          console.warn(`[sync] tx ${item.id} references assignment ${assignment.id} from a different device. Rejected.`);
+          rejected.push({ id: item.id, reason: "DEVICE_MISMATCH" });
+          continue;
+        }
+        resolvedBarberId = assignment.barberId;
+        cashierId = assignment.barberId;
+        mismatch = item.barberId !== assignment.barberId;
       }
 
-      // Re-validate resolvedBarberId in case the bound barber was removed
       if (!barberRates.has(resolvedBarberId)) {
         return NextResponse.json(
           {
             success: false,
-            error: `Resolved barberId "${resolvedBarberId}" is not a known active barber. Re-bind device and retry.`,
+            error: `Resolved barberId "${resolvedBarberId}" is not a known barber.`,
             invalidTransactionId: item.id,
           },
           { status: 400 }
@@ -137,40 +164,73 @@ export async function POST(request: NextRequest) {
       const commissionBase = "LIST_PRICE" as const;
       const commissionAmount = Math.round(listPrice * resolvedCommissionRate * 100) / 100;
 
-      // Insert transaction, line item, and commission log atomically
-      await prisma.transaction.create({
-        data: {
-          id: item.id,
-          barberId: resolvedBarberId,
-          cashierId,
-          totalAmount: item.totalAmount,
-          listPrice,
-          discountType: item.discountType,
-          discountAmount: item.discountAmount,
-          amountPaid,
-          tipAmount,
-          customAmount: item.customAmount,
-          customAmountNote: item.customAmountNote ?? null,
-          barberCommissionAmount: commissionAmount,
-          commissionBase,
-          paymentMethod: item.paymentMethod,
-          paymentReference: item.paymentReference ?? null,
-          transactionTime: new Date(item.transactionTime),
-          syncedAt: new Date(),
-          items: {
-            create: {
-              serviceId: item.serviceId,
-              priceAtSale: item.totalAmount,
-            },
-          },
-          commissionLogs: {
-            create: {
+      if (mismatch) {
+        console.warn(
+          `[sync] barberId mismatch for tx ${item.id}: client sent "${item.barberId}", ` +
+          `assignment says "${resolvedBarberId}". Persisting to sync_mismatch_logs.`
+        );
+      }
+
+      // Mismatch log, transaction, line item and commission log commit together, so a
+      // failed insert never leaves an orphan log.
+      try {
+        await prisma.$transaction([
+          ...(mismatch
+            ? [
+                prisma.syncMismatchLog.create({
+                  data: {
+                    transactionId: item.id,
+                    deviceKey: item.deviceKey!, // required by the schema when assignmentId is present
+                    claimedBarberId: item.barberId,
+                    resolvedBarberId,
+                  },
+                }),
+              ]
+            : []),
+          prisma.transaction.create({
+            data: {
+              id: item.id,
               barberId: resolvedBarberId,
-              amount: commissionAmount,
+              cashierId,
+              assignmentId: item.assignmentId ?? null,
+              totalAmount: item.totalAmount,
+              listPrice,
+              discountType: item.discountType,
+              discountAmount: item.discountAmount,
+              amountPaid,
+              tipAmount,
+              customAmount: item.customAmount,
+              customAmountNote: item.customAmountNote ?? null,
+              barberCommissionAmount: commissionAmount,
+              commissionBase,
+              paymentMethod: item.paymentMethod,
+              paymentReference: item.paymentReference ?? null,
+              transactionTime: new Date(item.transactionTime),
+              syncedAt: new Date(),
+              items: {
+                create: {
+                  serviceId: item.serviceId,
+                  priceAtSale: item.totalAmount,
+                },
+              },
+              commissionLogs: {
+                create: {
+                  barberId: resolvedBarberId,
+                  amount: commissionAmount,
+                },
+              },
             },
-          },
-        },
-      });
+          }),
+        ]);
+      } catch (error) {
+        // An overlapping sync inserted this id first: the client UUID is the
+        // idempotency key, so it is already safely recorded.
+        if (!isUniqueViolation(error)) throw error;
+        existingIdSet.add(item.id);
+        duplicatesSkipped++;
+        syncedIds.push(item.id);
+        continue;
+      }
 
       existingIdSet.add(item.id);
       processedCount++;
@@ -182,6 +242,7 @@ export async function POST(request: NextRequest) {
       processedCount,
       duplicatesSkipped,
       syncedIds,
+      rejected,
       serverTime: new Date().toISOString(),
     });
   } catch (error) {

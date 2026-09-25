@@ -14,6 +14,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import { db, type LocalTransaction } from "@/lib/db";
+import { syncNow } from "@/lib/sync";
 import { useLiveQuery } from "dexie-react-hooks";
 import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
 
@@ -76,48 +77,19 @@ export default function ShiftLogPage() {
     if (!navigator.onLine) return;
     setIsSyncing(true);
     try {
-      const pending = await db.transactions.where("synced").equals(0).toArray();
-      if (pending.length === 0) {
+      // Same lifecycle as the POS: register the pending assignment, then sync.
+      const outcome = await syncNow();
+      if (outcome.status === "failed") {
+        setSyncFeedback("Sync failed — queued locally");
+      } else if (outcome.status === "synced") {
+        const notSynced = outcome.held + outcome.rejected;
+        setSyncFeedback(`Synced ${outcome.processed} new, ${outcome.duplicates} verified${notSynced ? `, ${notSynced} still queued` : ""}`);
+      } else if (outcome.held > 0) {
+        setSyncFeedback(`${outcome.held} queued until barber assignment reaches the server`);
+      } else {
         setSyncFeedback("All transactions are synced ✓");
-        setTimeout(() => setSyncFeedback(null), 2500);
-        return;
       }
-      const deviceKey = localStorage.getItem("ruzzco_device_key") ?? undefined;
-      const payload = {
-        transactions: pending.map((t) => ({
-          id: t.id,
-          barberId: t.barberId,
-          serviceId: t.serviceId,
-          totalAmount: t.totalAmount,
-          listPrice: t.listPrice ?? t.price,
-          discountType: t.discountType ?? "NONE",
-          discountAmount: t.discountAmount ?? 0,
-          amountPaid: t.amountPaid ?? t.totalAmount,
-          tipAmount: t.tipAmount ?? 0,
-          customAmount: t.customAmount ?? false,
-          customAmountNote: t.customAmountNote ?? null,
-          paymentMethod: t.paymentMethod,
-          paymentReference: t.paymentReference ?? null,
-          transactionTime: t.transactionTime,
-          deviceKey,
-        })),
-      };
-      const res = await fetch("/api/v1/transactions/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const result = await res.json();
-      if (result.success && Array.isArray(result.syncedIds)) {
-        await db.transaction("rw", db.transactions, async () => {
-          for (const id of result.syncedIds) {
-            await db.transactions.update(id, { synced: 1, syncedAt: new Date().toISOString() });
-          }
-        });
-        setSyncFeedback(`Synced ${result.processedCount} new, ${result.duplicatesSkipped} verified`);
-        setTimeout(() => setSyncFeedback(null), 3000);
-      }
+      setTimeout(() => setSyncFeedback(null), 3000);
     } catch (err) {
       console.error("Sync error:", err);
       setSyncFeedback("Sync failed — queued locally");

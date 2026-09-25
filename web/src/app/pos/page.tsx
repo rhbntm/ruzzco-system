@@ -37,6 +37,13 @@ import {
   DEFAULT_BARBERS,
   DEFAULT_SERVICES,
 } from "@/lib/db";
+import {
+  createLocalAssignment,
+  ensureAssignmentId,
+  registerPendingAssignment,
+  syncNow,
+  verifyCurrentAssignment,
+} from "@/lib/sync";
 import { useLiveQuery } from "dexie-react-hooks";
 import { RuzzcoLogoBadge, MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
 
@@ -126,52 +133,29 @@ export default function MobilePOSPage() {
 
   // ── Sync dispatcher ─────────────────────────────────────────────────────────
 
+  const requireRebind = useCallback(() => {
+    setBinding(null);
+    setShowBindModal(true);
+  }, []);
+
+  // Register the pending assignment, then sync queued sales (see lib/sync.ts).
   const triggerSync = useCallback(async () => {
     if (typeof window === "undefined" || !navigator.onLine) return;
     try {
       setIsSyncing(true);
-      const pending = await db.transactions.where("synced").equals(0).toArray();
-      if (pending.length === 0) {
+      const outcome = await syncNow();
+      if (outcome.bind.bindingCleared) requireRebind();
+      if (outcome.status === "failed") {
+        setSyncFeedback("Sync failed. Queued locally.");
+      } else if (outcome.status === "synced") {
+        const notSynced = outcome.held + outcome.rejected;
+        setSyncFeedback(`Synced ${outcome.processed} new, ${outcome.duplicates} verified${notSynced ? `, ${notSynced} still queued` : ""}`);
+      } else if (outcome.held > 0) {
+        setSyncFeedback(`${outcome.held} queued until barber assignment reaches the server`);
+      } else {
         setSyncFeedback("All transactions are synced");
-        setTimeout(() => setSyncFeedback(null), 2500);
-        return;
       }
-      const deviceKey = getOrCreateDeviceKey();
-      const payload = {
-        transactions: pending.map((t) => ({
-          id: t.id,
-          barberId: t.barberId,
-          serviceId: t.serviceId,
-          totalAmount: t.totalAmount,
-          listPrice: t.listPrice ?? t.price,
-          discountType: t.discountType ?? "NONE",
-          discountAmount: t.discountAmount ?? 0,
-          amountPaid: t.amountPaid ?? t.totalAmount,
-          tipAmount: t.tipAmount ?? 0,
-          customAmount: t.customAmount ?? false,
-          customAmountNote: t.customAmountNote ?? null,
-          paymentMethod: t.paymentMethod,
-          paymentReference: t.paymentReference ?? null,
-          transactionTime: t.transactionTime,
-          deviceKey,
-        })),
-      };
-      const response = await fetch("/api/v1/transactions/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error(`Sync failed: HTTP ${response.status}`);
-      const result = await response.json();
-      if (result.success && Array.isArray(result.syncedIds)) {
-        await db.transaction("rw", db.transactions, async () => {
-          for (const id of result.syncedIds) {
-            await db.transactions.update(id, { synced: 1, syncedAt: new Date().toISOString() });
-          }
-        });
-        setSyncFeedback(`Synced ${result.processedCount} new, ${result.duplicatesSkipped} verified`);
-        setTimeout(() => setSyncFeedback(null), 3500);
-      }
+      setTimeout(() => setSyncFeedback(null), 3000);
     } catch (err) {
       console.error("Auto-sync error:", err);
       setSyncFeedback("Sync failed. Queued locally.");
@@ -179,39 +163,19 @@ export default function MobilePOSPage() {
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [requireRebind]);
 
-  // Flush a pending offline bind to the server on reconnect
-  const flushPendingBind = useCallback(async () => {
-    try {
-      const PENDING_KEY = "ruzzco_pending_bind";
-      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(PENDING_KEY) : null;
-      if (!raw) return;
-      const { deviceKey, barberId } = JSON.parse(raw) as { deviceKey: string; barberId: string };
-      const res = await fetch("/api/v1/devices/bind", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceKey, barberId }),
-      });
-      if (res.ok) {
-        localStorage.removeItem(PENDING_KEY);
-        console.info("[bind] Offline bind flushed to server.");
-      }
-      // If not ok, leave it in localStorage — will retry next online event
-    } catch {
-      // Server unreachable — will retry next time
-    }
-  }, []);
+  // Full lifecycle for load and reconnect: register, sync, then recheck the binding.
+  const reconcileWithServer = useCallback(async () => {
+    await triggerSync();
+    if (await verifyCurrentAssignment()) requireRebind();
+  }, [triggerSync, requireRebind]);
 
-  // Auto-sync and flush pending bind on reconnect
   useEffect(() => {
-    const handleOnline = () => {
-      flushPendingBind();
-      triggerSync();
-    };
+    const handleOnline = () => { reconcileWithServer(); };
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
-  }, [triggerSync, flushPendingBind]);
+  }, [reconcileWithServer]);
 
   // ── Device binding initialization ───────────────────────────────────────────
 
@@ -250,32 +214,18 @@ export default function MobilePOSPage() {
 
         // Load local binding
         const deviceKey = getOrCreateDeviceKey();
-        const localBinding = await db.deviceBindings.get(deviceKey);
+        const storedBinding = await db.deviceBindings.get(deviceKey);
 
-        if (localBinding) {
+        if (storedBinding) {
+          // Bindings from before assignment ids get one now, so new sales are assignment-backed.
+          const localBinding = await ensureAssignmentId(storedBinding);
           if (active) {
             setBinding(localBinding);
             setBindingLoaded(true);
           }
-          // Background verify server-side binding if online
-          if (navigator.onLine) {
-            try {
-              const res = await fetch(`/api/v1/devices/binding?deviceKey=${encodeURIComponent(deviceKey)}`);
-              if (res.ok) {
-                const data = await res.json();
-                if (!data.bound) {
-                  // Server revoked — clear local and prompt re-bind
-                  await db.deviceBindings.delete(deviceKey);
-                  if (active) {
-                    setBinding(null);
-                    setShowBindModal(true);
-                  }
-                }
-              }
-            } catch {
-              // Stay with local binding if server is unreachable
-            }
-          }
+          // Register the pending assignment, sync queued sales, then recheck the binding.
+          // Offline or unreachable: keep the local binding; sales stay queued with their assignment.
+          if (navigator.onLine && active) await reconcileWithServer();
         } else {
           // No local binding — show first-boot modal
           if (active) {
@@ -295,47 +245,23 @@ export default function MobilePOSPage() {
 
     initBinding();
     return () => { active = false; };
-  }, []);
+  }, [reconcileWithServer]);
 
   // ── Device bind action ──────────────────────────────────────────────────────
 
   const handleBindDevice = async (barber: CachedBarber) => {
     setIsBinding(true);
     try {
-      const deviceKey = getOrCreateDeviceKey();
-      const newBinding: LocalDeviceBinding = {
-        deviceKey,
-        barberId: barber.id,
-        barberName: barber.fullName,
-        assignedAt: new Date().toISOString(),
-      };
-
-      // Persist locally first — POS is usable immediately even if offline
-      await db.deviceBindings.put(newBinding);
+      // New assignment id generated on the phone; persisted locally first so the POS is
+      // usable offline. Sales already queued keep the assignment they were made under.
+      const newBinding = await createLocalAssignment(barber);
       setBinding(newBinding);
       setShowBindModal(false);
 
-      // Always store a pending bind so it can be flushed on reconnect
-      const PENDING_KEY = "ruzzco_pending_bind";
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem(PENDING_KEY, JSON.stringify({ deviceKey, barberId: barber.id }));
-      }
-
-      // Attempt server sync immediately if online; clear pending on success
+      // Make it active on the server now if online; otherwise the next sync registers it.
       if (navigator.onLine) {
-        try {
-          const res = await fetch("/api/v1/devices/bind", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ deviceKey, barberId: barber.id }),
-          });
-          if (res.ok && typeof localStorage !== "undefined") {
-            localStorage.removeItem(PENDING_KEY);
-          }
-          // If server returned an error, leave pending — flushPendingBind will retry
-        } catch {
-          // Network failure — flushPendingBind will retry on next online event
-        }
+        const result = await registerPendingAssignment();
+        if (result.bindingCleared) requireRebind();
       }
     } catch (e) {
       console.error("Error binding device:", e);
@@ -383,6 +309,9 @@ export default function MobilePOSPage() {
         transactionTime: new Date().toISOString(),
         synced: 0,
         syncedAt: null,
+        // Sale-time attribution: fixed now, never rewritten by a later rebind.
+        assignmentId: binding.assignmentId,
+        deviceKey: binding.deviceKey,
       };
 
       await db.transactions.add(newTransaction);

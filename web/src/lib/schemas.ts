@@ -3,6 +3,8 @@ import { z } from "zod";
 export const deviceBindSchema = z.object({
   deviceKey: z.string().uuid("Invalid device key UUID"),
   barberId: z.string().min(1, "Barber ID is required"),
+  // Generated on the phone at bind time. Optional so older clients still bind.
+  assignmentId: z.string().uuid("Invalid assignment UUID").optional(),
 });
 
 export const syncTransactionItemSchema = z.object({
@@ -21,6 +23,11 @@ export const syncTransactionItemSchema = z.object({
   paymentReference: z.string().nullable().optional(),
   transactionTime: z.string().datetime({ message: "Invalid ISO datetime string" }),
   deviceKey: z.string().uuid().optional(),
+  // Assignment active on the phone when the sale was made. Absent on legacy queued sales.
+  assignmentId: z.string().uuid().optional(),
+}).refine((item) => !item.assignmentId || item.deviceKey, {
+  message: "deviceKey is required when assignmentId is present",
+  path: ["deviceKey"],
 });
 
 export const syncBatchSchema = z.object({

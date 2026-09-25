@@ -20,6 +20,10 @@ export interface LocalTransaction {
   transactionTime: string; // ISO datetime string
   synced: number; // 0 = pending sync, 1 = synced
   syncedAt?: string | null;
+  // Sale-time attribution facts, copied from the binding. Never rewritten after a rebind.
+  // Absent on sales queued before assignment ids existed.
+  assignmentId?: string;
+  deviceKey?: string;
 }
 
 export interface CachedBarber {
@@ -41,6 +45,7 @@ export interface LocalDeviceBinding {
   barberId: string;
   barberName: string;
   assignedAt: string; // ISO datetime
+  assignmentId?: string; // generated on the phone at bind time; absent on bindings made before assignment ids
 }
 
 export class RuzzcoPOSDatabase extends Dexie {
@@ -95,7 +100,7 @@ export function generateUUID(): string {
 
 /**
  * Returns the persistent device key for this browser. Creates and stores one
- * on first call. This key is used for cashier attribution — it is not a secret.
+ * on first call. It identifies the device on its assignment records — it is not a secret.
  */
 export function getOrCreateDeviceKey(): string {
   const STORAGE_KEY = "ruzzco_device_key";

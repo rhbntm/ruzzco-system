@@ -29,10 +29,24 @@ _Note: MySQL runs on port `3307` locally to prevent conflicts with default port 
 
 ```bash
 cd web
-cp .env.example .env    # Verify DATABASE_URL matches port 3307
-npx prisma db push      # Sync schema to MySQL
-npx prisma db seed      # Seed initial barbers (Mart, Bayani) and services
+cp .env.example .env         # Verify DATABASE_URL matches port 3307
+npx prisma migrate deploy    # Apply the migrations in prisma/migrations
+npx prisma db seed           # Seed initial barbers (Mart, Bayani) and services
 ```
+
+**Schema changes** are committed as migrations. Do not use `prisma db push` or `prisma migrate dev` (it can offer to reset the database on drift). Edit `prisma/schema.prisma`, then generate the SQL from the live database, review it, and apply it (run the redirect in Git Bash; Windows PowerShell 5.1 redirection writes a BOM or UTF-16):
+
+```bash
+mkdir prisma/migrations/<YYYYMMDDHHMMSS>_<name>
+npx prisma migrate diff --from-schema-datasource prisma/schema.prisma \
+  --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/<YYYYMMDDHHMMSS>_<name>/migration.sql
+npx prisma migrate deploy
+npx prisma generate          # stop the dev server first on Windows (EPERM)
+```
+
+_Existing databases created with `db push` before migrations existed: run `npx prisma migrate resolve --applied 0_init` once (after checking `npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma` shows only the changes in later migrations), then `npx prisma migrate deploy`._
+
+**Attribution tests** (dev server running): `npm run test:attribution`. The fresh-database migration check also needs `TEST_ADMIN_DATABASE_URL` set to a MySQL user that can create databases, such as the local Docker root user.
 
 ### 3. Run the Development Server
 

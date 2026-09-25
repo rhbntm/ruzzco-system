@@ -87,12 +87,17 @@ model Transaction {
   paymentReference       String?           @map("payment_reference")
   transactionTime        DateTime          @map("transaction_time") // Client recorded time
   syncedAt               DateTime          @default(now()) @map("synced_at") // Server receipt time
+  // Device assignment active on the phone when the sale was made. Authoritative for barber
+  // attribution; null for legacy sales queued before assignment ids existed.
+  assignmentId           String?           @map("assignment_id")
+  assignment             DeviceAssignment? @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   items                  TransactionItem[]
   commissionLogs         CommissionLog[]
   createdAt              DateTime          @default(now()) @map("created_at")
 
   @@index([barberId])
   @@index([transactionTime])
+  @@index([assignmentId])
   @@map("transactions")
 }
 
@@ -124,12 +129,13 @@ model CommissionLog {
 }
 
 model DeviceAssignment {
-  id         String    @id @default(uuid())
-  deviceKey  String    @map("device_key") // localStorage UUID, not a secret
-  barberId   String    @map("barber_id")
-  barber     Barber    @relation(fields: [barberId], references: [id])
-  assignedAt DateTime  @default(now()) @map("assigned_at")
-  revokedAt  DateTime? @map("revoked_at") // null = active binding
+  id           String        @id @default(uuid()) // generated on the phone at bind time; by the server for older clients
+  deviceKey    String        @map("device_key") // localStorage UUID, not a secret
+  barberId     String        @map("barber_id")
+  barber       Barber        @relation(fields: [barberId], references: [id])
+  assignedAt   DateTime      @default(now()) @map("assigned_at")
+  revokedAt    DateTime?     @map("revoked_at") // null = active binding
+  transactions Transaction[] // sales made under this assignment; Restrict keeps history from being deleted
 
   @@index([deviceKey])
   @@index([barberId])
@@ -187,14 +193,14 @@ model DailyRevenueForecast {
 }
 
 /// Persistent audit record written whenever the sync route overrides a client-supplied
-/// barberId with the server-authoritative device binding. console.warn alone is lost on
+/// barberId with the barber of the sale's device assignment. console.warn alone is lost on
 /// restart; this table survives indefinitely and can be queried for tamper investigations.
 model SyncMismatchLog {
   id               BigInt   @id @default(autoincrement())
   transactionId    String   @map("transaction_id") // the tx whose barberId was overridden
   deviceKey        String   @map("device_key")
   claimedBarberId  String   @map("claimed_barber_id")  // what the client sent
-  resolvedBarberId String   @map("resolved_barber_id") // what the server binding says
+  resolvedBarberId String   @map("resolved_barber_id") // the sale's assignment barber (authoritative)
   detectedAt       DateTime @default(now()) @map("detected_at")
 
   @@index([deviceKey])
