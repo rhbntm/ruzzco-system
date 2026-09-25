@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { commissionFor } from "@/lib/commission";
 import {
   syncBatchSchema,
   syncTransactionItemSchema,
@@ -65,12 +66,13 @@ export async function POST(request: NextRequest) {
       rejected.push({ id, reason });
     };
 
-    // Pre-fetch all barber commission rates to avoid multiple queries
+    // Pre-fetch all barber commission rates to avoid multiple queries. Inactive barbers
+    // included: a sale made before deactivation is still recorded and payable.
     const barbers = await prisma.barber.findMany({
       select: { id: true, commissionRate: true },
     });
-    const barberRates = new Map<string, number>(
-      barbers.map((b) => [b.id, Number(b.commissionRate)])
+    const barberRates = new Map<string, Prisma.Decimal>(
+      barbers.map((b) => [b.id, b.commissionRate])
     );
 
     // Extract all IDs to check existing transactions in one query
@@ -174,13 +176,15 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const resolvedCommissionRate = barberRates.get(resolvedBarberId)!;
+      // The rate is the barber's rate now, when the server first records the sale. It is
+      // stored with the sale and never recalculated (duplicates are skipped above).
+      const commissionRate = barberRates.get(resolvedBarberId)!;
       const amountPaid = item.amountPaid ?? item.totalAmount;
       // Custom amount: list price is the entered amount (also fixes older queued payloads that carried the service price).
       const listPrice = item.customAmount ? amountPaid : (item.listPrice ?? item.totalAmount);
       const tipAmount = item.tipAmount ?? 0;
       const commissionBase = "LIST_PRICE" as const;
-      const commissionAmount = Math.round(listPrice * resolvedCommissionRate * 100) / 100;
+      const commissionAmount = commissionFor(listPrice, commissionRate);
 
       if (mismatch) {
         console.warn(
@@ -220,6 +224,7 @@ export async function POST(request: NextRequest) {
               customAmount: item.customAmount,
               customAmountNote: item.customAmountNote ?? null,
               barberCommissionAmount: commissionAmount,
+              commissionRate,
               commissionBase,
               paymentMethod: item.paymentMethod,
               paymentReference: item.paymentReference ?? null,

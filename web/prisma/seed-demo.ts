@@ -1,4 +1,5 @@
-import { PrismaClient, Prisma, DiscountType, PaymentMethod } from "@prisma/client";
+import { PrismaClient, DiscountType, PaymentMethod } from "@prisma/client";
+import { commissionFor } from "../src/lib/commission";
 
 // Demo transactions for today (Asia/Manila). Every row id starts with "demo-".
 //   npm run seed:demo            -> replace demo rows with today's samples
@@ -113,8 +114,8 @@ async function seed() {
 
   for (const tx of DEMO_TRANSACTIONS) {
     const rate = rateByBarber.get(tx.barberId)!;
-    // Commission is snapshotted on LIST_PRICE, same as the sync route.
-    const commission = new Prisma.Decimal(tx.listPrice).mul(rate).toDecimalPlaces(2);
+    // Rate and commission are snapshotted on LIST_PRICE, same as the sync route.
+    const commission = commissionFor(tx.listPrice, rate);
 
     await prisma.transaction.create({
       data: {
@@ -129,6 +130,7 @@ async function seed() {
         customAmount: tx.customAmount ?? false,
         customAmountNote: tx.customAmountNote ?? null,
         barberCommissionAmount: commission,
+        commissionRate: rate,
         commissionBase: "LIST_PRICE",
         paymentMethod: tx.paymentMethod,
         paymentReference: tx.paymentReference ?? null,

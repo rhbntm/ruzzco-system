@@ -48,6 +48,7 @@ async function testSyncIdempotency() {
           barberId: item.barberId,
           totalAmount: item.totalAmount,
           barberCommissionAmount: commissionAmount,
+          commissionRate: 0.5,
           paymentMethod: item.paymentMethod,
           paymentReference: item.paymentReference,
           transactionTime: new Date(item.transactionTime),

@@ -82,6 +82,9 @@ model Transaction {
   customAmount           Boolean           @default(false) @map("custom_amount")
   customAmountNote       String?           @db.VarChar(255) @map("custom_amount_note")
   barberCommissionAmount Decimal           @db.Decimal(10, 2) @map("barber_commission_amount")
+  // Barber's rate when the server first recorded the sale. Immutable; payouts never read
+  // Barber.commissionRate. No default: a sale is never recorded with an assumed rate.
+  commissionRate         Decimal           @db.Decimal(5, 2) @map("commission_rate")
   commissionBase         CommissionBase    @default(LIST_PRICE) @map("commission_base")
   paymentMethod          PaymentMethod     @default(CASH) @map("payment_method")
   paymentReference       String?           @map("payment_reference")
