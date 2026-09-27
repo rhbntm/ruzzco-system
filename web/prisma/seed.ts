@@ -46,18 +46,18 @@ async function main() {
     create: {
       id: "10000000-0000-0000-0000-000000000001",
       name: "Haircut",
-      standardPrice: 150.00,
+      standardPrice: 200.00,
       isActive: true,
     },
   });
 
-  const beardTrim = await prisma.service.upsert({
+  const shaveMassage = await prisma.service.upsert({
     where: { id: "10000000-0000-0000-0000-000000000002" },
     update: {},
     create: {
       id: "10000000-0000-0000-0000-000000000002",
-      name: "Beard Trim / Shave",
-      standardPrice: 100.00,
+      name: "Shave & Massage",
+      standardPrice: 150.00,
       isActive: true,
     },
   });
@@ -65,7 +65,7 @@ async function main() {
   console.log("✅ Seed completed successfully!");
   console.log(`- Owner: ${owner.name} (${owner.email})`);
   console.log(`- Barbers: ${mart.fullName}, ${bayaniBarber.fullName}`);
-  console.log(`- Services: ${haircut.name} (₱${haircut.standardPrice}), ${beardTrim.name} (₱${beardTrim.standardPrice})`);
+  console.log(`- Services: ${haircut.name} (₱${haircut.standardPrice}), ${shaveMassage.name} (₱${shaveMassage.standardPrice})`);
 }
 
 main()

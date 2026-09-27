@@ -144,13 +144,13 @@ export const DEFAULT_SERVICES: CachedService[] = [
   {
     id: "10000000-0000-0000-0000-000000000001",
     name: "Haircut",
-    standardPrice: 150,
+    standardPrice: 200,
     isActive: true,
   },
   {
     id: "10000000-0000-0000-0000-000000000002",
-    name: "Beard Trim / Shave",
-    standardPrice: 100,
+    name: "Shave & Massage",
+    standardPrice: 150,
     isActive: true,
   },
 ];
