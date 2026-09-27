@@ -8,7 +8,7 @@ Users: Bayani (owner and barber) and Mart (co-owner). The ML service (`ml-servic
 ## Layout and commands
 - Repo root: `docker-compose.yml` (MySQL 8, host port 3307, db `ruzzco_db`) and `web/`.
 - `web/`: Next.js 16.3.5 (App Router, Turbopack), React 19, Tailwind 4, Prisma 6 (MySQL), Dexie 4, Zod 4.
-- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution` and `npm run test:sync-rejections` (need the dev server), `npm run test:submit-lock`.
+- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission` and `npm run test:reconciliation` (need the dev server), `npm run test:submit-lock`.
 - `web/.env` needs `DATABASE_URL` and `OWNER_PIN`. Never print, log, or commit their values.
 - Next.js 16 differs from older versions. Read `node_modules/next/dist/docs/` before using an API you are unsure about.
 
@@ -32,6 +32,7 @@ Code must respect these. Don't build features from this list unless a slice spec
 
 ## Git
 - Never add `Co-Authored-By: Claude` trailers or other Claude attribution to commits.
+- Commit on `main` unless told otherwise. Check the current branch before committing.
 - Commit only when I ask. Never push, force-push or rewrite history without explicit confirmation.
 - One tool commits at a time. If `.git/index.lock` exists, check `Get-Process git` before removing it.
 
