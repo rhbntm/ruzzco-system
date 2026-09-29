@@ -5,13 +5,13 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Starting Ruzzco Barbers database seed...");
 
-  // 1. Seed Owner User
+  // 1. Seed Owner User (Mart owns the shop; 2026-09-25 interview)
   const owner = await prisma.user.upsert({
-    where: { email: "bayani@ruzzcobarbers.com" },
+    where: { email: "mart@ruzzcobarbers.com" },
     update: {},
     create: {
-      name: "Bayani Delos Santos",
-      email: "bayani@ruzzcobarbers.com",
+      name: "Mart Baldemor",
+      email: "mart@ruzzcobarbers.com",
       role: Role.OWNER,
     },
   });
@@ -39,10 +39,22 @@ async function main() {
     },
   });
 
-  // 3. Seed Core Services
+  const vince = await prisma.barber.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000003" },
+    update: {},
+    create: {
+      id: "00000000-0000-0000-0000-000000000003",
+      fullName: "Vince",
+      commissionRate: 0.50,
+      isActive: true,
+    },
+  });
+
+  // 3. Seed Core Services (prices from the logbook and 2026-09-25 interview).
+  // `update` sets the price too, so re-seeding an existing DB picks it up.
   const haircut = await prisma.service.upsert({
     where: { id: "10000000-0000-0000-0000-000000000001" },
-    update: {},
+    update: { standardPrice: 200.00 },
     create: {
       id: "10000000-0000-0000-0000-000000000001",
       name: "Haircut",
@@ -53,7 +65,7 @@ async function main() {
 
   const shaveMassage = await prisma.service.upsert({
     where: { id: "10000000-0000-0000-0000-000000000002" },
-    update: {},
+    update: { name: "Shave & Massage", standardPrice: 150.00 },
     create: {
       id: "10000000-0000-0000-0000-000000000002",
       name: "Shave & Massage",
@@ -64,7 +76,7 @@ async function main() {
 
   console.log("✅ Seed completed successfully!");
   console.log(`- Owner: ${owner.name} (${owner.email})`);
-  console.log(`- Barbers: ${mart.fullName}, ${bayaniBarber.fullName}`);
+  console.log(`- Barbers: ${mart.fullName}, ${bayaniBarber.fullName}, ${vince.fullName}`);
   console.log(`- Services: ${haircut.name} (₱${haircut.standardPrice}), ${shaveMassage.name} (₱${shaveMassage.standardPrice})`);
 }
 

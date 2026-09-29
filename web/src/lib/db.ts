@@ -138,6 +138,12 @@ export const DEFAULT_BARBERS: CachedBarber[] = [
     commissionRate: 0.5,
     isActive: true,
   },
+  {
+    id: "00000000-0000-0000-0000-000000000003",
+    fullName: "Vince",
+    commissionRate: 0.5,
+    isActive: true,
+  },
 ];
 
 export const DEFAULT_SERVICES: CachedService[] = [

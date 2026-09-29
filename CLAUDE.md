@@ -1,11 +1,12 @@
 # Ruzzco Barbers System
 
 SPCC BSIT capstone: offline-first mobile POS plus revenue forecasting for Ruzzco Barbers (Caloocan).
-Users: Bayani (owner and barber) and Mart (co-owner). The ML service (`ml-service/`) is not in this repo yet.
+Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). The ML service (`ml-service/`) is not in this repo yet.
 
 @web/AGENTS.md
 
 ## Layout and commands
+
 - Repo root: `docker-compose.yml` (MySQL 8, host port 3307, db `ruzzco_db`) and `web/`.
 - `web/`: Next.js 16.3.5 (App Router, Turbopack), React 19, Tailwind 4, Prisma 6 (MySQL), Dexie 4, Zod 4.
 - Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission` and `npm run test:reconciliation` (need the dev server), `npm run test:submit-lock`.
@@ -21,6 +22,7 @@ Code must respect these. Don't build features from this list unless a slice spec
 - Forecasting target: customers per day. Revenue is derived from it.
 - Business dates use Asia/Manila (UTC+8). Never derive them from UTC defaults.
 - The shop has 2 active barbers (2026-09-25 interview). Never hardcode the roster or its size.
+- Open 10 AM-10 PM daily, including holidays.
 
 ## Environment (Windows)
 - Shell is Windows PowerShell. Claude settings live in `.claude/settings.json`; never create `.claudesettings.json` or other variants.
@@ -46,6 +48,7 @@ Code must respect these. Don't build features from this list unless a slice spec
 - **"Wrap up":** record the session's decisions in `../ruzzco-barbers` with reasoning, update Business facts if one changed, show me the changes in both repos, and commit each repo only after I OK it.
 
 ## Invariants (do not break)
+
 - Offline-first: the POS writes to Dexie first and syncs through `POST /api/v1/transactions/sync`. The client UUID is the idempotency key. New client fields must be optional or defaulted so old queued payloads still validate. Bump the Dexie version only when adding an index.
 - Attribution is fixed at sale time. Each binding is a `DeviceAssignment` whose id the phone generates; every new sale stores that `assignmentId` and the device key. The server attributes a sale to its assignment's barber, never to the device's current binding, so a rebind can never move historical sales. Revoked assignments stay valid for their sales. A claimed `barberId` that differs from the assignment's is overridden and logged to `SyncMismatchLog`. Never default a commission rate.
 - Sync results are per sale. The request shape is validated once; each item is validated and processed on its own, so one bad sale never blocks the valid ones in the batch. The server never inserts a rejected sale (nor an orphan mismatch log) and answers `{ syncedIds, rejected: [{ id, reason }] }` with reason `INVALID` (malformed data, or the database refuses it: unknown service, value too long or out of range), `UNKNOWN_BARBER` (replaces the old batch-wide 400), `DEVICE_MISMATCH` or `ASSIGNMENT_UNAVAILABLE`. Only a bad outer shape returns 400.
@@ -58,15 +61,28 @@ Code must respect these. Don't build features from this list unless a slice spec
 - Expected drawer cash = cash sales + cash tips - cash payouts - petty cash. GCash and Maya are digital and are not in the drawer.
 - Payment methods: CASH, GCASH, MAYA.
 
+## Session log (required)
+
+Before a session ends, or when I say "log", append to docs/sessions/YYYY-MM-DD.md:
+
+- What changed (features/files), commit hashes if committed
+- Decisions made and why; tag [AI proposal] anything I didn't confirm
+- Open questions and blockers
+  Under ~20 lines. Never rewrite earlier entries.
+
 ## Client rules
 Confirmed (one self-filled form, 2026-09-23): daily payout before the barber goes home; the shop absorbs discounts; tips 100% to the barber; petty cash is logged as expenses; payments via cash, GCash, Maya; bundles and custom amounts exist; barbers use both personal phones and a shared device.
 
-Unconfirmed. Keep as settings, do not hardcode: the discount base (list vs paid), whether petty cash is shared or shop-only, retail commission, and tip channel.
+Unconfirmed. Keep as settings, do not hardcode: the discount base (list vs paid), whether petty cash is shared or shop-only, retail commission, tip channel, and whether Mart also cuts hair (he is still seeded as an active barber).
+
+Conflicts to resolve: the POS "Senior/PWD −20%" button and the `demo-senior-pwd` demo row contradict the no-PWD, loyalty-only discount rule. The advisor (2026-09-28) asked to add a payment gateway and remove the ledger. Keep cash reconciliation either way.
 
 ## Data caveats (ML)
 In the Dec-Feb dataset, dates and cuts per day are real. The ₱100 per row is the owner's 50% share of the cut, not the price. The haircut price was ₱180 until 2025-09-20 and ₱200 from 2025-09-21. Haircut type, payment method, and customer names are generated or randomized. Never use `haircut_type` or `payment_method` as features or present them as real. Forecast customer counts, then multiply by the current price.
 
 ## Known gaps
+
 - No service worker or manifest: offline means the queue only, and the page must stay open.
 - Counter-station mode, attendance and roster, and inventory are not built.
 - The "Save payout" UX is unclear. The demo seed is placeholder data only.
+- Loyalty-card discounts are not built.
