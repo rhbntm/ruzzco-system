@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const transactions = await prisma.transaction.findMany({
       where: {
         transactionTime: { gte: startOfDay, lte: endOfDay },
+        paymentStatus: "PAID",
       },
       select: {
         totalAmount: true,

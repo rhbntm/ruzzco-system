@@ -8,6 +8,7 @@ const METHOD_LABELS: Record<LocalTransaction["paymentMethod"], string> = {
   CASH: "Cash",
   GCASH: "GCash",
   MAYA: "Maya",
+  QRPH: "QR Ph (test)",
 };
 
 /**

@@ -25,6 +25,7 @@ import {
   List,
   X,
   ChevronRight,
+  QrCode,
 } from "lucide-react";
 import {
   db,
@@ -51,6 +52,7 @@ import {
   verifyCurrentAssignment,
 } from "@/lib/sync";
 import { RejectedSales } from "@/components/RejectedSales";
+import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { createSubmitLock } from "@/lib/submit-lock";
 import { useLiveQuery } from "dexie-react-hooks";
 import { RuzzcoLogoBadge, MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
@@ -58,6 +60,8 @@ import { RuzzcoLogoBadge, MustacheIcon, BarberPoleIcon } from "@/components/Ruzz
 // After a sale is saved, further payment taps are ignored this long, so a double tap
 // that lands after the (millisecond-fast) local write still records only one sale.
 const SALE_REPEAT_GUARD_MS = 800;
+
+type PaymentMethod = LocalTransaction["paymentMethod"];
 
 // ─── Online status hooks ───────────────────────────────────────────────────────
 
@@ -96,6 +100,9 @@ export default function MobilePOSPage() {
   // Digital payment reference modal state
   const [digitalMethod, setDigitalMethod] = useState<"GCASH" | "MAYA" | null>(null);
   const [digitalRef, setDigitalRef] = useState("");
+  // QR Ph (test): shown only when the server reports the gateway on. Last known value is kept offline.
+  const [gatewayEnabled, setGatewayEnabled] = useState(false);
+  const [qrSale, setQrSale] = useState<{ id: string; amount: number } | null>(null);
   // True while a sale is being written and for a short repeat guard after it (UX only;
   // correctness comes from the synchronous lock).
   const [isRecording, setIsRecording] = useState(false);
@@ -205,6 +212,16 @@ export default function MobilePOSPage() {
     return () => window.removeEventListener("online", handleOnline);
   }, [reconcileWithServer]);
 
+  // Gateway availability: 200 = on, 404 = off (PAYMENT_GATEWAY). Rechecked when back online.
+  useEffect(() => {
+    if (!isOnline) return;
+    let active = true;
+    fetch("/api/v1/payments/qrph", { cache: "no-store" })
+      .then((res) => { if (active) setGatewayEnabled(res.ok); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [isOnline]);
+
   // ── Device binding initialization ───────────────────────────────────────────
 
   useEffect(() => {
@@ -300,12 +317,12 @@ export default function MobilePOSPage() {
 
   // ── Transaction recording ───────────────────────────────────────────────────
 
-  // Writes one sale to Dexie. Call only through recordTransaction, which holds the checkout lock.
+  // Writes one sale to Dexie and returns it. Call only through recordTransaction, which holds the checkout lock.
   const createSale = useCallback(
-    async (method: "CASH" | "GCASH" | "MAYA", reference?: string): Promise<boolean> => {
-      if (!binding) return false;
+    async (method: PaymentMethod, reference?: string): Promise<{ id: string; amount: number } | null> => {
+      if (!binding) return null;
       const service = services.find((s) => s.id === selectedServiceId) || services[0];
-      if (!service) return false;
+      if (!service) return null;
 
       const parsedCustomAmount = Number(customAmountInput);
       const isCustomAmount = customAmountInput.trim().length > 0 && Number.isFinite(parsedCustomAmount) && parsedCustomAmount > 0;
@@ -345,17 +362,18 @@ export default function MobilePOSPage() {
 
       await db.transactions.add(newTransaction);
 
-      const methodLabel = method === "GCASH" ? "GCash" : method === "MAYA" ? "Maya" : "Cash";
+      const methodLabel = method === "GCASH" ? "GCash" : method === "MAYA" ? "Maya" : method === "QRPH" ? "QR Ph (pending)" : "Cash";
       setLastActionToast({
         message: `₱${amountPaid.toFixed(2)} ${methodLabel}${tipAmount ? ` + ₱${tipAmount.toFixed(2)} tip` : ""} — ${binding.barberName}`,
         type: "success",
       });
       setTimeout(() => setLastActionToast(null), 3000);
 
-      if (navigator.onLine) {
+      // A QRPH sale is synced by the QR checkout, which waits for the sync before charging.
+      if (navigator.onLine && method !== "QRPH") {
         startTransition(() => { triggerSync(); });
       }
-      return true;
+      return { id: newTransaction.id, amount: amountPaid };
     },
     [binding, services, selectedServiceId, discountType, customAmountInput, tipChoice, customTipInput, triggerSync]
   );
@@ -363,16 +381,16 @@ export default function MobilePOSPage() {
   // Every payment method records through here. The lock is checked synchronously before
   // any await, so a second tap cannot generate a second transaction id (see lib/submit-lock.ts).
   const recordTransaction = useCallback(
-    async (method: "CASH" | "GCASH" | "MAYA", reference?: string): Promise<"saved" | "skipped" | "busy" | "failed"> => {
+    async (method: PaymentMethod, reference?: string): Promise<{ outcome: "saved" | "skipped" | "busy" | "failed"; sale?: { id: string; amount: number } }> => {
       const result = await checkoutLock.run(() => createSale(method, reference));
-      if (result.status === "busy") return "busy";
+      if (result.status === "busy") return { outcome: "busy" };
       if (result.status === "failed") {
         console.error("Error recording sale:", result.error);
         setLastActionToast({ message: "Sale not saved. Try again.", type: "info" });
         setTimeout(() => setLastActionToast(null), 3000);
-        return "failed";
+        return { outcome: "failed" };
       }
-      return result.value ? "saved" : "skipped";
+      return result.value ? { outcome: "saved", sale: result.value } : { outcome: "skipped" };
     },
     [checkoutLock, createSale]
   );
@@ -381,14 +399,28 @@ export default function MobilePOSPage() {
 
   const handleDigitalConfirm = async () => {
     if (!digitalMethod) return;
-    const result = await recordTransaction(digitalMethod, digitalRef.trim() || undefined);
+    const { outcome } = await recordTransaction(digitalMethod, digitalRef.trim() || undefined);
     // A duplicate tap ("busy") leaves the modal to the tap that owns the sale;
     // a failure keeps it open so the reference is not lost.
-    if (result === "saved" || result === "skipped") {
+    if (outcome === "saved" || outcome === "skipped") {
       setDigitalMethod(null);
       setDigitalRef("");
     }
   };
+
+  // The sale is written to Dexie first like any other; the QR checkout then syncs and charges it.
+  const handleQrphCheckout = async () => {
+    const { outcome, sale } = await recordTransaction("QRPH");
+    if (outcome === "saved" && sale) setQrSale(sale);
+  };
+
+  // Resolves true once the QR sale is on the server (synced), so the charge can be created.
+  const qrSaleId = qrSale?.id;
+  const ensureQrSaleSynced = useCallback(async () => {
+    if (!qrSaleId || !navigator.onLine) return false;
+    await triggerSync();
+    return (await db.transactions.get(qrSaleId))?.synced === 1;
+  }, [qrSaleId, triggerSync]);
 
   // ── Derived values ──────────────────────────────────────────────────────────
 
@@ -505,6 +537,15 @@ export default function MobilePOSPage() {
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-64 bg-red-600/10 blur-3xl pointer-events-none" />
 
       {/* Digital payment reference modal */}
+      {qrSale && (
+        <QrPhCheckout
+          transactionId={qrSale.id}
+          amount={qrSale.amount}
+          ensureSynced={ensureQrSaleSynced}
+          onClose={() => setQrSale(null)}
+        />
+      )}
+
       {digitalMethod && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-[#12141a] border border-[#232734] rounded-2xl p-5 space-y-4 shadow-2xl">
@@ -783,6 +824,25 @@ export default function MobilePOSPage() {
               </span>
             </button>
 
+            {gatewayEnabled && (
+              <div className="space-y-1">
+                <button
+                  onClick={() => { void handleQrphCheckout(); }}
+                  disabled={!binding || isRecording || !isOnline}
+                  type="button"
+                  className="w-full min-h-[60px] py-4 px-6 rounded-xl border-2 border-violet-500/60 bg-violet-600/15 hover:bg-violet-600/25 active:scale-[0.98] text-violet-200 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <QrCode className="w-5 h-5 stroke-[2.5]" />
+                  <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
+                    QR Ph (test) — ₱{previewAmount.toFixed(2)}
+                  </span>
+                </button>
+                {!isOnline && (
+                  <p className="text-center text-[11px] text-amber-400">Needs internet. Use cash, GCash or Maya.</p>
+                )}
+              </div>
+            )}
+
             <p className="text-center text-[11px] text-zinc-500">
               Saves to device immediately — syncs to server when online
             </p>
@@ -825,7 +885,11 @@ export default function MobilePOSPage() {
                       <span className="text-zinc-500 ml-1">• {tx.barberName}</span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {tx.paymentMethod === "GCASH" || tx.paymentMethod === "MAYA" ? (
+                      {tx.paymentMethod === "QRPH" ? (
+                        <span className="w-4 h-4 rounded-full flex items-center justify-center bg-violet-500/20 text-violet-300" title="QR Ph (test)">
+                          <QrCode className="w-2.5 h-2.5" />
+                        </span>
+                      ) : tx.paymentMethod === "GCASH" || tx.paymentMethod === "MAYA" ? (
                         <span className={`w-4 h-4 rounded-full flex items-center justify-center ${tx.paymentMethod === "MAYA" ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400"}`} title={tx.paymentMethod === "MAYA" ? "Maya" : "GCash"}>
                           <Smartphone className="w-2.5 h-2.5" />
                         </span>

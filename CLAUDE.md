@@ -9,8 +9,8 @@ Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). T
 
 - Repo root: `docker-compose.yml` (MySQL 8, host port 3307, db `ruzzco_db`) and `web/`.
 - `web/`: Next.js 16.3.5 (App Router, Turbopack), React 19, Tailwind 4, Prisma 6 (MySQL), Dexie 4, Zod 4.
-- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission` and `npm run test:reconciliation` (need the dev server), `npm run test:submit-lock`.
-- `web/.env` needs `DATABASE_URL` and `OWNER_PIN`. Never print, log, or commit their values.
+- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation` and `npm run test:gateway` (need the dev server; gateway: started with the gateway env vars), `npm run test:submit-lock`.
+- `web/.env` needs `DATABASE_URL` and `OWNER_PIN`; the optional QR Ph demo uses `PAYMENT_GATEWAY` (`off` default | `paymongo_test`), `PAYMONGO_SECRET_KEY` (must be `sk_test_`) and `PAYMONGO_WEBHOOK_SECRET`. Never print, log, or commit their values.
 - Next.js 16 differs from older versions. Read `node_modules/next/dist/docs/` before using an API you are unsure about.
 
 ## Business facts (locked)
@@ -59,7 +59,8 @@ Code must respect these. Don't build features from this list unless a slice spec
 - Owner-only: `/ledger` and the payout and reconciliation write routes need the `OWNER_PIN` cookie (`ruzzco_owner_access`, HttpOnly). The Secure flag follows the request protocol.
 - Money is `Decimal(10,2)`. `totalAmount` is the amount paid, excluding tip. Tips are separate, go 100% to the barber, and are excluded from revenue and the commission base. Revenue is `amountPaid`. `commissionBase` defaults to `LIST_PRICE` (the shop absorbs discounts). The ledger recomputes with a LIST_PRICE/AMOUNT_PAID toggle.
 - Expected drawer cash = cash sales + cash tips - cash payouts - petty cash. GCash and Maya are digital and are not in the drawer.
-- Payment methods: CASH, GCASH, MAYA.
+- Payment methods: CASH, GCASH, MAYA. QRPH is gateway-only (PayMongo test mode, `PAYMENT_GATEWAY=paymongo_test`); with the switch off it never appears.
+- `Transaction.paymentStatus`: PAID | PENDING | EXPIRED | FAILED. Non-gateway sales are always PAID. A QRPH sale is stored PENDING whatever the client sends; only the server (signed webhook or Check status against PayMongo) changes it. Only PAID sales count toward revenue, commission, payouts and reconciliation; the rest are listed separately. Gateway money is never in the drawer.
 
 ## Session log (required)
 

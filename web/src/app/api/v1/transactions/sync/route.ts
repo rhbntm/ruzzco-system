@@ -228,6 +228,8 @@ export async function POST(request: NextRequest) {
               commissionBase,
               paymentMethod: item.paymentMethod,
               paymentReference: item.paymentReference ?? null,
+              // Only the gateway (webhook or status check) can mark a QRPH sale PAID.
+              paymentStatus: item.paymentMethod === "QRPH" ? "PENDING" : "PAID",
               transactionTime: new Date(item.transactionTime),
               syncedAt: new Date(),
               items: {

@@ -38,7 +38,8 @@ const ZERO = new Prisma.Decimal(0);
 async function totalsForDate(date: string, commissionBase: Base) {
   const day = businessDay(date);
   const transactions = await prisma.transaction.findMany({
-    where: { transactionTime: { gte: day.start, lt: day.end } },
+    // Only PAID sales are owed; a QRPH sale joins its day's totals once the gateway confirms it.
+    where: { transactionTime: { gte: day.start, lt: day.end }, paymentStatus: "PAID" },
     select: {
       barberId: true,
       totalAmount: true,

@@ -15,7 +15,7 @@ export interface LocalTransaction {
   tipAmount?: number;
   customAmount?: boolean;
   customAmountNote?: string | null;
-  paymentMethod: "CASH" | "GCASH" | "MAYA";
+  paymentMethod: "CASH" | "GCASH" | "MAYA" | "QRPH"; // QRPH: gateway-only; payment status lives on the server
   paymentReference?: string | null;
   transactionTime: string; // ISO datetime string
   synced: number; // 0 = pending sync, 1 = synced

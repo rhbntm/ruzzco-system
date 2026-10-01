@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   RefreshCw,
   ClipboardCheck,
+  QrCode,
 } from "lucide-react";
 import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { manilaToday } from "@/lib/business-date";
@@ -20,12 +21,24 @@ interface ExpectedTotals {
   gcashTotal: string;
   mayaTotal: string;
   digitalTotal: string;
+  qrphTotal: string;
+  gatewaySales: GatewaySale[];
   cashTips: string;
   cashPayouts: string;
   pettyCash: string;
   expectedDrawerCash: string;
   totalRevenue: string;
   transactionCount: number;
+}
+
+// QR Ph (PayMongo test) sales on this date. Only PAID ones count; the rest are listed only.
+interface GatewaySale {
+  id: string;
+  status: "PAID" | "PENDING" | "EXPIRED" | "FAILED";
+  amount: string;
+  transactionTime: string;
+  paidAt: string | null;
+  late: boolean; // confirmed after this business day ended
 }
 
 interface SavedRecord {
@@ -46,8 +59,9 @@ interface SavedRecord {
 
 interface Staleness {
   stale: boolean;
-  staleReasons: ("EXPECTED_CASH_CHANGED" | "LATE_SYNCED_TRANSACTIONS")[];
+  staleReasons: ("EXPECTED_CASH_CHANGED" | "LATE_SYNCED_TRANSACTIONS" | "LATE_GATEWAY_CONFIRMATIONS")[];
   lateSyncedCount: number;
+  lateConfirmedCount: number;
   expectedCashDelta: string;
 }
 
@@ -242,8 +256,35 @@ export default function ReconciliationPage() {
                 </div>
               ))}
             </div>
+            {(parseFloat(expected.qrphTotal) > 0 || expected.gatewaySales.length > 0) && (
+              <div className="p-3.5 rounded-xl bg-[#12141a] border border-violet-500/30 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-violet-300 font-semibold">
+                    <QrCode className="w-3.5 h-3.5" /> QR Ph (PayMongo test) collected
+                  </span>
+                  <span className="font-extrabold text-violet-200 font-[family-name:var(--font-oswald)]">₱{expected.qrphTotal}</span>
+                </div>
+                <p className="text-[11px] text-zinc-500">Gateway money is not in the drawer. Only paid QR sales count.</p>
+                <ul className="space-y-1">
+                  {expected.gatewaySales.map((g) => (
+                    <li key={g.id} className="flex items-center justify-between gap-2 text-xs p-2 rounded-lg bg-[#181b24] border border-[#232734]">
+                      <span className="text-zinc-400">
+                        {new Date(g.transactionTime).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}
+                        <span className="font-mono text-zinc-600 ml-1.5">{g.id.slice(0, 8)}…</span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${g.status === "PAID" ? "bg-emerald-500/15 text-emerald-300" : g.status === "PENDING" ? "bg-amber-500/15 text-amber-300" : "bg-red-500/15 text-red-300"}`}>
+                          {g.status}{g.late ? " · late confirmation" : ""}
+                        </span>
+                        <span className={`font-bold font-[family-name:var(--font-oswald)] ${g.status === "PAID" ? "text-zinc-100" : "text-zinc-500 line-through"}`}>₱{g.amount}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <p className="text-[11px] text-zinc-500">
-              {expected.transactionCount} synced transactions on {date}
+              {expected.transactionCount} paid synced transactions on {date}
             </p>
           </section>
         )}
@@ -365,6 +406,9 @@ export default function ReconciliationPage() {
                   <p className="font-bold">Out of date: this record no longer matches the register.</p>
                   {staleness.staleReasons.includes("LATE_SYNCED_TRANSACTIONS") && (
                     <p>{staleness.lateSyncedCount} sale{staleness.lateSyncedCount === 1 ? "" : "s"} for this date synced after it was saved.</p>
+                  )}
+                  {staleness.staleReasons.includes("LATE_GATEWAY_CONFIRMATIONS") && (
+                    <p>{staleness.lateConfirmedCount} QR Ph sale{staleness.lateConfirmedCount === 1 ? " was" : "s were"} confirmed paid after it was saved (revenue changed; the drawer did not).</p>
                   )}
                   {staleness.staleReasons.includes("EXPECTED_CASH_CHANGED") && (
                     <p>Expected drawer cash is now ₱{expected?.expectedDrawerCash} ({parseFloat(staleness.expectedCashDelta) > 0 ? "+" : ""}₱{staleness.expectedCashDelta}).</p>

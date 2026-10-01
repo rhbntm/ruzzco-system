@@ -1,4 +1,4 @@
-import { Prisma, type ShiftReconciliation } from "@prisma/client";
+import { Prisma, type PaymentStatus, type ShiftReconciliation } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { BusinessDay } from "@/lib/business-date";
 
@@ -13,16 +13,30 @@ export type ExpectedTotals = {
   gcashTotal: Prisma.Decimal;
   mayaTotal: Prisma.Decimal;
   digitalTotal: Prisma.Decimal;
+  qrphTotal: Prisma.Decimal; // QR Ph (PayMongo test) collected: paid gateway sales, never in the drawer
   totalRevenue: Prisma.Decimal;
-  transactionCount: number;
+  transactionCount: number; // PAID sales only
+  gatewaySales: GatewaySale[]; // every QRPH sale in the window, any status
 };
 
-export type StaleReason = "EXPECTED_CASH_CHANGED" | "LATE_SYNCED_TRANSACTIONS";
+// A QRPH sale counts on its own sale date. `late` = the gateway confirmed it after that
+// business day ended. PENDING, EXPIRED and FAILED sales count nowhere and are listed here only.
+export type GatewaySale = {
+  id: string;
+  status: PaymentStatus;
+  amount: Prisma.Decimal;
+  transactionTime: Date;
+  paidAt: Date | null;
+  late: boolean;
+};
+
+export type StaleReason = "EXPECTED_CASH_CHANGED" | "LATE_SYNCED_TRANSACTIONS" | "LATE_GATEWAY_CONFIRMATIONS";
 
 export type Staleness = {
   stale: boolean;
   staleReasons: StaleReason[];
   lateSyncedCount: number; // sales in the window that reached the server after reconciledAt
+  lateConfirmedCount: number; // QRPH sales in the window the gateway confirmed after reconciledAt
   expectedCashDelta: Prisma.Decimal; // live expected drawer cash minus the saved one
 };
 
@@ -30,13 +44,24 @@ const inWindow = (day: BusinessDay) => ({ transactionTime: { gte: day.start, lt:
 
 // The one definition of expected drawer cash, used by GET and POST:
 //   cash sales + cash-sale tips - cash payouts marked paid - petty cash
-// GCash and Maya sales are digital and never enter the drawer; unpaid payout rows and
+// GCash, Maya and QR Ph sales are digital and never enter the drawer; unpaid payout rows and
 // gcashPaid never leave it. Revenue is amountPaid (totalAmount for legacy sales), tips excluded.
+// Only PAID sales count; non-gateway sales are always PAID.
 export async function computeExpected(day: BusinessDay, pettyCash: Prisma.Decimal.Value): Promise<ExpectedTotals> {
   const [transactions, payouts] = await Promise.all([
     prisma.transaction.findMany({
       where: inWindow(day),
-      select: { totalAmount: true, amountPaid: true, paymentMethod: true, tipAmount: true },
+      select: {
+        id: true,
+        totalAmount: true,
+        amountPaid: true,
+        paymentMethod: true,
+        paymentStatus: true,
+        tipAmount: true,
+        transactionTime: true,
+        gatewayPayment: { select: { paidAt: true } },
+      },
+      orderBy: { transactionTime: "asc" },
     }),
     prisma.dailyPayoutLedger.aggregate({
       where: { businessDate: day.dateValue, paidAt: { not: null } },
@@ -48,9 +73,26 @@ export async function computeExpected(day: BusinessDay, pettyCash: Prisma.Decima
   let cashTips = ZERO;
   let gcashTotal = ZERO;
   let mayaTotal = ZERO;
+  let qrphTotal = ZERO;
+  let transactionCount = 0;
+  const gatewaySales: GatewaySale[] = [];
   for (const tx of transactions) {
     const amount = tx.amountPaid ?? tx.totalAmount;
-    if (tx.paymentMethod === "CASH") {
+    if (tx.paymentMethod === "QRPH") {
+      const paidAt = tx.gatewayPayment?.paidAt ?? null;
+      gatewaySales.push({
+        id: tx.id,
+        status: tx.paymentStatus,
+        amount,
+        transactionTime: tx.transactionTime,
+        paidAt,
+        late: tx.paymentStatus === "PAID" && !!paidAt && paidAt >= day.end,
+      });
+    }
+    if (tx.paymentStatus !== "PAID") continue;
+    transactionCount++;
+    if (tx.paymentMethod === "QRPH") qrphTotal = qrphTotal.add(amount);
+    else if (tx.paymentMethod === "CASH") {
       cashSales = cashSales.add(amount);
       cashTips = cashTips.add(tx.tipAmount);
     } else if (tx.paymentMethod === "GCASH") gcashTotal = gcashTotal.add(amount);
@@ -68,8 +110,10 @@ export async function computeExpected(day: BusinessDay, pettyCash: Prisma.Decima
     gcashTotal,
     mayaTotal,
     digitalTotal,
-    totalRevenue: cashSales.add(digitalTotal),
-    transactionCount: transactions.length,
+    qrphTotal,
+    totalRevenue: cashSales.add(digitalTotal).add(qrphTotal),
+    transactionCount,
+    gatewaySales,
   };
 }
 
@@ -80,14 +124,21 @@ export async function computeStaleness(
   saved: Pick<ShiftReconciliation, "expectedCash" | "reconciledAt">,
   live: ExpectedTotals
 ): Promise<Staleness> {
-  const lateSyncedCount = await prisma.transaction.count({
-    where: { ...inWindow(day), syncedAt: { gt: saved.reconciledAt } },
-  });
+  const [lateSyncedCount, lateConfirmedCount] = await Promise.all([
+    prisma.transaction.count({
+      where: { ...inWindow(day), syncedAt: { gt: saved.reconciledAt } },
+    }),
+    // Revenue moved without a new sync: a pending QR Ph sale was confirmed after the save.
+    prisma.gatewayPayment.count({
+      where: { paidAt: { gt: saved.reconciledAt }, transaction: inWindow(day) },
+    }),
+  ]);
   const expectedCashDelta = live.expectedDrawerCash.sub(saved.expectedCash);
   const staleReasons: StaleReason[] = [];
   if (!expectedCashDelta.isZero()) staleReasons.push("EXPECTED_CASH_CHANGED");
   if (lateSyncedCount > 0) staleReasons.push("LATE_SYNCED_TRANSACTIONS");
-  return { stale: staleReasons.length > 0, staleReasons, lateSyncedCount, expectedCashDelta };
+  if (lateConfirmedCount > 0) staleReasons.push("LATE_GATEWAY_CONFIRMATIONS");
+  return { stale: staleReasons.length > 0, staleReasons, lateSyncedCount, lateConfirmedCount, expectedCashDelta };
 }
 
 export function latestRevision(day: BusinessDay) {
@@ -109,8 +160,10 @@ export function serializeExpected(t: ExpectedTotals) {
     gcashTotal: t.gcashTotal.toFixed(2),
     mayaTotal: t.mayaTotal.toFixed(2),
     digitalTotal: t.digitalTotal.toFixed(2),
+    qrphTotal: t.qrphTotal.toFixed(2),
     totalRevenue: t.totalRevenue.toFixed(2),
     transactionCount: t.transactionCount,
+    gatewaySales: t.gatewaySales.map((g) => ({ ...g, amount: g.amount.toFixed(2) })),
   };
 }
 

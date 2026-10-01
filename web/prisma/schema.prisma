@@ -17,6 +17,21 @@ enum PaymentMethod {
   CASH
   GCASH
   MAYA
+  QRPH // gateway-only (PAYMENT_GATEWAY on); never in the drawer
+}
+
+// Only PAID sales count toward revenue, commission, payouts and reconciliation.
+// Non-gateway sales are always PAID; a QRPH sale starts PENDING and only the server
+// (webhook or status check) moves it.
+enum PaymentStatus {
+  PAID
+  PENDING
+  EXPIRED
+  FAILED
+}
+
+enum GatewayProvider {
+  PAYMONGO_TEST
 }
 
 enum DiscountType {
@@ -88,6 +103,8 @@ model Transaction {
   commissionBase         CommissionBase    @default(LIST_PRICE) @map("commission_base")
   paymentMethod          PaymentMethod     @default(CASH) @map("payment_method")
   paymentReference       String?           @map("payment_reference")
+  paymentStatus          PaymentStatus     @default(PAID) @map("payment_status")
+  gatewayPayment         GatewayPayment?
   transactionTime        DateTime          @map("transaction_time") // Client recorded time
   syncedAt               DateTime          @default(now()) @map("synced_at") // Server receipt time
   // Device assignment active on the phone when the sale was made. Authoritative for barber
@@ -196,6 +213,32 @@ model DailyRevenueForecast {
 
   @@unique([forecastDate])
   @@map("daily_revenue_forecasts")
+}
+
+/// One gateway charge per sale (transactionId is the sale's client UUID). Status mirrors
+/// PayMongo; Transaction.paymentStatus is updated with it in the same DB transaction.
+model GatewayPayment {
+  id            String          @id @default(uuid())
+  transactionId String          @unique @map("transaction_id")
+  transaction   Transaction     @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  provider      GatewayProvider @default(PAYMONGO_TEST)
+  intentId      String          @unique @map("intent_id")
+  amount        Decimal         @db.Decimal(10, 2)
+  status        PaymentStatus   @default(PENDING)
+  createdAt     DateTime        @default(now()) @map("created_at")
+  paidAt        DateTime?       @map("paid_at")
+  lastEventId   String?         @map("last_event_id")
+
+  @@map("gateway_payments")
+}
+
+/// Webhook event ids already applied; a redelivery with the same id is a no-op.
+model GatewayWebhookEvent {
+  eventId    String   @id @map("event_id")
+  type       String
+  receivedAt DateTime @default(now()) @map("received_at")
+
+  @@map("gateway_webhook_events")
 }
 
 /// Persistent audit record written whenever the sync route overrides a client-supplied

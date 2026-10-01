@@ -12,6 +12,7 @@ import {
   WifiOff,
   Banknote,
   Smartphone,
+  QrCode,
   TriangleAlert,
 } from "lucide-react";
 import { db, type LocalTransaction } from "@/lib/db";
@@ -288,6 +289,11 @@ export default function ShiftLogPage() {
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-semibold">
                         <Smartphone className="w-2.5 h-2.5" />
                         GCash
+                      </span>
+                    ) : tx.paymentMethod === "QRPH" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-semibold" title="Paid status is on the server">
+                        <QrCode className="w-2.5 h-2.5" />
+                        QR Ph (test)
                       </span>
                     ) : tx.paymentMethod === "MAYA" ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold">

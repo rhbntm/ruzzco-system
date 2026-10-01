@@ -25,7 +25,9 @@ export const syncTransactionItemSchema = z.object({
   tipAmount: z.number().nonnegative().max(MONEY_MAX).default(0),
   customAmount: z.boolean().default(false),
   customAmountNote: z.string().max(255).nullable().optional(),
-  paymentMethod: z.enum(["CASH", "GCASH", "MAYA"]).default("CASH"),
+  // QRPH is gateway-only. The client never sends a payment status: the server stores QRPH
+  // sales as PENDING and every other method as PAID (unknown keys are stripped).
+  paymentMethod: z.enum(["CASH", "GCASH", "MAYA", "QRPH"]).default("CASH"),
   paymentReference: z.string().max(191).nullable().optional(),
   transactionTime: z.string().datetime({ message: "Invalid ISO datetime string" }),
   deviceKey: z.string().uuid().optional(),
