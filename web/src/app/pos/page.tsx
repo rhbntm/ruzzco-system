@@ -85,7 +85,6 @@ export default function MobilePOSPage() {
   const [barbers, setBarbers] = useState<CachedBarber[]>(DEFAULT_BARBERS);
   const [services, setServices] = useState<CachedService[]>(DEFAULT_SERVICES);
   const [selectedServiceId, setSelectedServiceId] = useState<string>(DEFAULT_SERVICES[0].id);
-  const [discountType, setDiscountType] = useState<"NONE" | "PERCENT" | "FIXED">("NONE");
   const [customAmountInput, setCustomAmountInput] = useState("");
   const [tipChoice, setTipChoice] = useState<"NONE" | "20" | "50" | "CUSTOM">("NONE");
   const [customTipInput, setCustomTipInput] = useState("");
@@ -326,12 +325,10 @@ export default function MobilePOSPage() {
 
       const parsedCustomAmount = Number(customAmountInput);
       const isCustomAmount = customAmountInput.trim().length > 0 && Number.isFinite(parsedCustomAmount) && parsedCustomAmount > 0;
-      // A custom amount replaces the service price entirely: list price is the entered amount, with no discount.
+      // A custom amount replaces the service price entirely: list price is the entered amount.
+      // The POS offers no discounts (no PWD/senior discount); new sales always record NONE.
       const listPrice = isCustomAmount ? Math.round(parsedCustomAmount * 100) / 100 : service.standardPrice;
-      const effectiveDiscountType = isCustomAmount ? "NONE" : discountType;
-      const discountAmount = effectiveDiscountType === "PERCENT" ? Math.round(listPrice * 0.2 * 100) / 100 : 0;
-      const discountedPrice = Math.max(0, listPrice - discountAmount);
-      const amountPaid = Math.round(discountedPrice * 100) / 100;
+      const amountPaid = Math.round(Math.max(0, listPrice) * 100) / 100;
       const parsedCustomTip = Number(customTipInput);
       const tipAmount = tipChoice === "20" ? 20 : tipChoice === "50" ? 50 : tipChoice === "CUSTOM" && Number.isFinite(parsedCustomTip) && parsedCustomTip >= 0 ? Math.round(parsedCustomTip * 100) / 100 : 0;
 
@@ -344,8 +341,8 @@ export default function MobilePOSPage() {
         price: listPrice,
         totalAmount: amountPaid,
         listPrice,
-        discountType: effectiveDiscountType,
-        discountAmount,
+        discountType: "NONE",
+        discountAmount: 0,
         amountPaid,
         tipAmount,
         customAmount: isCustomAmount,
@@ -375,7 +372,7 @@ export default function MobilePOSPage() {
       }
       return { id: newTransaction.id, amount: amountPaid };
     },
-    [binding, services, selectedServiceId, discountType, customAmountInput, tipChoice, customTipInput, triggerSync]
+    [binding, services, selectedServiceId, customAmountInput, tipChoice, customTipInput, triggerSync]
   );
 
   // Every payment method records through here. The lock is checked synchronously before
@@ -426,8 +423,7 @@ export default function MobilePOSPage() {
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
   const previewListPrice = selectedService?.standardPrice ?? 0;
-  const previewDiscount = discountType === "PERCENT" ? Math.round(previewListPrice * 0.2 * 100) / 100 : 0;
-  const previewAmount = customAmountInput.trim() && Number(customAmountInput) > 0 ? Number(customAmountInput) : previewListPrice - previewDiscount;
+  const previewAmount = customAmountInput.trim() && Number(customAmountInput) > 0 ? Number(customAmountInput) : previewListPrice;
   const previewTip = tipChoice === "20" ? 20 : tipChoice === "50" ? 50 : tipChoice === "CUSTOM" && Number(customTipInput) >= 0 ? Number(customTipInput) : 0;
   const digitalLabel = digitalMethod === "MAYA" ? "Maya" : "GCash";
   const digitalColor = digitalMethod === "MAYA" ? "emerald" : "blue";
@@ -772,18 +768,14 @@ export default function MobilePOSPage() {
             <div className="p-3 rounded-xl bg-[#12141a] border border-[#232734] space-y-2.5">
               <div className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Adjust total</div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => setDiscountType("NONE")} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${discountType === "NONE" ? "bg-zinc-700 text-white border-zinc-500" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>No discount</button>
-                <button type="button" onClick={() => setDiscountType("PERCENT")} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${discountType === "PERCENT" ? "bg-red-600/30 text-red-200 border-red-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>Senior/PWD −20%</button>
-              </div>
-              <div className="flex gap-2">
                 {(["NONE", "20", "50"] as const).map((choice) => (
                   <button key={choice} type="button" onClick={() => setTipChoice(choice)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${tipChoice === choice ? "bg-emerald-600/30 text-emerald-200 border-emerald-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>{choice === "NONE" ? "No tip" : `+₱${choice} tip`}</button>
                 ))}
                 <button type="button" onClick={() => setTipChoice("CUSTOM")} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${tipChoice === "CUSTOM" ? "bg-emerald-600/30 text-emerald-200 border-emerald-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>Custom tip</button>
               </div>
               {tipChoice === "CUSTOM" && <input type="number" min="0" step="0.01" inputMode="decimal" placeholder="Tip amount" value={customTipInput} onChange={(e) => setCustomTipInput(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm" />}
-              <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ₱${(previewListPrice - previewDiscount).toFixed(2)})`} value={customAmountInput} onChange={(e) => setCustomAmountInput(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm" />
-              <div className="flex justify-between text-[11px] text-zinc-500"><span>List ₱{previewListPrice.toFixed(2)} · discount ₱{previewDiscount.toFixed(2)}</span><span className="text-zinc-300">Paid ₱{previewAmount.toFixed(2)} · tip ₱{previewTip.toFixed(2)}</span></div>
+              <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ₱${previewListPrice.toFixed(2)})`} value={customAmountInput} onChange={(e) => setCustomAmountInput(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm" />
+              <div className="flex justify-between text-[11px] text-zinc-500"><span>List ₱{previewListPrice.toFixed(2)}</span><span className="text-zinc-300">Paid ₱{previewAmount.toFixed(2)} · tip ₱{previewTip.toFixed(2)}</span></div>
             </div>
 
             {/* Cash button */}
