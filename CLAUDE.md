@@ -9,7 +9,7 @@ Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). T
 
 - Repo root: `docker-compose.yml` (MySQL 8, host port 3307, db `ruzzco_db`) and `web/`.
 - `web/`: Next.js 16.3.5 (App Router, Turbopack), React 19, Tailwind 4, Prisma 6 (MySQL), Dexie 4, Zod 4.
-- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation` and `npm run test:gateway` (need the dev server; gateway: started with the gateway env vars), `npm run test:submit-lock`, `npm run test:pricing`.
+- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation` and `npm run test:gateway` (need the dev server; gateway: started with the gateway env vars), `npm run test:submit-lock`, `npm run test:pricing`, `npm run test:payload-compat`.
 - `web/.env` needs `DATABASE_URL` and `OWNER_PIN`; the optional QR Ph demo uses `PAYMENT_GATEWAY` (`off` default | `paymongo_test`), `PAYMONGO_SECRET_KEY` (must be `sk_test_`) and `PAYMONGO_WEBHOOK_SECRET`. Never print, log, or commit their values.
 - Next.js 16 differs from older versions. Read `node_modules/next/dist/docs/` before using an API you are unsure about.
 
