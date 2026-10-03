@@ -27,6 +27,7 @@ import {
   ChevronRight,
   QrCode,
 } from "lucide-react";
+import { priceSale, type TipChoice } from "@/lib/pricing";
 import {
   db,
   initializeLocalCatalog,
@@ -86,7 +87,7 @@ export default function MobilePOSPage() {
   const [services, setServices] = useState<CachedService[]>(DEFAULT_SERVICES);
   const [selectedServiceId, setSelectedServiceId] = useState<string>(DEFAULT_SERVICES[0].id);
   const [customAmountInput, setCustomAmountInput] = useState("");
-  const [tipChoice, setTipChoice] = useState<"NONE" | "20" | "50" | "CUSTOM">("NONE");
+  const [tipChoice, setTipChoice] = useState<TipChoice>("NONE");
   const [customTipInput, setCustomTipInput] = useState("");
 
   // Device binding state
@@ -323,14 +324,12 @@ export default function MobilePOSPage() {
       const service = services.find((s) => s.id === selectedServiceId) || services[0];
       if (!service) return null;
 
-      const parsedCustomAmount = Number(customAmountInput);
-      const isCustomAmount = customAmountInput.trim().length > 0 && Number.isFinite(parsedCustomAmount) && parsedCustomAmount > 0;
-      // A custom amount replaces the service price entirely: list price is the entered amount.
-      // The POS offers no discounts (no PWD/senior discount); new sales always record NONE.
-      const listPrice = isCustomAmount ? Math.round(parsedCustomAmount * 100) / 100 : service.standardPrice;
-      const amountPaid = Math.round(Math.max(0, listPrice) * 100) / 100;
-      const parsedCustomTip = Number(customTipInput);
-      const tipAmount = tipChoice === "20" ? 20 : tipChoice === "50" ? 50 : tipChoice === "CUSTOM" && Number.isFinite(parsedCustomTip) && parsedCustomTip >= 0 ? Math.round(parsedCustomTip * 100) / 100 : 0;
+      const { listPrice, discountType, discountAmount, amountPaid, tipAmount, isCustomAmount } = priceSale({
+        standardPrice: service.standardPrice,
+        customAmountInput,
+        tipChoice,
+        customTipInput,
+      });
 
       const newTransaction: LocalTransaction = {
         id: generateUUID(),
@@ -341,8 +340,8 @@ export default function MobilePOSPage() {
         price: listPrice,
         totalAmount: amountPaid,
         listPrice,
-        discountType: "NONE",
-        discountAmount: 0,
+        discountType,
+        discountAmount,
         amountPaid,
         tipAmount,
         customAmount: isCustomAmount,
@@ -423,8 +422,13 @@ export default function MobilePOSPage() {
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
   const previewListPrice = selectedService?.standardPrice ?? 0;
-  const previewAmount = customAmountInput.trim() && Number(customAmountInput) > 0 ? Number(customAmountInput) : previewListPrice;
-  const previewTip = tipChoice === "20" ? 20 : tipChoice === "50" ? 50 : tipChoice === "CUSTOM" && Number(customTipInput) >= 0 ? Number(customTipInput) : 0;
+  // Same function as createSale, so the checkout buttons show exactly what will be recorded.
+  const { amountPaid: previewAmount, tipAmount: previewTip } = priceSale({
+    standardPrice: previewListPrice,
+    customAmountInput,
+    tipChoice,
+    customTipInput,
+  });
   const digitalLabel = digitalMethod === "MAYA" ? "Maya" : "GCash";
   const digitalColor = digitalMethod === "MAYA" ? "emerald" : "blue";
 

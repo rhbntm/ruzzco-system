@@ -11,6 +11,7 @@
     "test:attribution": "tsx scripts/test-assignment-attribution.ts",
     "test:commission": "tsx scripts/test-commission.ts",
     "test:gateway": "tsx scripts/test-gateway.ts",
+    "test:pricing": "tsx scripts/test-pricing.ts",
     "test:reconciliation": "tsx scripts/test-reconciliation.ts",
     "test:submit-lock": "tsx scripts/test-submit-lock.ts",
     "test:sync-rejections": "tsx scripts/test-sync-rejections.ts"
