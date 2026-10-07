@@ -54,11 +54,26 @@ export interface LocalDeviceBinding {
   assignmentId?: string; // generated on the phone at bind time; absent on bindings made before assignment ids
 }
 
+/**
+ * A barber's GCash or Maya QR, cached so the payment modal shows it with no internet
+ * (slice 6). Display only: never part of a sale. Kept for every active barber, so an
+ * offline rebind on a shared phone still has the right QR. Filled by refreshPaymentQrs().
+ */
+export interface LocalPaymentQr {
+  id: string; // `${barberId}:${method}`
+  barberId: string;
+  method: "GCASH" | "MAYA";
+  sha256: string;
+  contentType: string;
+  dataUrl: string;
+}
+
 export class RuzzcoPOSDatabase extends Dexie {
   transactions!: Table<LocalTransaction, string>;
   barbers!: Table<CachedBarber, string>;
   services!: Table<CachedService, string>;
   deviceBindings!: Table<LocalDeviceBinding, string>;
+  paymentQrs!: Table<LocalPaymentQr, string>;
 
   constructor() {
     super("RuzzcoPOSDB");
@@ -73,6 +88,14 @@ export class RuzzcoPOSDatabase extends Dexie {
       barbers: "id, fullName, isActive",
       services: "id, name, isActive",
       deviceBindings: "deviceKey, barberId",
+    });
+    // v3: adds the payment QR cache (a new table, so a new primary index)
+    this.version(3).stores({
+      transactions: "id, barberId, serviceId, transactionTime, synced",
+      barbers: "id, fullName, isActive",
+      services: "id, name, isActive",
+      deviceBindings: "deviceKey, barberId",
+      paymentQrs: "id",
     });
   }
 }

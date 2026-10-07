@@ -52,6 +52,8 @@ import {
   syncNow,
   verifyCurrentAssignment,
 } from "@/lib/sync";
+import { refreshPaymentQrs } from "@/lib/payment-qr-cache";
+import { qrCacheId } from "@/lib/payment-qr-plan";
 import { RejectedSales } from "@/components/RejectedSales";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { createSubmitLock } from "@/lib/submit-lock";
@@ -169,6 +171,21 @@ export default function MobilePOSPage() {
     [] as LocalTransaction[]
   );
 
+  // QR shown in the GCash/Maya modal: the bound barber's, from the device cache, so it
+  // still shows offline. Undefined while loading, null when none is set up.
+  const modalQr = useLiveQuery(
+    async () => {
+      if (!binding || !digitalMethod) return null;
+      try {
+        return (await db.paymentQrs.get(qrCacheId(binding.barberId, digitalMethod))) ?? null;
+      } catch {
+        return null;
+      }
+    },
+    [binding?.barberId, digitalMethod],
+    undefined
+  );
+
   // ── Sync dispatcher ─────────────────────────────────────────────────────────
 
   const requireRebind = useCallback(() => {
@@ -220,6 +237,12 @@ export default function MobilePOSPage() {
       .then((res) => { if (active) setGatewayEnabled(res.ok); })
       .catch(() => {});
     return () => { active = false; };
+  }, [isOnline]);
+
+  // Payment QR cache: refreshed on load while online and on every reconnect. Offline, the
+  // cached copies stay as they are.
+  useEffect(() => {
+    if (isOnline) void refreshPaymentQrs();
   }, [isOnline]);
 
   // ── Device binding initialization ───────────────────────────────────────────
@@ -307,6 +330,7 @@ export default function MobilePOSPage() {
       if (navigator.onLine) {
         const result = await registerPendingAssignment();
         if (result.bindingCleared) requireRebind();
+        void refreshPaymentQrs();
       }
     } catch (e) {
       console.error("Error binding device:", e);
@@ -567,6 +591,17 @@ export default function MobilePOSPage() {
             </div>
 
             <div>
+              {modalQr ? (
+                <div className="mx-auto mb-1 w-48 space-y-1.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- cached data URL from IndexedDB */}
+                  <img src={modalQr.dataUrl} alt={`${digitalLabel} QR on file for ${binding?.barberName ?? "this barber"}`} className="w-full aspect-square object-contain rounded-xl bg-white p-2" />
+                  <p className="text-[11px] text-zinc-500 text-center">{digitalLabel} QR on file for {binding?.barberName}</p>
+                </div>
+              ) : modalQr === null ? (
+                <div className="mb-1 p-3 rounded-xl border border-dashed border-[#2c3140] text-center text-xs text-zinc-400">
+                  No {digitalLabel} QR set up for {binding?.barberName}. Ask the owner to add one.
+                </div>
+              ) : null}
               <div className={`text-3xl font-extrabold text-center pt-2 font-[family-name:var(--font-oswald)] ${digitalColor === "emerald" ? "text-emerald-400" : "text-blue-400"}`}>
                 ₱{digitalTotal.toFixed(2)}
               </div>
@@ -576,8 +611,9 @@ export default function MobilePOSPage() {
                 </p>
               )}
               <p className="text-xs text-zinc-400 text-center mt-2 mb-3">
-                Have the customer send <strong className="text-white">₱{digitalTotal.toFixed(2)}</strong> by{" "}
-                {digitalLabel}. If you have the {digitalLabel} reference number, enter it below.
+                {modalQr ? "Have the customer scan the QR and send " : "Have the customer send "}
+                <strong className="text-white">₱{digitalTotal.toFixed(2)}</strong> by {digitalLabel}. If you have the{" "}
+                {digitalLabel} reference number, enter it below.
               </p>
               <input
                 type="text"

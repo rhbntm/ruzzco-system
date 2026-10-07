@@ -14,6 +14,7 @@
     "test:payload-compat": "tsx scripts/test-payload-compat.ts",
     "test:payment-qr": "tsx scripts/test-payment-qr.ts",
     "test:pricing": "tsx scripts/test-pricing.ts",
+    "test:qr-cache": "tsx scripts/test-qr-cache.ts",
     "test:reconciliation": "tsx scripts/test-reconciliation.ts",
     "test:submit-lock": "tsx scripts/test-submit-lock.ts",
     "test:sync-rejections": "tsx scripts/test-sync-rejections.ts"
