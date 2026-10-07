@@ -429,6 +429,8 @@ export default function MobilePOSPage() {
     tipChoice,
     customTipInput,
   });
+  // What the customer sends by GCash/Maya: the amount paid plus any tip entered before payment.
+  const digitalTotal = previewAmount + previewTip;
   const digitalLabel = digitalMethod === "MAYA" ? "Maya" : "GCash";
   const digitalColor = digitalMethod === "MAYA" ? "emerald" : "blue";
 
@@ -565,13 +567,17 @@ export default function MobilePOSPage() {
             </div>
 
             <div>
-              <div className={`text-3xl font-extrabold text-center py-2 font-[family-name:var(--font-oswald)] ${digitalColor === "emerald" ? "text-emerald-400" : "text-blue-400"}`}>
-                ₱{selectedService?.standardPrice.toFixed(2)}
+              <div className={`text-3xl font-extrabold text-center pt-2 font-[family-name:var(--font-oswald)] ${digitalColor === "emerald" ? "text-emerald-400" : "text-blue-400"}`}>
+                ₱{digitalTotal.toFixed(2)}
               </div>
-              <p className="text-xs text-zinc-400 text-center mb-3">
-                Have the customer scan the QR code and send{" "}
-                <strong className="text-white">₱{selectedService?.standardPrice.toFixed(2)}</strong>,
-                then enter the reference number below.
+              {previewTip > 0 && (
+                <p className="text-[11px] text-zinc-500 text-center">
+                  ₱{previewAmount.toFixed(2)} + ₱{previewTip.toFixed(2)} tip
+                </p>
+              )}
+              <p className="text-xs text-zinc-400 text-center mt-2 mb-3">
+                Have the customer send <strong className="text-white">₱{digitalTotal.toFixed(2)}</strong> by{" "}
+                {digitalLabel}. If you have the {digitalLabel} reference number, enter it below.
               </p>
               <input
                 type="text"
