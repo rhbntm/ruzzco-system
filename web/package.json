@@ -12,6 +12,7 @@
     "test:commission": "tsx scripts/test-commission.ts",
     "test:gateway": "tsx scripts/test-gateway.ts",
     "test:payload-compat": "tsx scripts/test-payload-compat.ts",
+    "test:payment-qr": "tsx scripts/test-payment-qr.ts",
     "test:pricing": "tsx scripts/test-pricing.ts",
     "test:reconciliation": "tsx scripts/test-reconciliation.ts",
     "test:submit-lock": "tsx scripts/test-submit-lock.ts",
