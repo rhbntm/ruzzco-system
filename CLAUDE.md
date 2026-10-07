@@ -9,7 +9,7 @@ Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). T
 
 - Repo root: `docker-compose.yml` (MySQL 8, host port 3307, db `ruzzco_db`) and `web/`.
 - `web/`: Next.js 16.3.5 (App Router, Turbopack), React 19, Tailwind 4, Prisma 6 (MySQL), Dexie 4, Zod 4.
-- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation` and `npm run test:gateway` (need the dev server; gateway: started with the gateway env vars), `npm run test:submit-lock`, `npm run test:pricing`, `npm run test:payload-compat`.
+- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation`, `npm run test:gateway` and `npm run test:payment-qr` (need the dev server; gateway: started with the gateway env vars; attribution T17 also needs `TEST_ADMIN_DATABASE_URL`, a MySQL user that can create a scratch database, e.g. the local Docker root), `npm run test:submit-lock`, `npm run test:pricing`, `npm run test:payload-compat`, `npm run test:qr-cache`.
 - `web/.env` needs `DATABASE_URL` and `OWNER_PIN`; the optional QR Ph demo uses `PAYMENT_GATEWAY` (`off` default | `paymongo_test`), `PAYMONGO_SECRET_KEY` (must be `sk_test_`) and `PAYMONGO_WEBHOOK_SECRET`. Never print, log, or commit their values.
 - Next.js 16 differs from older versions. Read `node_modules/next/dist/docs/` before using an API you are unsure about.
 
@@ -56,11 +56,12 @@ Code must respect these. Don't build features from this list unless a slice spec
 - Only `POST /api/v1/devices/bind` creates an active assignment (revoke-and-create in one transaction, idempotent by id, never reactivates). Sync may only register an unknown assignment from its sales, and only as already revoked; it never touches the active binding. The client syncs the pending current assignment's sales only after its bind succeeds (`web/src/lib/sync.ts`).
 - `cashierId` = the assignment's barber for assignment-backed sales. Legacy sales without `assignmentId` keep their stamped `barberId`, get `cashierId = null`, and are never overridden by the current binding.
 - Use `generateUUID()` from `src/lib/db.ts`, not `crypto.randomUUID()` (LAN HTTP is not a secure context).
-- Owner-only: `/ledger` and the payout and reconciliation write routes need the `OWNER_PIN` cookie (`ruzzco_owner_access`, HttpOnly). The Secure flag follows the request protocol.
+- Owner-only: `/ledger`, `/payment-qr`, and the payout, reconciliation and payment-QR write routes need the `OWNER_PIN` cookie (`ruzzco_owner_access`, HttpOnly). The Secure flag follows the request protocol.
 - Money is `Decimal(10,2)`. `totalAmount` is the amount paid, excluding tip. Tips are separate, go 100% to the barber, and are excluded from revenue and the commission base. Revenue is `amountPaid`. `commissionBase` defaults to `LIST_PRICE` (the shop absorbs discounts). The ledger recomputes with a LIST_PRICE/AMOUNT_PAID toggle.
 - Expected drawer cash = cash sales + cash tips - cash payouts - petty cash. GCash and Maya are digital and are not in the drawer.
 - Payment methods: CASH, GCASH, MAYA. QRPH is gateway-only (PayMongo test mode, `PAYMENT_GATEWAY=paymongo_test`); with the switch off it never appears.
 - `Transaction.paymentStatus`: PAID | PENDING | EXPIRED | FAILED. Non-gateway sales are always PAID. A QRPH sale is stored PENDING whatever the client sends; only the server (signed webhook or Check status against PayMongo) changes it. Only PAID sales count toward revenue, commission, payouts and reconciliation; the rest are listed separately. Gateway money is never in the drawer.
+- Payment QRs (slice 6) are display only: a GCash or Maya image per barber record, shown in the POS modal for the bound barber. They live only in `barber_payment_qrs` and the phones' IndexedDB (`paymentQrs`); never committed, seeded, logged (not even a Prisma error message) or sent in a sale payload. Uploads are PNG/JPEG/WebP by file signature, 1 MB max. A QR never changes how a sale is recorded, and no rule about who owes whom for digital payments is encoded.
 
 ## Session log (required)
 
@@ -76,14 +77,14 @@ Confirmed (one self-filled form, 2026-09-23): daily payout before the barber goe
 
 Unconfirmed. Keep as settings, do not hardcode: the discount base (list vs paid), whether petty cash is shared or shop-only, retail commission, tip channel, and whether Mart also cuts hair (he is still seeded as an active barber).
 
-Conflicts to resolve: the POS "Senior/PWD −20%" button and the `demo-senior-pwd` demo row contradict the no-PWD, loyalty-only discount rule. The advisor (2026-09-28) asked to add a payment gateway and remove the ledger. Keep cash reconciliation either way.
+Conflicts to resolve: the `demo-senior-pwd` demo row contradicts the no-PWD, loyalty-only discount rule (the POS button was removed 2026-10-02). The advisor (2026-09-28) asked to add a payment gateway and remove the ledger. Keep cash reconciliation either way.
 
 ## Data caveats (ML)
 In the Dec-Feb dataset, dates and cuts per day are real. The ₱100 per row is the owner's 50% share of the cut, not the price. The haircut price was ₱180 until 2025-09-20 and ₱200 from 2025-09-21. Haircut type, payment method, and customer names are generated or randomized. Never use `haircut_type` or `payment_method` as features or present them as real. Forecast customer counts, then multiply by the current price.
 
 ## Known gaps
 
-- No service worker or manifest: offline means the queue only, and the page must stay open.
+- No service worker or manifest: offline means the queue only, and the page must stay open. A service worker needs HTTPS (or localhost); the phones use LAN HTTP, so a PWA slice starts with HTTPS.
 - Counter-station mode, attendance and roster, and inventory are not built.
 - The "Save payout" UX is unclear. The demo seed is placeholder data only.
 - Loyalty-card discounts are not built.
