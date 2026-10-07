@@ -15,6 +15,7 @@ import {
   Clock,
   MapPin,
   CheckCircle2,
+  QrCode,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
@@ -30,6 +31,7 @@ const destinations: Destination[] = [
   { href: "/shift-log", title: "Shift Log", body: "Every sale on this phone, its sync status, and anything that needs attention.", icon: History },
   { href: "/reconciliation", title: "End-of-Day Cash", body: "Count the drawer against expected cash after tips, payouts and petty cash.", icon: ClipboardCheck },
   { href: "/ledger", title: "Barber Ledger", body: "Daily 50/50 commission and payouts, from the rates saved at each sale.", icon: Wallet, ownerOnly: true },
+  { href: "/payment-qr", title: "Payment QR", body: "Add each barber's GCash and Maya QR, shown when a customer pays by phone.", icon: QrCode, ownerOnly: true },
 ];
 
 const flow: { title: string; body: string; icon: LucideIcon }[] = [
