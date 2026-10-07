@@ -65,6 +65,7 @@ model Barber {
   commissionLogs  CommissionLog[]
   payoutLedgers   DailyPayoutLedger[]
   deviceAssignments DeviceAssignment[]
+  paymentQrs      BarberPaymentQr[]
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
 
@@ -239,6 +240,23 @@ model GatewayWebhookEvent {
   receivedAt DateTime @default(now()) @map("received_at")
 
   @@map("gateway_webhook_events")
+}
+
+/// A GCash or Maya QR image the owner uploaded for a barber, shown in the POS payment modal.
+/// Display only: sales never reference it. The image lives only here (and in the phones'
+/// IndexedDB cache); it is never committed, seeded, logged or sent in a sale payload.
+model BarberPaymentQr {
+  id          String        @id @default(uuid())
+  barberId    String        @map("barber_id")
+  barber      Barber        @relation(fields: [barberId], references: [id])
+  method      PaymentMethod // GCASH or MAYA only, enforced by the route
+  contentType String        @map("content_type")
+  image       Bytes         @db.MediumBlob
+  sha256      String        @db.Char(64)
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@unique([barberId, method])
+  @@map("barber_payment_qrs")
 }
 
 /// Persistent audit record written whenever the sync route overrides a client-supplied
