@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import type { LucideIcon } from "lucide-react";
 import {
   Scissors,
@@ -11,7 +12,6 @@ import {
   WifiOff,
   RefreshCw,
   Banknote,
-  LineChart,
   Clock,
   MapPin,
   CheckCircle2,
@@ -20,6 +20,9 @@ import {
 import { prisma } from "@/lib/prisma";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
 import { gatewayConfig } from "@/lib/gateway";
+import { OWNER_COOKIE, isOwnerCookie } from "@/lib/owner-access";
+import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
+import { ForecastLocked, ForecastPanel } from "@/components/ForecastPanel";
 import { RuzzcoLogoBadge, MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
 
 export const dynamic = "force-dynamic";
@@ -58,8 +61,20 @@ async function loadSnapshot() {
   }
 }
 
+// Forecast numbers are loaded only for the owner; everyone else gets the locked card.
+async function loadForecast(): Promise<SerializedForecast | null> {
+  try {
+    const { run, days } = await latestForecast();
+    return serializeForecast(run, days);
+  } catch (error) {
+    console.error("[home] forecast query failed:", error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
 export default async function HomePage() {
-  const snapshot = await loadSnapshot();
+  const isOwner = isOwnerCookie((await cookies()).get(OWNER_COOKIE)?.value);
+  const [snapshot, forecast] = await Promise.all([loadSnapshot(), isOwner ? loadForecast() : Promise.resolve(null)]);
   const gatewayOn = gatewayConfig() !== null;
 
   const built = [
@@ -70,6 +85,7 @@ export default async function HomePage() {
     "50/50 commission saved with each sale, never recomputed",
     "Daily payout ledger behind an owner PIN",
     "End-of-day drawer reconciliation with petty cash",
+    "7-day customer and revenue forecast for the owner, from the paper logbook",
   ];
 
   return (
@@ -91,8 +107,8 @@ export default async function HomePage() {
               <MustacheIcon className="w-8 h-4 text-red-600 shrink-0" />
             </h1>
             <p className="text-zinc-400 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
-              The shop&apos;s point of sale and end-of-day books, built to keep working offline, with customer
-              forecasting on the way.
+              The shop&apos;s point of sale and end-of-day books, built to keep working offline, with a 7-day
+              customer forecast for the owner.
             </p>
           </div>
 
@@ -119,6 +135,19 @@ export default async function HomePage() {
             <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Caloocan City</span>
           </div>
         </header>
+
+        {/* Forecast (owner only) */}
+        {isOwner ? (
+          forecast ? (
+            <ForecastPanel initial={forecast} today={manilaToday()} />
+          ) : (
+            <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-900/50 text-sm text-rose-300">
+              The saved forecast can&apos;t be loaded right now because the database is unreachable.
+            </div>
+          )
+        ) : (
+          <ForecastLocked />
+        )}
 
         {/* Today */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -202,8 +231,8 @@ export default async function HomePage() {
           </section>
         )}
 
-        {/* Built and next */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Built */}
+        <section>
           <div className="p-5 rounded-xl bg-[#12141a] border border-emerald-500/25 space-y-3">
             <div className="text-xs font-bold uppercase tracking-wider text-emerald-300 font-[family-name:var(--font-oswald)]">Built so far</div>
             <ul className="space-y-2">
@@ -214,16 +243,6 @@ export default async function HomePage() {
                 </li>
               ))}
             </ul>
-          </div>
-          <div className="p-5 rounded-xl bg-[#12141a]/60 border border-[#232734] space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-[family-name:var(--font-oswald)]">Coming next</div>
-            <div className="flex items-start gap-2 text-sm text-zinc-300">
-              <LineChart className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-              <span>
-                Customer forecasting: predict how many customers come in each day, and derive expected revenue from
-                that.
-              </span>
-            </div>
           </div>
         </section>
 

@@ -21,11 +21,16 @@ export function ownerCookieValue() {
   return process.env.OWNER_PIN ? tokenForPin(process.env.OWNER_PIN) : "";
 }
 
-export function hasOwnerAccess(request: NextRequest) {
+// For server components, which read cookies with `await cookies()` instead of a request.
+export function isOwnerCookie(value: string | undefined) {
   const expected = ownerCookieValue();
-  const actual = request.cookies.get(OWNER_COOKIE)?.value ?? "";
+  const actual = value ?? "";
   if (!expected || actual.length !== expected.length) return false;
   return timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
+}
+
+export function hasOwnerAccess(request: NextRequest) {
+  return isOwnerCookie(request.cookies.get(OWNER_COOKIE)?.value);
 }
 
 export function ownerRequiredResponse() {
