@@ -8,6 +8,7 @@ import calendar
 import datetime as dt
 
 import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
 
 # Advisor guidance 2026-10-05: train only on the logbook from this date on (post-gap).
 POST_GAP_START = pd.Timestamp("2026-07-13")
@@ -158,6 +159,78 @@ def average_ticket(entries, data_from, data_to):
         "rows_with_amount": int(len(amounts)),
         "amount_total": float(amounts.sum()),
     }
+
+
+BASELINES = ["average", "weekday", "last7"]
+METHODS = BASELINES + ["random_forest"]
+
+
+def baseline_predictions(train, dates):
+    """The three simple averages' guesses for each date, from open training days only (Decision 3).
+
+    average: mean customers over all training days. weekday: mean for that weekday, falling
+    back to the overall average when the weekday has no training rows. last7: mean of the
+    last 7 training days. Returns a DataFrame with one column per baseline.
+    """
+    train = train.sort_values("date")
+    overall = train["customers"].astype(float).mean()
+    by_weekday = train.groupby("dow")["customers"].mean().astype(float)
+    last7 = train["customers"].tail(7).astype(float).mean()
+    weekdays = calendar_features(dates)["dow"]
+    return pd.DataFrame({
+        "average": [overall] * len(weekdays),
+        "weekday": [by_weekday.get(d, overall) for d in weekdays],
+        "last7": [last7] * len(weekdays),
+    })
+
+
+def walk_forward(daily, weeks=4, block_days=7):
+    """Test every method on the last `weeks` blocks of 7 calendar days, ending on data_to (Decision 2).
+
+    Each block trains only on open days before the block starts and is scored only on its
+    open days. Score = mean absolute error (MAE) in customers per day. Returns per-week
+    results (oldest first), the mean MAE per method, the best baseline (lowest mean), and
+    the number of weeks Random Forest beat that baseline (Decision 6: no tuning here).
+    """
+    data_to = daily["date"].max()
+    training_rows = daily[daily["use_for_training"]]
+    results = []
+    for k in reversed(range(weeks)):
+        end = data_to - pd.Timedelta(days=block_days * k)
+        start = end - pd.Timedelta(days=block_days - 1)
+        train = training_rows[training_rows["date"] < start]
+        test = training_rows[(training_rows["date"] >= start) & (training_rows["date"] <= end)]
+        if train.empty or test.empty:
+            raise ValueError(f"Test week {start.date()} to {end.date()} has no open days to train on or to score.")
+
+        guesses = baseline_predictions(train, test["date"])
+        guesses["random_forest"] = _fit_random_forest(train).predict(test[FEATURES])
+        actual = test["customers"].astype(float).to_numpy()
+        results.append({
+            "start": start,
+            "end": end,
+            "train_to": train["date"].max(),
+            "scored_dates": list(test["date"]),
+            "days": len(test),
+            "mae": {m: float(abs(guesses[m].to_numpy() - actual).mean()) for m in METHODS},
+        })
+
+    mean = {m: sum(w["mae"][m] for w in results) / len(results) for m in METHODS}
+    best = min(BASELINES, key=lambda m: mean[m])
+    return {
+        "weeks": results,
+        "mean": mean,
+        "best_baseline": best,
+        "weeks_rf_won": sum(w["mae"]["random_forest"] < w["mae"][best] for w in results),
+        "weeks_tested": len(results),
+    }
+
+
+def _fit_random_forest(train):
+    """Random Forest on the four calendar inputs, default settings, fixed seed (Decision 6)."""
+    model = RandomForestRegressor(random_state=42)
+    model.fit(train[FEATURES], train["customers"].astype(float))
+    return model
 
 
 def _dates(values):

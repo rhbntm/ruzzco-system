@@ -6,3 +6,7 @@ joblib==1.4.2
 openpyxl==3.1.5
 pytest==8.3.5
 httpx==0.28.1
+# Pinned dependencies of the above, so training and serving always use the same numerics.
+numpy==2.2.6
+scipy==1.15.3
+anyio==4.9.0
