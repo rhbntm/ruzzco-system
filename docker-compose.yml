@@ -18,6 +18,14 @@ services:
       timeout: 5s
       retries: 10
 
+  ml-service:
+    build: ./ml-service
+    container_name: ruzzco-ml
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./ml-service:/app
+
 volumes:
   mysql_data:
     driver: local

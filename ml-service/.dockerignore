@@ -1,0 +1,5 @@
+# The logbook and trained artifacts never go into the image; in dev they come in through the volume.
+data/
+artifacts/
+__pycache__/
+.pytest_cache/
