@@ -10,6 +10,8 @@
     "seed:demo": "tsx prisma/seed-demo.ts",
     "test:attribution": "tsx scripts/test-assignment-attribution.ts",
     "test:commission": "tsx scripts/test-commission.ts",
+    "test:forecast": "tsx scripts/test-forecast.ts",
+    "test:forecast-parse": "tsx scripts/test-forecast-parse.ts",
     "test:gateway": "tsx scripts/test-gateway.ts",
     "test:payload-compat": "tsx scripts/test-payload-compat.ts",
     "test:payment-qr": "tsx scripts/test-payment-qr.ts",

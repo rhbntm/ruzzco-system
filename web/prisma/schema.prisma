@@ -211,9 +211,32 @@ model DailyRevenueForecast {
   confidenceUpperBound Decimal? @db.Decimal(10, 2) @map("confidence_upper_bound")
   predictedHeadcount   Int?     @map("predicted_headcount")
   generatedAt          DateTime @default(now()) @map("generated_at")
+  runId                String?      @map("run_id")
+  run                  ForecastRun? @relation(fields: [runId], references: [id])
 
   @@unique([forecastDate])
   @@map("daily_revenue_forecasts")
+}
+
+/// One call to the ml-service forecast (slice 7). Stores the model's version, training range
+/// and test error so the owner dashboard can explain the numbers when the service is down.
+/// Its days are the DailyRevenueForecast rows; a later run overwrites the same dates.
+model ForecastRun {
+  id                    String   @id @default(uuid())
+  createdAt             DateTime @default(now()) @map("created_at")
+  modelVersion          String   @map("model_version")
+  dataFrom              DateTime @db.Date @map("data_from")
+  dataTo                DateTime @db.Date @map("data_to")
+  trainingDays          Int      @map("training_days")
+  avgTicket             Decimal  @db.Decimal(10, 2) @map("avg_ticket")
+  typicalErrorCustomers Decimal  @db.Decimal(6, 2) @map("typical_error_customers")
+  bestBaseline          String   @map("best_baseline")
+  bestBaselineError     Decimal  @db.Decimal(6, 2) @map("best_baseline_error")
+  weeksRfWon            Int      @map("weeks_rf_won")
+  weeksTested           Int      @map("weeks_tested")
+  days                  DailyRevenueForecast[]
+
+  @@map("forecast_runs")
 }
 
 /// One gateway charge per sale (transactionId is the sale's client UUID). Status mirrors
