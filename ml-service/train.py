@@ -5,13 +5,20 @@ With no flag, uses the only .xlsx file in data/.
 """
 
 import argparse
+import datetime as dt
+import hashlib
 import json
 from pathlib import Path
+
+import joblib
+import sklearn
 
 import pipeline
 
 DATA_DIR = Path(__file__).parent / "data"
 ARTIFACTS_DIR = Path(__file__).parent / "artifacts"
+# Asia/Manila is UTC+8 all year (no daylight saving), so a fixed offset is exact.
+MANILA = dt.timezone(dt.timedelta(hours=8), "Asia/Manila")
 
 
 def find_logbook(data_dir=DATA_DIR):
@@ -46,11 +53,48 @@ def main():
     evaluation = pipeline.walk_forward(daily)
     print()
     print_comparison(evaluation, ticket["avg_ticket"])
-    ARTIFACTS_DIR.mkdir(exist_ok=True)
-    evaluation_path = ARTIFACTS_DIR / "evaluation.json"
-    evaluation_path.write_text(json.dumps(evaluation_summary(evaluation), indent=2), encoding="utf-8")
+
+    model = pipeline.train_final_model(daily)
+    paths = write_artifacts(model, daily, ticket, evaluation, ARTIFACTS_DIR)
     print()
-    print(f"Wrote {evaluation_path.relative_to(Path(__file__).parent)}")
+    for path in paths:
+        print(f"Wrote {path.relative_to(Path(__file__).parent)}")
+
+
+def write_artifacts(model, daily, ticket, evaluation, out_dir):
+    """Save evaluation.json, model.joblib and metadata.json (section 7). Returns the three paths."""
+    out_dir.mkdir(exist_ok=True)
+    evaluation_path = out_dir / "evaluation.json"
+    evaluation_path.write_text(json.dumps(evaluation_summary(evaluation), indent=2), encoding="utf-8")
+
+    model_path = out_dir / "model.joblib"
+    joblib.dump(model, model_path)
+    model_hash = hashlib.sha256(model_path.read_bytes()).hexdigest()[:8]
+
+    data_from, data_to = daily["date"].min().date(), daily["date"].max().date()
+    best = evaluation["best_baseline"]
+    metadata = {
+        "model_version": f"rf-{data_to.isoformat()}-{model_hash}",
+        "trained_at": dt.datetime.now(MANILA).isoformat(timespec="seconds"),
+        "data_from": data_from.isoformat(),
+        "data_to": data_to.isoformat(),
+        "training_days": int(daily["use_for_training"].sum()),
+        "features": pipeline.FEATURES,
+        "payday_rule": pipeline.PAYDAY_RULE,
+        "avg_ticket": ticket["avg_ticket"],
+        "rows_with_amount": ticket["rows_with_amount"],
+        "evaluation": {
+            "weeks_tested": evaluation["weeks_tested"],
+            "rf_mae": round(evaluation["mean"]["random_forest"], 2),
+            "best_baseline": best,
+            "best_baseline_mae": round(evaluation["mean"][best], 2),
+            "weeks_rf_won": evaluation["weeks_rf_won"],
+        },
+        "sklearn_version": sklearn.__version__,
+    }
+    metadata_path = out_dir / "metadata.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    return [evaluation_path, model_path, metadata_path]
 
 
 def week_label(week):

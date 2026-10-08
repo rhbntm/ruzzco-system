@@ -226,6 +226,29 @@ def walk_forward(daily, weeks=4, block_days=7):
     }
 
 
+def train_final_model(daily):
+    """Fit the Random Forest that will be served, on every open day in range (Decisions 1 and 6)."""
+    return _fit_random_forest(daily[daily["use_for_training"]])
+
+
+def forecast(model, start, days, avg_ticket):
+    """Expected customers and revenue for `days` consecutive dates from `start` (Decision 5).
+
+    customers is never negative and is rounded to one decimal; revenue is that rounded
+    number times avg_ticket, to two decimals, so every row checks out by hand.
+    """
+    if days < 1:
+        raise ValueError("days must be at least 1.")
+    dates = pd.date_range(pd.Timestamp(start).normalize(), periods=days, freq="D")
+    predicted = model.predict(calendar_features(dates)[FEATURES])
+    customers = [round(max(0.0, float(p)), 1) for p in predicted]
+    return pd.DataFrame({
+        "date": dates,
+        "customers": customers,
+        "revenue": [round(c * avg_ticket, 2) for c in customers],
+    })
+
+
 def _fit_random_forest(train):
     """Random Forest on the four calendar inputs, default settings, fixed seed (Decision 6)."""
     model = RandomForestRegressor(random_state=42)
