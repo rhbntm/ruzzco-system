@@ -74,7 +74,11 @@ async function main() {
   const afterFirst = await rowsInRange();
   check("7 stored days point at the run", afterFirst.length === 7 && afterFirst.every((r) => r.runId === firstRun?.id));
   check("confidence bounds stay null", afterFirst.every((r) => r.confidenceLowerBound === null && r.confidenceUpperBound === null));
-  check("headcount is a whole number", afterFirst.every((r) => Number.isInteger(r.predictedHeadcount) && (r.predictedHeadcount ?? -1) >= 0));
+  check("headcount is the customers rounded", afterFirst.every((r) => r.predictedCustomers !== null && r.predictedHeadcount === Math.round(Number(r.predictedCustomers))));
+  check(
+    "revenue = customers (one decimal) × average ticket",
+    afterFirst.every((r) => Math.abs(Number(r.predictedCustomers) * Number(firstRun?.avgTicket) - Number(r.predictedRevenue)) <= 0.01)
+  );
 
   console.log("\nSecond refresh the same day");
   const second = await call("POST", "/api/v1/forecast/refresh");

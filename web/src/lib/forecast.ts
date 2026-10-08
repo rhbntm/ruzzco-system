@@ -90,6 +90,7 @@ export async function saveForecast(forecast: ForecastResponse) {
     for (const day of forecast.days) {
       const values = {
         predictedHeadcount: Math.round(day.customers),
+        predictedCustomers: day.customers.toFixed(1),
         predictedRevenue: day.revenue.toFixed(2),
         confidenceLowerBound: null,
         confidenceUpperBound: null,
@@ -140,7 +141,9 @@ export function serializeForecast(run: ForecastRun | null, days: DailyRevenueFor
     },
     days: days.map((day) => ({
       date: day.forecastDate.toISOString().slice(0, 10),
-      customers: day.predictedHeadcount,
+      // One decimal, so each day's revenue checks out by hand (customers × avgTicket). Rows saved
+      // before predictedCustomers existed fall back to the rounded headcount.
+      customers: day.predictedCustomers !== null ? Number(day.predictedCustomers) : day.predictedHeadcount,
       revenue: day.predictedRevenue.toFixed(2),
     })),
   };

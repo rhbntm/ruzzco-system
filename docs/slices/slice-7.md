@@ -124,7 +124,7 @@ model ForecastRun {
 }
 ```
 
-`DailyRevenueForecast` gains `runId String? @map("run_id")` with its relation. `predictedHeadcount` = rounded customers, `predictedRevenue` = revenue. The confidence bound columns stay null.
+`DailyRevenueForecast` gains `runId String? @map("run_id")` with its relation, and `predictedCustomers Decimal? @db.Decimal(6, 1)` (added 2026-10-08 so the dashboard can show one decimal). `predictedCustomers` = customers, `predictedHeadcount` = rounded customers, `predictedRevenue` = revenue. The confidence bound columns stay null.
 - `src/lib/forecast.ts`: Zod schema for the service response (exact day count, consecutive dates, non-negative numbers); `fetchForecast(start, days)`; `saveForecast(response)` creates the run and upserts one `DailyRevenueForecast` per date in a single Prisma transaction. A later run overwrites the same dates (unique `forecastDate`).
 - `POST /api/v1/forecast/refresh` (owner cookie, 401 otherwise): fetch for `manilaToday()` and 7 days, save, return the run and days. Service unreachable or invalid response → 502, nothing saved.
 - `GET /api/v1/forecast` (owner cookie): the latest run plus stored days from `manilaToday()` for 7 days. Database only, never calls the service.
@@ -132,7 +132,7 @@ model ForecastRun {
 ## 10. Owner dashboard
 
 - On load, if the latest run was created before today (Asia/Manila), try one refresh. If it fails, show what's saved.
-- Shows: each of the 7 days (weekday, date, expected customers as a whole number, expected revenue in whole pesos); the week's totals; and these plain sentences:
+- Shows: each of the 7 days (weekday, date, expected customers to one decimal (changed 2026-10-08 from a whole number, so each row's revenue checks out by hand), expected revenue in whole pesos); the week's totals; and these plain sentences:
   - "On the last {weeks_tested} weeks of logbook records, this forecast was off by about {rf_mae} customers (about ₱{rf_mae × avg_ticket}) a day. Guessing the plain average was off by {best_baseline_mae}." Both numbers always show, whichever is lower.
   - "Based on the logbook from {data_from} to {data_to} ({training_days} open days). Revenue = expected customers × ₱{avg_ticket}, the average paid per customer in that period."
   - Service down: "Forecast service is offline. Showing the forecast saved on {date}." Days already past are not shown.

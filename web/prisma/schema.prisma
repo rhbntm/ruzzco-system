@@ -210,6 +210,8 @@ model DailyRevenueForecast {
   confidenceLowerBound Decimal? @db.Decimal(10, 2) @map("confidence_lower_bound")
   confidenceUpperBound Decimal? @db.Decimal(10, 2) @map("confidence_upper_bound")
   predictedHeadcount   Int?     @map("predicted_headcount")
+  // The model's customers to one decimal (slice 7); predictedHeadcount is the same number rounded.
+  predictedCustomers   Decimal? @db.Decimal(6, 1) @map("predicted_customers")
   generatedAt          DateTime @default(now()) @map("generated_at")
   runId                String?      @map("run_id")
   run                  ForecastRun? @relation(fields: [runId], references: [id])

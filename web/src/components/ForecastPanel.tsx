@@ -106,7 +106,7 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
                     <span className="inline-block w-10 font-semibold">{formatDate(day.date, { weekday: "short" })}</span>
                     <span className="text-zinc-400">{formatDate(day.date, { month: "short", day: "numeric" })}</span>
                   </td>
-                  <td className="py-2 text-right text-white font-semibold">{day.customers ?? "—"}</td>
+                  <td className="py-2 text-right text-white font-semibold">{day.customers === null ? "—" : day.customers.toFixed(1)}</td>
                   <td className="py-2 text-right text-white">{peso(Number(day.revenue))}</td>
                 </tr>
               ))}
@@ -114,7 +114,7 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
             <tfoot>
               <tr className="border-t border-zinc-700">
                 <td className="pt-2 font-bold text-white uppercase text-xs tracking-wider">{days.length === 7 ? "Week total" : `${days.length}-day total`}</td>
-                <td className="pt-2 text-right font-bold text-red-400">{totalCustomers}</td>
+                <td className="pt-2 text-right font-bold text-red-400">{totalCustomers.toFixed(1)}</td>
                 <td className="pt-2 text-right font-bold text-red-400">{peso(totalRevenue)}</td>
               </tr>
             </tfoot>
