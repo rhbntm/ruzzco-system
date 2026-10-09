@@ -61,3 +61,18 @@ def test_best_baseline_and_weeks_won_are_consistent():
 
 def baseline_predictions_for(train, dates):
     return pipeline.baseline_predictions(train, [pd.Timestamp(d) for d in dates])
+
+
+def test_spread_is_the_standard_deviation_of_the_weekly_errors():
+    import statistics
+
+    result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 3 + d.dayofweek + d.day % 4))
+    for method in pipeline.METHODS:
+        weekly = [w["mae"][method] for w in result["weeks"]]
+        assert result["spread"][method] == pytest.approx(statistics.stdev(weekly))
+
+
+def test_constant_series_has_no_spread():
+    result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 6))
+    for method in pipeline.BASELINES:
+        assert result["spread"][method] == pytest.approx(0)

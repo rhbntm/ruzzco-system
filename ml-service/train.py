@@ -116,6 +116,11 @@ def print_comparison(evaluation, avg_ticket):
         f"{'Mean':<24} {'':>4}  {mean['average']:>7.2f}  {mean['weekday']:>7.2f}  "
         f"{mean['last7']:>6.2f}  {mean['random_forest']:>8.2f}"
     )
+    spread = evaluation["spread"]
+    print(
+        f"{'Spread (SD of weeks)':<24} {'':>4}  {spread['average']:>7.2f}  {spread['weekday']:>7.2f}  "
+        f"{spread['last7']:>6.2f}  {spread['random_forest']:>8.2f}"
+    )
     print(
         f"Random Forest beats the best simple average ({evaluation['best_baseline']}) "
         f"in {evaluation['weeks_rf_won']} of {evaluation['weeks_tested']} weeks."
@@ -137,6 +142,7 @@ def evaluation_summary(evaluation):
             for week in evaluation["weeks"]
         ],
         "mean": {m: round(v, 4) for m, v in evaluation["mean"].items()},
+        "spread": {m: round(v, 4) for m, v in evaluation["spread"].items()},
         "best_baseline": evaluation["best_baseline"],
         "weeks_rf_won": evaluation["weeks_rf_won"],
         "weeks_tested": evaluation["weeks_tested"],

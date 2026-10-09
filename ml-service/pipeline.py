@@ -6,6 +6,7 @@ docs/slices/slice-7.md section 2. Nothing here reads POS transactions.
 
 import calendar
 import datetime as dt
+import statistics
 
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
@@ -191,6 +192,8 @@ def walk_forward(daily, weeks=4, block_days=7):
     open days. Score = mean absolute error (MAE) in customers per day. Returns per-week
     results (oldest first), the mean MAE per method, the best baseline (lowest mean), and
     the number of weeks Random Forest beat that baseline (Decision 6: no tuning here).
+    spread is the sample standard deviation of each method's weekly MAEs: how much the
+    error moves from one test week to the next.
     """
     data_to = daily["date"].max()
     training_rows = daily[daily["use_for_training"]]
@@ -216,10 +219,12 @@ def walk_forward(daily, weeks=4, block_days=7):
         })
 
     mean = {m: sum(w["mae"][m] for w in results) / len(results) for m in METHODS}
+    spread = {m: statistics.stdev(w["mae"][m] for w in results) if len(results) > 1 else 0.0 for m in METHODS}
     best = min(BASELINES, key=lambda m: mean[m])
     return {
         "weeks": results,
         "mean": mean,
+        "spread": spread,
         "best_baseline": best,
         "weeks_rf_won": sum(w["mae"]["random_forest"] < w["mae"][best] for w in results),
         "weeks_tested": len(results),
