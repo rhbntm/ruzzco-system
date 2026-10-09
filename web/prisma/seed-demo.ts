@@ -9,8 +9,8 @@ import { commissionFor } from "../src/lib/commission";
 const prisma = new PrismaClient();
 
 const DEMO_PREFIX = "demo-";
-const MART_ID = "00000000-0000-0000-0000-000000000001";
 const BAYANI_ID = "00000000-0000-0000-0000-000000000002";
+const VINCE_ID = "00000000-0000-0000-0000-000000000003"; // Mart doesn't cut hair (Mart and Bayani, Oct 2026)
 const HAIRCUT_ID = "10000000-0000-0000-0000-000000000001";
 const BEARD_ID = "10000000-0000-0000-0000-000000000002";
 
@@ -33,7 +33,7 @@ type DemoTx = {
 const DEMO_TRANSACTIONS: DemoTx[] = [
   {
     id: "demo-senior-pwd",
-    barberId: MART_ID,
+    barberId: VINCE_ID,
     serviceId: HAIRCUT_ID,
     time: "09:30",
     listPrice: 150,
@@ -54,7 +54,7 @@ const DEMO_TRANSACTIONS: DemoTx[] = [
   },
   {
     id: "demo-maya",
-    barberId: MART_ID,
+    barberId: VINCE_ID,
     serviceId: HAIRCUT_ID,
     time: "11:00",
     listPrice: 150,
@@ -75,7 +75,7 @@ const DEMO_TRANSACTIONS: DemoTx[] = [
   },
   {
     id: "demo-gcash",
-    barberId: MART_ID,
+    barberId: VINCE_ID,
     serviceId: BEARD_ID,
     time: "14:45",
     listPrice: 100,
@@ -100,7 +100,7 @@ async function clean(): Promise<number> {
 
 async function seed() {
   const barbers = await prisma.barber.findMany({
-    where: { id: { in: [MART_ID, BAYANI_ID] } },
+    where: { id: { in: [BAYANI_ID, VINCE_ID] } },
     select: { id: true, commissionRate: true },
   });
   const rateByBarber = new Map(barbers.map((b) => [b.id, b.commissionRate]));

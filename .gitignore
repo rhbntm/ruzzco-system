@@ -4,3 +4,5 @@ ml-service/data/
 ml-service/artifacts/
 ml-service/**/__pycache__/
 ml-service/.pytest_cache/
+
+/.env

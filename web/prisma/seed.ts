@@ -17,6 +17,9 @@ async function main() {
   });
 
   // 2. Seed Core Barbers
+  // Mart owns the shop but doesn't cut hair (Mart and Bayani, Oct 2026), so a new database
+  // creates his barber record inactive. `update` stays empty: re-seeding never changes an
+  // existing database, where his record may already have sales.
   const mart = await prisma.barber.upsert({
     where: { id: "00000000-0000-0000-0000-000000000001" },
     update: {},
@@ -24,7 +27,7 @@ async function main() {
       id: "00000000-0000-0000-0000-000000000001",
       fullName: "Mart Baldemor",
       commissionRate: 0.50,
-      isActive: true,
+      isActive: false,
     },
   });
 
@@ -76,7 +79,7 @@ async function main() {
 
   console.log("✅ Seed completed successfully!");
   console.log(`- Owner: ${owner.name} (${owner.email})`);
-  console.log(`- Barbers: ${mart.fullName}, ${bayaniBarber.fullName}, ${vince.fullName}`);
+  console.log(`- Barbers: ${bayaniBarber.fullName}, ${vince.fullName} (${mart.fullName}: ${mart.isActive ? "active" : "inactive"})`);
   console.log(`- Services: ${haircut.name} (₱${haircut.standardPrice}), ${shaveMassage.name} (₱${shaveMassage.standardPrice})`);
 }
 

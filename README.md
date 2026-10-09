@@ -20,8 +20,11 @@
 Ensure Docker Desktop is running, then run:
 
 ```bash
+cp .env.example .env         # Set the MySQL passwords (repo root, not committed)
 docker compose up -d mysql
 ```
+
+MySQL reads these passwords only when its volume is first created; changing `.env` later does not change an existing database.
 
 _Note: MySQL runs on port `3307` locally to prevent conflicts with default port `3306`._
 
@@ -29,9 +32,9 @@ _Note: MySQL runs on port `3307` locally to prevent conflicts with default port 
 
 ```bash
 cd web
-cp .env.example .env         # Verify DATABASE_URL matches port 3307
+cp .env.example .env         # DATABASE_URL: the user and password from the root .env, port 3307
 npx prisma migrate deploy    # Apply the migrations in prisma/migrations
-npx prisma db seed           # Seed initial barbers (Mart, Bayani) and services
+npx prisma db seed           # Seed barbers (Bayani, Vince; Mart inactive) and services
 ```
 
 **Schema changes** are committed as migrations. Do not use `prisma db push` or `prisma migrate dev` (it can offer to reset the database on drift). Edit `prisma/schema.prisma`, then generate the SQL from the live database, review it, and apply it (run the redirect in Git Bash; Windows PowerShell 5.1 redirection writes a BOM or UTF-16):

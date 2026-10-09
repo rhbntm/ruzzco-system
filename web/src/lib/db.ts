@@ -147,14 +147,8 @@ export function getOrCreateDeviceKey(): string {
   }
 }
 
-// Default seed fallbacks matching database seed.ts
+// Default seed fallbacks matching database seed.ts (active barbers only; Mart doesn't cut hair)
 export const DEFAULT_BARBERS: CachedBarber[] = [
-  {
-    id: "00000000-0000-0000-0000-000000000001",
-    fullName: "Mart Baldemor",
-    commissionRate: 0.5,
-    isActive: true,
-  },
   {
     id: "00000000-0000-0000-0000-000000000002",
     fullName: "Bayani Delos Santos",

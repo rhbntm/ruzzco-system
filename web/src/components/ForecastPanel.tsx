@@ -157,7 +157,10 @@ export function ForecastLocked() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pin }),
       });
-      if (!response.ok) throw new Error("Wrong PIN.");
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error ?? "Wrong PIN.");
+      }
       setPin("");
       router.refresh();
     } catch (err) {

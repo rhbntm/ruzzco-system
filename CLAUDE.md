@@ -9,8 +9,9 @@ Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). T
 
 - Repo root: `docker-compose.yml` (MySQL 8, host port 3307, db `ruzzco_db`; `ml-service` on host port 8001), `web/` and `ml-service/`.
 - `web/`: Next.js 16.3.5 (App Router, Turbopack), React 19, Tailwind 4, Prisma 6 (MySQL), Dexie 4, Zod 4.
-- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation`, `npm run test:gateway` and `npm run test:payment-qr` (need the dev server; gateway: started with the gateway env vars; attribution T17 also needs `TEST_ADMIN_DATABASE_URL`, a MySQL user that can create a scratch database, e.g. the local Docker root), `npm run test:submit-lock`, `npm run test:pricing`, `npm run test:payload-compat`, `npm run test:qr-cache`.
+- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation`, `npm run test:gateway` and `npm run test:payment-qr` (need the dev server; gateway: started with the gateway env vars; attribution T17 also needs `TEST_ADMIN_DATABASE_URL`, a MySQL user that can create a scratch database, e.g. the local Docker root), `npm run test:owner-unlock` (needs the dev server; at most 5 runs per 15 minutes, see the script), `npm run test:submit-lock`, `npm run test:pricing`, `npm run test:payload-compat`, `npm run test:qr-cache`, `npm run test:pin-attempts`.
 - `ml-service/` (run from the repo root): `docker compose run --rm ml-service python train.py` (reads the only `.xlsx` in `ml-service/data/`, prints the summary and the model-vs-averages table, writes `ml-service/artifacts/`), `docker compose run --rm ml-service pytest -q`, `docker compose up -d ml-service`. The service loads the model at startup: run `docker compose restart ml-service` after retraining. `npm run test:forecast-parse` needs nothing; `npm run test:forecast` needs the dev server and a trained, running ml-service.
+- Root `.env` (copy `.env.example`) holds the MySQL passwords that Docker Compose reads; MySQL uses them only when its volume is first created. Never print, log, or commit them.
 - `web/.env` needs `DATABASE_URL` and `OWNER_PIN`; optional `ML_SERVICE_URL` (default `http://localhost:8001`); the optional QR Ph demo uses `PAYMENT_GATEWAY` (`off` default | `paymongo_test`), `PAYMONGO_SECRET_KEY` (must be `sk_test_`) and `PAYMONGO_WEBHOOK_SECRET`. Never print, log, or commit their values.
 - Next.js 16 differs from older versions. Read `node_modules/next/dist/docs/` before using an API you are unsure about.
 
@@ -57,7 +58,7 @@ Code must respect these. Don't build features from this list unless a slice spec
 - Only `POST /api/v1/devices/bind` creates an active assignment (revoke-and-create in one transaction, idempotent by id, never reactivates). Sync may only register an unknown assignment from its sales, and only as already revoked; it never touches the active binding. The client syncs the pending current assignment's sales only after its bind succeeds (`web/src/lib/sync.ts`).
 - `cashierId` = the assignment's barber for assignment-backed sales. Legacy sales without `assignmentId` keep their stamped `barberId`, get `cashierId = null`, and are never overridden by the current binding.
 - Use `generateUUID()` from `src/lib/db.ts`, not `crypto.randomUUID()` (LAN HTTP is not a secure context).
-- Owner-only: `/ledger`, `/payment-qr`, the forecast panel on `/` and the `/api/v1/forecast` routes, and the payout, reconciliation and payment-QR write routes need the `OWNER_PIN` cookie (`ruzzco_owner_access`, HttpOnly). The Secure flag follows the request protocol.
+- Owner-only: `/ledger`, `/payment-qr`, the forecast panel on `/` and the `/api/v1/forecast` routes, and the payout, reconciliation and payment-QR write routes need the `OWNER_PIN` cookie (`ruzzco_owner_access`, HttpOnly). The Secure flag follows the request protocol. Wrong PINs are limited in memory (`src/lib/pin-attempts.ts`): 5 per client or 30 shop-wide in 15 minutes lock for 15 minutes, and a lock refuses even the correct PIN.
 - Money is `Decimal(10,2)`. `totalAmount` is the amount paid, excluding tip. Tips are separate, go 100% to the barber, and are excluded from revenue and the commission base. Revenue is `amountPaid`. `commissionBase` defaults to `LIST_PRICE` (the shop absorbs discounts). The ledger recomputes with a LIST_PRICE/AMOUNT_PAID toggle.
 - Expected drawer cash = cash sales + cash tips - cash payouts - petty cash. GCash and Maya are digital and are not in the drawer.
 - Payment methods: CASH, GCASH, MAYA. QRPH is gateway-only (PayMongo test mode, `PAYMENT_GATEWAY=paymongo_test`); with the switch off it never appears.
@@ -77,7 +78,9 @@ Before a session ends, or when I say "log", append to docs/sessions/YYYY-MM-DD.m
 ## Client rules
 Confirmed (one self-filled form, 2026-09-23): daily payout before the barber goes home; the shop absorbs discounts; tips 100% to the barber; petty cash is logged as expenses; payments via cash, GCash, Maya; bundles and custom amounts exist; barbers use both personal phones and a shared device.
 
-Unconfirmed. Keep as settings, do not hardcode: the discount base (list vs paid), whether petty cash is shared or shop-only, retail commission, tip channel, and whether Mart also cuts hair (he is still seeded as an active barber).
+Confirmed by Mart and Bayani (by 2026-10-09): Mart doesn't cut hair. New databases seed his barber record inactive; an existing database keeps whatever it has.
+
+Unconfirmed. Keep as settings, do not hardcode: the discount base (list vs paid), whether petty cash is shared or shop-only, retail commission, and tip channel.
 
 Conflicts to resolve: the `demo-senior-pwd` demo row contradicts the no-PWD, loyalty-only discount rule (the POS button was removed 2026-10-02). The advisor (2026-09-28) asked to add a payment gateway and remove the ledger. Keep cash reconciliation either way.
 
