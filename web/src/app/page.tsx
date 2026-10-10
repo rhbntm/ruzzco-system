@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
+import { countsOnDay } from "@/lib/time-review";
 import { gatewayConfig } from "@/lib/gateway";
 import { OWNER_COOKIE, isOwnerCookie } from "@/lib/owner-access";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
@@ -51,7 +52,7 @@ async function loadSnapshot() {
       prisma.barber.findMany({ where: { isActive: true }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } }),
       prisma.service.findMany({ where: { isActive: true }, select: { id: true, name: true, standardPrice: true }, orderBy: { standardPrice: "desc" } }),
       today
-        ? prisma.transaction.count({ where: { paymentStatus: "PAID", transactionTime: { gte: today.start, lt: today.end } } })
+        ? prisma.transaction.count({ where: { paymentStatus: "PAID", ...countsOnDay(today) } })
         : Promise.resolve(0),
     ]);
     return { ok: true as const, barbers, services, salesToday };

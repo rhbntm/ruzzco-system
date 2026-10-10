@@ -301,6 +301,9 @@ async function runSync(): Promise<SyncOutcome> {
 /** Sends one chunk and applies the per-sale results to Dexie. False when the request failed. */
 async function sendChunk(chunk: LocalTransaction[], currentDeviceKey: string, outcome: SyncOutcome): Promise<boolean> {
   const payload = {
+    // This phone's clock right now. The server compares it with its own to spot a wrong
+    // phone clock; the sales keep their own timestamps either way.
+    sentAt: new Date().toISOString(),
     transactions: chunk.map((t) => ({
       id: t.id,
       barberId: t.barberId,

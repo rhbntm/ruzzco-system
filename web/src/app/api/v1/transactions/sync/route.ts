@@ -5,6 +5,7 @@ import { commissionFor } from "@/lib/commission";
 import { readJson, serverError } from "@/lib/api";
 import { isUniqueViolation } from "@/lib/prisma-errors";
 import { gatewayStatus } from "@/lib/gateway";
+import { detectTimeAnomaly } from "@/lib/time-anomaly";
 import {
   syncBatchSchema,
   syncTransactionItemSchema,
@@ -54,6 +55,10 @@ export async function POST(request: NextRequest) {
     }
 
     const entries = parseResult.data.transactions.map(toEntry);
+    // Server time is the reference for suspicious phone timestamps (L5). One reading per
+    // request, so every sale in it is judged against the same clock.
+    const serverNow = new Date();
+    const sentAt = parseResult.data.sentAt ? new Date(parseResult.data.sentAt) : undefined;
     // Read once per request. A QRPH sale is only stored when the gateway can charge it;
     // otherwise it would sit PENDING forever with no way to pay.
     const qrphAvailable = gatewayStatus().state === "on";
@@ -196,6 +201,9 @@ export async function POST(request: NextRequest) {
       const tipAmount = item.tipAmount ?? 0;
       const commissionBase = "LIST_PRICE" as const;
       const commissionAmount = commissionFor(listPrice, commissionRate);
+      // Recorded, never rejected: the sale keeps its own timestamp and waits for the owner
+      // to confirm its business day. Duplicates were skipped above, so a flag is set once.
+      const anomaly = detectTimeAnomaly({ transactionTime: new Date(item.transactionTime), sentAt, serverNow });
 
       if (mismatch) {
         console.warn(
@@ -243,6 +251,8 @@ export async function POST(request: NextRequest) {
               paymentStatus: item.paymentMethod === "QRPH" ? "PENDING" : "PAID",
               transactionTime: new Date(item.transactionTime),
               syncedAt: new Date(),
+              timeFlag: anomaly?.flag ?? null,
+              clockSkewSeconds: anomaly?.skewSeconds ?? null,
               items: {
                 create: {
                   serviceId: item.serviceId,

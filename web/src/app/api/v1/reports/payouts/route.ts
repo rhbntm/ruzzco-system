@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { readJson, serverError } from "@/lib/api";
+import { countHeldForReview, countsOnDay } from "@/lib/time-review";
 import { commissionFor } from "@/lib/commission";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
 import { isBusinessDate, parseBusinessDate } from "@/lib/business-date";
@@ -40,7 +41,8 @@ async function totalsForDate(date: string, commissionBase: Base) {
   const day = businessDay(date);
   const transactions = await prisma.transaction.findMany({
     // Only PAID sales are owed; a QRPH sale joins its day's totals once the gateway confirms it.
-    where: { transactionTime: { gte: day.start, lt: day.end }, paymentStatus: "PAID" },
+    // countsOnDay: a flagged sale's commission waits for the owner's date review (L5).
+    where: { ...countsOnDay(day), paymentStatus: "PAID" },
     select: {
       barberId: true,
       totalAmount: true,
@@ -134,7 +136,8 @@ export async function GET(request: NextRequest) {
   try {
     const totals = await totalsForDate(parsed.data.date, parsed.data.commissionBase);
     const rows = await syncLedgerRows(parsed.data.date, totals);
-    return NextResponse.json({ success: true, date: parsed.data.date, commissionBase: parsed.data.commissionBase, expenseSharing: "SHOP_ONLY", rows: serialize(rows, parsed.data.commissionBase, totals) });
+    const heldForReview = await countHeldForReview(businessDay(parsed.data.date));
+    return NextResponse.json({ success: true, date: parsed.data.date, commissionBase: parsed.data.commissionBase, expenseSharing: "SHOP_ONLY", heldForReview, rows: serialize(rows, parsed.data.commissionBase, totals) });
   } catch (error) {
     return serverError("[GET /api/v1/reports/payouts]", error, "Could not load ledger");
   }

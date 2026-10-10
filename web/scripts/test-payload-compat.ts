@@ -8,7 +8,7 @@
  * required field rejects it, it comes back INVALID on every Retry. New fields must stay
  * optional or defaulted; add a fixture here whenever the payload gains one.
  */
-import { syncTransactionItemSchema } from "../src/lib/schemas";
+import { syncBatchSchema, syncTransactionItemSchema } from "../src/lib/schemas";
 
 let passed = 0;
 const failures: string[] = [];
@@ -150,6 +150,19 @@ expectRejected("missing totalAmount", { id: ids.sale, barberId: "barber-1", serv
 expectRejected("zero totalAmount", { id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 0, transactionTime: time });
 expectRejected("non-UUID id", { id: "sale-1", barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 200, transactionTime: time });
 expectRejected("unknown payment method", { id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 200, paymentMethod: "PAYPAL", transactionTime: time });
+
+console.log("\nBatch envelope: optional sentAt (L5)");
+{
+  const one = [{ id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 200, transactionTime: time }];
+  const old = syncBatchSchema.safeParse({ transactions: one });
+  check("a batch without sentAt (older phones, queued payloads) still parses", old.success && old.data.sentAt === undefined);
+  const now = syncBatchSchema.safeParse({ transactions: one, sentAt: new Date().toISOString() });
+  check("a batch with sentAt parses and keeps it", now.success && typeof now.data.sentAt === "string");
+  const junk = syncBatchSchema.safeParse({ transactions: one, sentAt: "yesterday-ish" });
+  check("an unreadable sentAt is ignored, never a reason to refuse the sales", junk.success && junk.data.sentAt === undefined);
+  const wrongType = syncBatchSchema.safeParse({ transactions: one, sentAt: 12345 });
+  check("a non-string sentAt is ignored too", wrongType.success && wrongType.data.sentAt === undefined);
+}
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

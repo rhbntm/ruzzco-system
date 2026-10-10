@@ -45,6 +45,20 @@ enum CommissionBase {
   AMOUNT_PAID
 }
 
+// Why a sale's phone timestamp is not trusted to pick its business day (slice L5).
+// DEVICE_CLOCK_SKEW wins when both apply: the phone's clock explains the future timestamp.
+enum TimeFlag {
+  FUTURE_TIMESTAMP // more than 5 minutes ahead of the server when it arrived
+  DEVICE_CLOCK_SKEW // the phone's clock (sentAt) was more than 5 minutes off the server's
+}
+
+// The owner's decision for a flagged sale: count it on the day the phone stated, or on the
+// Manila date the server received it.
+enum TimeReviewChoice {
+  STATED_DATE
+  RECEIVED_DATE
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -112,6 +126,14 @@ model Transaction {
   // attribution; null for legacy sales queued before assignment ids existed.
   assignmentId           String?           @map("assignment_id")
   assignment             DeviceAssignment? @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  // Suspicious phone timestamp (set once at sync, never recomputed). transactionTime is kept
+  // as sent. A flagged sale counts on no business day until the owner reviews it; then it
+  // counts only on timeReviewedBusinessDate. Null on every ordinary sale.
+  timeFlag                 TimeFlag?         @map("time_flag")
+  clockSkewSeconds         Int?              @map("clock_skew_seconds") // + = phone ahead of the server
+  timeReviewedAt           DateTime?         @map("time_reviewed_at")
+  timeReviewChoice         TimeReviewChoice? @map("time_review_choice")
+  timeReviewedBusinessDate DateTime?         @db.Date @map("time_reviewed_business_date")
   items                  TransactionItem[]
   commissionLogs         CommissionLog[]
   createdAt              DateTime          @default(now()) @map("created_at")
@@ -119,6 +141,7 @@ model Transaction {
   @@index([barberId])
   @@index([transactionTime])
   @@index([assignmentId])
+  @@index([timeFlag])
   @@map("transactions")
 }
 

@@ -39,6 +39,7 @@ Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, get:
 type Behaviour = { fail?: (requestNo: number) => boolean; reject?: Set<string>; reason?: string; delayMs?: number; onRequest?: () => Promise<void> | void };
 let behaviour: Behaviour = {};
 let requests: string[][] = [];
+let sentAts: (string | undefined)[] = [];
 let inFlight = 0;
 let maxInFlight = 0;
 
@@ -48,8 +49,10 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   inFlight++;
   maxInFlight = Math.max(maxInFlight, inFlight);
   try {
-    const ids = (JSON.parse(String(init?.body)) as { transactions: { id: string }[] }).transactions.map((t) => t.id);
+    const body = JSON.parse(String(init?.body)) as { sentAt?: string; transactions: { id: string }[] };
+    const ids = body.transactions.map((t) => t.id);
     requests.push(ids);
+    sentAts.push(body.sentAt);
     await behaviour.onRequest?.();
     if (behaviour.delayMs) await new Promise((r) => setTimeout(r, behaviour.delayMs));
     if (behaviour.fail?.(requests.length)) return new Response("{}", { status: 500 });
@@ -92,6 +95,7 @@ async function main() {
     await db.transactions.clear();
     behaviour = {};
     requests = [];
+    sentAts = [];
     maxInFlight = 0;
   };
   const unsyncedCount = () => db.transactions.where("synced").equals(0).count();
@@ -105,6 +109,11 @@ async function main() {
   check("every sale is sent once", new Set(requests.flat()).size === 120 && requests.flat().length === 120);
   check("all 120 marked synced", (await unsyncedCount()) === 0);
   check("outcome adds up across chunks", outcome.status === "synced" && outcome.processed === 120, JSON.stringify(outcome));
+  check(
+    "every chunk carries the phone's clock (sentAt) at send time",
+    sentAts.length === 3 && sentAts.every((s) => typeof s === "string" && Math.abs(Date.parse(s) - Date.now()) < 60_000),
+    JSON.stringify(sentAts)
+  );
 
   await reset();
   const ids = await addSales(60);

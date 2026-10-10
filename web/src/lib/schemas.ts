@@ -50,6 +50,9 @@ export const syncBatchSchema = z.object({
     .array(z.unknown())
     .min(1, "At least one transaction required for sync")
     .max(SYNC_BATCH_MAX, "Too many transactions in one sync"),
+  // The phone's clock when it sent this batch (L5). Optional so older clients and queued
+  // payloads still validate; an unreadable value is ignored, never a reason to refuse sales.
+  sentAt: z.string().datetime().optional().catch(undefined),
 });
 
 export type DeviceBindPayload = z.infer<typeof deviceBindSchema>;

@@ -14,6 +14,7 @@ import {
   serializeStaleness,
 } from "@/lib/reconciliation";
 import { z } from "zod";
+import { listNeedsReview } from "@/lib/time-review";
 
 const reconcileSchema = z.object({
   date: z.string().refine(isBusinessDate, "date must be a real calendar date (YYYY-MM-DD)"),
@@ -48,6 +49,8 @@ export async function GET(request: NextRequest) {
     // Live figures use the latest revision's petty cash: it is only recorded at reconciliation.
     const live = await computeExpected(day, saved?.pettyCashAmount ?? 0);
     const staleness = saved ? await computeStaleness(day, saved, live) : null;
+    // Flagged sales stated or received on this day, held out of the figures until reviewed.
+    const needsDateReview = await listNeedsReview(day);
 
     return NextResponse.json({
       success: true,
@@ -55,6 +58,7 @@ export async function GET(request: NextRequest) {
       expected: serializeExpected(live),
       saved: saved ? serializeSaved(saved) : null,
       staleness: staleness ? serializeStaleness(staleness) : null,
+      needsDateReview,
     });
   } catch (error) {
     return serverError("[GET /api/v1/reports/reconciliation]", error);
@@ -124,6 +128,7 @@ export async function POST(request: NextRequest) {
           expected: serializeExpected(live),
           saved: serializeSaved(record),
           staleness: serializeStaleness(staleness),
+          needsDateReview: await listNeedsReview(day),
         });
       } catch (error) {
         if (!isUniqueViolation(error)) throw error;

@@ -59,11 +59,30 @@ interface SavedRecord {
 
 interface Staleness {
   stale: boolean;
-  staleReasons: ("EXPECTED_CASH_CHANGED" | "LATE_SYNCED_TRANSACTIONS" | "LATE_GATEWAY_CONFIRMATIONS")[];
+  staleReasons: ("EXPECTED_CASH_CHANGED" | "LATE_SYNCED_TRANSACTIONS" | "LATE_GATEWAY_CONFIRMATIONS" | "TIME_REVIEWED")[];
   lateSyncedCount: number;
   lateConfirmedCount: number;
+  lateReviewedCount: number;
   expectedCashDelta: string;
 }
+
+// A sale whose phone timestamp is suspect (L5). It counts on no day until the owner picks one.
+interface NeedsReviewSale {
+  id: string;
+  barberName: string;
+  paymentMethod: string;
+  amount: string;
+  tipAmount: string;
+  flag: "FUTURE_TIMESTAMP" | "DEVICE_CLOCK_SKEW";
+  skewSeconds: number | null;
+  transactionTime: string;
+  receivedAt: string;
+  statedDate: string;
+  receivedDate: string;
+}
+
+const manilaTime = (iso: string) =>
+  new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 export default function ReconciliationPage() {
   const todayStr = manilaToday(); // business date, whatever the device's timezone
@@ -71,6 +90,8 @@ export default function ReconciliationPage() {
   const [expected, setExpected] = useState<ExpectedTotals | null>(null);
   const [saved, setSaved] = useState<SavedRecord | null>(null);
   const [staleness, setStaleness] = useState<Staleness | null>(null);
+  const [needsReview, setNeedsReview] = useState<NeedsReviewSale[]>([]);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [countedCash, setCountedCash] = useState("");
@@ -91,6 +112,7 @@ export default function ReconciliationPage() {
       setExpected(null);
       setSaved(null);
       setStaleness(null);
+      setNeedsReview([]);
       setFeedback(null);
       try {
         const res = await fetch(`/api/v1/reports/reconciliation?date=${date}`);
@@ -101,6 +123,7 @@ export default function ReconciliationPage() {
           setExpected(data.expected);
           setSaved(data.saved);
           setStaleness(data.staleness);
+          setNeedsReview(data.needsDateReview ?? []);
           if (data.saved) {
             setCountedCash(data.saved.countedCash);
             setNote(data.saved.note ?? "");
@@ -159,6 +182,35 @@ export default function ReconciliationPage() {
       setFeedback({ msg: "Save failed — check connection", ok: false });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Owner confirms a flagged sale's business day; the figures then reload.
+  const handleReview = async (id: string, choice: "STATED_DATE" | "RECEIVED_DATE") => {
+    setReviewingId(id);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/v1/reports/time-review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId: id, choice }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.status === 401) {
+        setShowOwnerUnlock(true);
+        setFeedback({ msg: "Owner PIN required to confirm a sale's date.", ok: false });
+        return;
+      }
+      if (!res.ok || !data?.success) {
+        setFeedback({ msg: data?.error ?? "Could not record the review", ok: false });
+        return;
+      }
+      setFeedback({ msg: `Sale counted on ${data.businessDate}.`, ok: true });
+      setRefreshKey((k) => k + 1);
+    } catch {
+      setFeedback({ msg: "Could not record the review — check connection", ok: false });
+    } finally {
+      setReviewingId(null);
     }
   };
 
@@ -289,6 +341,57 @@ export default function ReconciliationPage() {
           </section>
         )}
 
+        {/* Sales held for date review (L5) */}
+        {needsReview.length > 0 && (
+          <section className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/40 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-300 uppercase tracking-wider">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              {needsReview.length} {needsReview.length === 1 ? "sale needs" : "sales need"} a date
+            </div>
+            <p className="text-[11px] text-amber-200/80 leading-relaxed">
+              The phone&apos;s clock looked wrong when {needsReview.length === 1 ? "this sale" : "these sales"} synced, so{" "}
+              {needsReview.length === 1 ? "it is" : "they are"} not counted in any day&apos;s cash, revenue or payouts yet. Pick the day each
+              one belongs to.
+            </p>
+            {needsReview.map((sale) => (
+              <div key={sale.id} className="p-3 rounded-lg bg-[#12141a] border border-amber-500/20 text-xs space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-zinc-200">{sale.barberName} · {sale.paymentMethod}</span>
+                  <span className="font-bold text-zinc-100 font-[family-name:var(--font-oswald)]">₱{sale.amount}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-400">
+                  <div>Phone said: <span className="text-zinc-200">{manilaTime(sale.transactionTime)}</span></div>
+                  <div>Server got it: <span className="text-zinc-200">{manilaTime(sale.receivedAt)}</span></div>
+                </div>
+                <div className="text-[10px] text-amber-300/80">
+                  {sale.flag === "FUTURE_TIMESTAMP"
+                    ? "Stamped later than it reached the server."
+                    : `The phone's clock was off by about ${Math.round(Math.abs(sale.skewSeconds ?? 0) / 60)} minutes.`}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleReview(sale.id, "STATED_DATE")}
+                    disabled={reviewingId !== null || sale.statedDate > todayStr}
+                    className="flex-1 px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 font-semibold hover:bg-zinc-800 disabled:opacity-40 cursor-pointer"
+                    title={sale.statedDate > todayStr ? "That date has not happened yet" : undefined}
+                  >
+                    Keep {sale.statedDate}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleReview(sale.id, "RECEIVED_DATE")}
+                    disabled={reviewingId !== null}
+                    className="flex-1 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200 font-semibold hover:bg-amber-500/20 disabled:opacity-40 cursor-pointer"
+                  >
+                    Use {sale.receivedDate}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
         {/* Drawer count form */}
         <section className="space-y-3.5 p-4 rounded-xl bg-[#12141a] border border-[#232734] relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
@@ -409,6 +512,9 @@ export default function ReconciliationPage() {
                   )}
                   {staleness.staleReasons.includes("LATE_GATEWAY_CONFIRMATIONS") && (
                     <p>{staleness.lateConfirmedCount} QR Ph sale{staleness.lateConfirmedCount === 1 ? " was" : "s were"} confirmed paid after it was saved (revenue changed; the drawer did not).</p>
+                  )}
+                  {staleness.staleReasons.includes("TIME_REVIEWED") && (
+                    <p>{staleness.lateReviewedCount} sale{staleness.lateReviewedCount === 1 ? " was" : "s were"} confirmed onto this date after it was saved.</p>
                   )}
                   {staleness.staleReasons.includes("EXPECTED_CASH_CHANGED") && (
                     <p>Expected drawer cash is now ₱{expected?.expectedDrawerCash} ({parseFloat(staleness.expectedCashDelta) > 0 ? "+" : ""}₱{staleness.expectedCashDelta}).</p>

@@ -228,26 +228,30 @@ export default function ShiftLogPage() {
 
         <RejectedSales sales={rejectedSales ?? []} busy={isSyncing} onRetry={handleRetryRejected} />
 
-        {/* Today's Summary Cards */}
+        {/* Today's Summary Cards: this phone's own records, provisional */}
+        <p className="text-[11px] text-zinc-500">
+          Totals below are from this phone only and are provisional: they include sales not yet synced, and sales the
+          server holds for a date review. End-of-Day Cash has the shop&apos;s official figures.
+        </p>
         <section className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
             {
               label: "Cuts Today",
               value: todayTransactions.length,
               accent: "text-zinc-100",
-              sub: "this device",
+              sub: "this phone (provisional)",
             },
             {
               label: "Total Revenue",
               value: `₱${(cashTotal + gcashTotal + mayaTotal).toFixed(2)}`,
               accent: "text-red-400 font-bold",
-              sub: "all methods",
+              sub: "this phone (provisional)",
             },
             {
               label: "Cash",
               value: `₱${cashTotal.toFixed(2)}`,
               accent: "text-emerald-400",
-              sub: "in drawer",
+              sub: "this phone, cash",
             },
             {
               label: "GCash",

@@ -1,6 +1,7 @@
 import { Prisma, type PaymentStatus, type ShiftReconciliation } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { BusinessDay } from "@/lib/business-date";
+import { countsOnDay } from "@/lib/time-review";
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -30,13 +31,14 @@ export type GatewaySale = {
   late: boolean;
 };
 
-export type StaleReason = "EXPECTED_CASH_CHANGED" | "LATE_SYNCED_TRANSACTIONS" | "LATE_GATEWAY_CONFIRMATIONS";
+export type StaleReason = "EXPECTED_CASH_CHANGED" | "LATE_SYNCED_TRANSACTIONS" | "LATE_GATEWAY_CONFIRMATIONS" | "TIME_REVIEWED";
 
 export type Staleness = {
   stale: boolean;
   staleReasons: StaleReason[];
   lateSyncedCount: number; // sales in the window that reached the server after reconciledAt
   lateConfirmedCount: number; // QRPH sales in the window the gateway confirmed after reconciledAt
+  lateReviewedCount: number; // flagged sales the owner confirmed onto this day after reconciledAt
   expectedCashDelta: Prisma.Decimal; // live expected drawer cash minus the saved one
 };
 
@@ -46,11 +48,12 @@ const inWindow = (day: BusinessDay) => ({ transactionTime: { gte: day.start, lt:
 //   cash sales + cash-sale tips - cash payouts marked paid - petty cash
 // GCash, Maya and QR Ph sales are digital and never enter the drawer; unpaid payout rows and
 // gcashPaid never leave it. Revenue is amountPaid (totalAmount for legacy sales), tips excluded.
-// Only PAID sales count; non-gateway sales are always PAID.
+// Only PAID sales count; non-gateway sales are always PAID. Only sales that count on the day
+// (countsOnDay): a flagged sale waits for the owner's date review.
 export async function computeExpected(day: BusinessDay, pettyCash: Prisma.Decimal.Value): Promise<ExpectedTotals> {
   const [transactions, payouts] = await Promise.all([
     prisma.transaction.findMany({
-      where: inWindow(day),
+      where: countsOnDay(day),
       select: {
         id: true,
         totalAmount: true,
@@ -124,13 +127,18 @@ export async function computeStaleness(
   saved: Pick<ShiftReconciliation, "expectedCash" | "reconciledAt">,
   live: ExpectedTotals
 ): Promise<Staleness> {
-  const [lateSyncedCount, lateConfirmedCount] = await Promise.all([
+  const [lateSyncedCount, lateConfirmedCount, lateReviewedCount] = await Promise.all([
+    // Unflagged only: a flagged sale arriving late changes nothing until it is reviewed.
     prisma.transaction.count({
-      where: { ...inWindow(day), syncedAt: { gt: saved.reconciledAt } },
+      where: { ...inWindow(day), timeFlag: null, syncedAt: { gt: saved.reconciledAt } },
     }),
     // Revenue moved without a new sync: a pending QR Ph sale was confirmed after the save.
     prisma.gatewayPayment.count({
-      where: { paidAt: { gt: saved.reconciledAt }, transaction: inWindow(day) },
+      where: { paidAt: { gt: saved.reconciledAt }, transaction: countsOnDay(day) },
+    }),
+    // The owner confirmed a flagged sale onto this day after it was saved.
+    prisma.transaction.count({
+      where: { timeFlag: { not: null }, timeReviewedBusinessDate: day.dateValue, timeReviewedAt: { gt: saved.reconciledAt } },
     }),
   ]);
   const expectedCashDelta = live.expectedDrawerCash.sub(saved.expectedCash);
@@ -138,7 +146,8 @@ export async function computeStaleness(
   if (!expectedCashDelta.isZero()) staleReasons.push("EXPECTED_CASH_CHANGED");
   if (lateSyncedCount > 0) staleReasons.push("LATE_SYNCED_TRANSACTIONS");
   if (lateConfirmedCount > 0) staleReasons.push("LATE_GATEWAY_CONFIRMATIONS");
-  return { stale: staleReasons.length > 0, staleReasons, lateSyncedCount, lateConfirmedCount, expectedCashDelta };
+  if (lateReviewedCount > 0) staleReasons.push("TIME_REVIEWED");
+  return { stale: staleReasons.length > 0, staleReasons, lateSyncedCount, lateConfirmedCount, lateReviewedCount, expectedCashDelta };
 }
 
 export function latestRevision(day: BusinessDay) {

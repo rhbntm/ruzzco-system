@@ -6,3 +6,6 @@ ml-service/**/__pycache__/
 ml-service/.pytest_cache/
 
 /.env
+
+# Local database backups (contain client data); never committed
+/backups/
