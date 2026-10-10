@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { isUniqueViolation } from "@/lib/prisma-errors";
-import { applyGatewayStatus, createQrphCharge, gatewayConfig, retrieveIntentStatus } from "@/lib/gateway";
+import { applyGatewayStatus, ensureQrphCharge, gatewayConfig, paymongoClient, retrieveIntentStatus } from "@/lib/gateway";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +16,10 @@ export async function GET() {
 
 /**
  * POST { transactionId }: creates (or returns) the QR Ph charge for a synced QRPH sale.
- * Idempotent per sale: a second call returns the existing intent, never a new one. An
- * expired or failed charge is not retried (out of scope); the cashier rings a new sale.
+ * Idempotent per sale: a second call, even a concurrent one, returns the existing intent and
+ * never creates a second charge (ensureQrphCharge). This is also the "Retry QR payment" path
+ * for a sale that synced without a charge. An expired or failed charge is not retried (out of
+ * scope); the cashier rings a new sale.
  */
 export async function POST(request: NextRequest) {
   const config = gatewayConfig();
@@ -28,28 +29,11 @@ export async function POST(request: NextRequest) {
   const { transactionId } = parsed.data;
 
   try {
-    const sale = await prisma.transaction.findUnique({
-      where: { id: transactionId },
-      select: { paymentMethod: true, totalAmount: true, gatewayPayment: true },
-    });
-    if (!sale) return NextResponse.json({ success: false, error: "NOT_SYNCED" }, { status: 404 });
-    if (sale.paymentMethod !== "QRPH") return NextResponse.json({ success: false, error: "NOT_QRPH" }, { status: 409 });
-
-    if (sale.gatewayPayment) return NextResponse.json(await existingCharge(config, sale.gatewayPayment));
-
-    // Amount = the sale's totalAmount (amount paid, tip excluded).
-    const charge = await createQrphCharge(config, sale.totalAmount, transactionId);
-    try {
-      await prisma.gatewayPayment.create({
-        data: { transactionId, intentId: charge.intentId, amount: sale.totalAmount, provider: "PAYMONGO_TEST" },
-      });
-    } catch (error) {
-      // A concurrent call stored its intent first; that one is the sale's charge.
-      if (!isUniqueViolation(error)) throw error;
-      const winner = await prisma.gatewayPayment.findUniqueOrThrow({ where: { transactionId } });
-      return NextResponse.json(await existingCharge(config, winner));
-    }
-    return NextResponse.json({ success: true, status: "PENDING", intentId: charge.intentId, qr: charge.qr });
+    const result = await ensureQrphCharge(transactionId, paymongoClient(config));
+    if (result.kind === "not_synced") return NextResponse.json({ success: false, error: "NOT_SYNCED" }, { status: 404 });
+    if (result.kind === "not_qrph") return NextResponse.json({ success: false, error: "NOT_QRPH" }, { status: 409 });
+    if (result.kind === "existing") return NextResponse.json(await existingCharge(config, result.payment));
+    return NextResponse.json({ success: true, status: "PENDING", intentId: result.intentId, qr: result.qr });
   } catch (error) {
     console.error("[POST /api/v1/payments/qrph]", error instanceof Error ? error.message : error);
     return NextResponse.json({ success: false, error: "Gateway error. Use cash, GCash or Maya." }, { status: 502 });

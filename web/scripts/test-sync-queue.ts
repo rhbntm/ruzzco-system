@@ -36,7 +36,7 @@ Object.defineProperty(globalThis, "window", { configurable: true, value: globalT
 Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, get: () => true });
 
 // ── Fake server ──────────────────────────────────────────────────────────────
-type Behaviour = { fail?: (requestNo: number) => boolean; reject?: Set<string>; delayMs?: number; onRequest?: () => Promise<void> | void };
+type Behaviour = { fail?: (requestNo: number) => boolean; reject?: Set<string>; reason?: string; delayMs?: number; onRequest?: () => Promise<void> | void };
 let behaviour: Behaviour = {};
 let requests: string[][] = [];
 let inFlight = 0;
@@ -53,7 +53,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     await behaviour.onRequest?.();
     if (behaviour.delayMs) await new Promise((r) => setTimeout(r, behaviour.delayMs));
     if (behaviour.fail?.(requests.length)) return new Response("{}", { status: 500 });
-    const rejected = ids.filter((id) => behaviour.reject?.has(id)).map((id) => ({ id, reason: "INVALID" }));
+    const rejected = ids.filter((id) => behaviour.reject?.has(id)).map((id) => ({ id, reason: behaviour.reason ?? "INVALID" }));
     const syncedIds = ids.filter((id) => !behaviour.reject?.has(id));
     return Response.json({ success: true, processedCount: syncedIds.length, duplicatesSkipped: 0, syncedIds, rejected });
   } finally {
@@ -63,7 +63,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 
 async function main() {
   const { db } = await import("../src/lib/db");
-  const { syncNow, SYNC_CHUNK_SIZE } = await import("../src/lib/sync");
+  const { syncNow, retryRejected, SYNC_CHUNK_SIZE } = await import("../src/lib/sync");
   const { fetchWithTimeout } = await import("../src/lib/fetch-timeout");
   const { SYNC_BATCH_MAX } = await import("../src/lib/schemas");
 
@@ -148,6 +148,35 @@ async function main() {
   await Promise.all([first, second]);
   const late = await db.transactions.get(lateId);
   check("a sale saved mid-run is picked up by the rerun", late?.synced === 1 && requests.length === 2, `requests ${requests.length}`);
+
+  console.log("\nRetry of a QRPH sale refused while QR Ph was off");
+  await reset();
+  const qr = { ...sale(), paymentMethod: "QRPH" as const, totalAmount: 250, amountPaid: 250, listPrice: 250 };
+  const cash = sale();
+  await db.transactions.bulkAdd([qr, cash]);
+  behaviour.reject = new Set([qr.id]);
+  behaviour.reason = "GATEWAY_DISABLED";
+  await syncNow();
+  const refused = await db.transactions.get(qr.id);
+  check("the QRPH sale is kept, unsynced, with GATEWAY_DISABLED", refused?.synced === 0 && refused.syncError === "GATEWAY_DISABLED");
+  check("the cash sale in the same batch still synced", (await db.transactions.get(cash.id))?.synced === 1);
+  check("the refused sale is not retried automatically", (await syncNow()).status === "empty");
+
+  let retried = await retryRejected(qr.id);
+  check("retry while still off: refused again, no QR payment offered", !retried.qrCharge && (await db.transactions.get(qr.id))?.syncError === "GATEWAY_DISABLED");
+
+  behaviour.reject = new Set(); // QR Ph switched back on
+  retried = await retryRejected(qr.id);
+  check("retry after re-enabling: the sale syncs", (await db.transactions.get(qr.id))?.synced === 1);
+  check("and the QR payment is offered for that sale and amount", retried.qrCharge?.id === qr.id && retried.qrCharge?.amount === 250, JSON.stringify(retried.qrCharge));
+  const stored = await db.transactions.get(qr.id);
+  check("nothing about the sale was rewritten", stored?.totalAmount === 250 && stored.paymentMethod === "QRPH" && stored.assignmentId === qr.assignmentId);
+
+  await reset();
+  const cashRejected = { ...sale(), syncError: "INVALID" };
+  await db.transactions.add(cashRejected);
+  retried = await retryRejected(cashRejected.id);
+  check("retrying a non-QRPH sale never offers a QR payment", !retried.qrCharge && (await db.transactions.get(cashRejected.id))?.synced === 1);
 
   console.log("\nTimeouts");
   const hanging = ((_input: RequestInfo | URL, init?: RequestInit) =>

@@ -11,7 +11,8 @@ export const deviceBindSchema = z.object({
 const MONEY_MAX = 99_999_999.99;
 
 /** Why the server did not record a sale. Sent per item; the sale stays queued on the phone. */
-export type SyncRejectReason = "INVALID" | "UNKNOWN_BARBER" | "DEVICE_MISMATCH" | "ASSIGNMENT_UNAVAILABLE";
+// GATEWAY_DISABLED: a QRPH sale while QR Ph is off or misconfigured on the server.
+export type SyncRejectReason = "INVALID" | "UNKNOWN_BARBER" | "DEVICE_MISMATCH" | "ASSIGNMENT_UNAVAILABLE" | "GATEWAY_DISABLED";
 
 export const syncTransactionItemSchema = z.object({
   id: z.string().uuid("Invalid transaction UUID"),

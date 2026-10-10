@@ -10,9 +10,13 @@
  *   npm run dev                  (in another terminal)
  *   npm run test:gateway         (TEST_BASE_URL overrides http://localhost:3000)
  *
+ * G8 runs the real src/lib/sync.ts (retryRejected) on fake-indexeddb against the same server.
+ * The QR charge itself (one per sale) is covered by test:qrph-charge, without PayMongo.
+ *
  * Secrets are read, never printed. Uses a throwaway barber and a fixed past business date
  * (2000-01-20); everything it creates is deleted at the end.
  */
+import "fake-indexeddb/auto";
 import { createHmac, randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
@@ -208,6 +212,45 @@ async function main() {
   const other = event("refund.succeeded", `pi_test_${RUN}_d`);
   wh = await deliver(other.body, sign(other.body));
   check("unhandled event type → 200 ignored", wh.status === 200 && wh.body?.ignored === true);
+
+  console.log("\nG8 a QRPH sale refused while QR Ph was off: Retry after it is back on");
+  // The phone as it was left: the sale saved, refused with GATEWAY_DISABLED, not on the server.
+  const store = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+    },
+  });
+  Object.defineProperty(globalThis, "window", { configurable: true, value: globalThis });
+  Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, get: () => true });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
+    realFetch(typeof input === "string" && input.startsWith("/") ? `${BASE}${input}` : input, init)) as typeof fetch;
+  const { db } = await import("../src/lib/db");
+  const phone = await import("../src/lib/sync");
+  const refusedSale = sale("12:00", "QRPH", 180);
+  await db.transactions.add({
+    ...refusedSale,
+    barberName: "Test Barber",
+    serviceName: "Haircut",
+    price: 180,
+    paymentMethod: "QRPH",
+    synced: 0,
+    syncError: "GATEWAY_DISABLED",
+  });
+  check("before Retry the server does not have it", !(await stored(refusedSale.id)));
+  const retried = await phone.retryRejected(refusedSale.id);
+  const onPhone = await db.transactions.get(refusedSale.id);
+  const onServer = await stored(refusedSale.id);
+  check("Retry with QR Ph on: the sale syncs", onPhone?.synced === 1 && onPhone.syncError === undefined);
+  check("stored PENDING, with no charge yet", onServer?.paymentStatus === "PENDING" && !onServer.gatewayPayment);
+  check("the QR payment is offered for that sale and amount", retried.qrCharge?.id === refusedSale.id && retried.qrCharge?.amount === 180, JSON.stringify(retried.qrCharge));
+  check("still counts nowhere until paid", (await reconciliation()).gatewaySales.some((g) => g.id === refusedSale.id && g.status === "PENDING"));
+  globalThis.fetch = realFetch;
+  db.close();
 }
 
 async function cleanup() {

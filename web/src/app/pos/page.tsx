@@ -41,7 +41,6 @@ import {
   DEFAULT_SERVICES,
 } from "@/lib/db";
 import {
-  clearRejection,
   countPending,
   createLocalAssignment,
   ensureAssignmentId,
@@ -49,11 +48,13 @@ import {
   listRejected,
   readPendingBind,
   registerPendingAssignment,
+  retryRejected,
   summarizeSync,
   syncNow,
   verifyCurrentAssignment,
 } from "@/lib/sync";
 import { REQUEST_TIMEOUT_MS, fetchWithTimeout } from "@/lib/fetch-timeout";
+import { checkQrphAvailable } from "@/lib/qrph-client";
 import { refreshPaymentQrs } from "@/lib/payment-qr-cache";
 import { qrCacheId } from "@/lib/payment-qr-plan";
 import { RejectedSales } from "@/components/RejectedSales";
@@ -221,11 +222,25 @@ export default function MobilePOSPage() {
     }
   }, [requireRebind]);
 
-  // Explicit retry of a rejected sale: re-queue it unchanged, then run the normal sync.
+  // Explicit retry of a rejected sale: re-queue it unchanged, then run the normal sync. A QRPH
+  // sale that now reached the server goes straight to its QR payment (one charge per sale).
   const handleRetryRejected = useCallback(async (id: string) => {
-    await clearRejection(id);
-    await triggerSync();
-  }, [triggerSync]);
+    if (typeof window === "undefined" || !navigator.onLine) return;
+    setIsSyncing(true);
+    try {
+      const { outcome, qrCharge } = await retryRejected(id);
+      if (outcome.bind.bindingCleared) requireRebind();
+      setSyncFeedback(outcome.status === "failed" ? "Sync failed. Queued locally." : summarizeSync(outcome));
+      setTimeout(() => setSyncFeedback(null), 3000);
+      if (qrCharge) setQrSale(qrCharge);
+    } catch (err) {
+      console.error("Retry error:", err);
+      setSyncFeedback("Sync failed. Queued locally.");
+      setTimeout(() => setSyncFeedback(null), 3000);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [requireRebind]);
 
   // Full lifecycle for load and reconnect: register, sync, then recheck the binding.
   const reconcileWithServer = useCallback(async () => {
@@ -456,7 +471,14 @@ export default function MobilePOSPage() {
   };
 
   // The sale is written to Dexie first like any other; the QR checkout then syncs and charges it.
+  // First re-ask the server: the button may be stale if QR Ph was switched off since it loaded.
   const handleQrphCheckout = async () => {
+    if (!(await checkQrphAvailable())) {
+      setGatewayEnabled(false);
+      setLastActionToast({ message: "QR Ph is switched off. Use cash, GCash or Maya.", type: "info" });
+      setTimeout(() => setLastActionToast(null), 3000);
+      return;
+    }
     const { outcome, sale } = await recordTransaction("QRPH");
     if (outcome === "saved" && sale) setQrSale(sale);
   };

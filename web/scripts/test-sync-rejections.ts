@@ -226,6 +226,22 @@ async function main() {
   for (const log of orphaned) if ((await prisma.transaction.count({ where: { id: log.transactionId } })) === 0) orphanIds.push(log.transactionId);
   check("T12: no mismatch log in this run points at a missing transaction", orphanIds.length === 0, orphanIds.join(","));
 
+  // ── QR Ph switched off: QRPH sales are refused, the rest of the batch is not ──
+  console.log("\nQRPH with the gateway off");
+  const qrphOn = (await fetch(`${BASE}/api/v1/payments/qrph`, { cache: "no-store" })).ok;
+  if (qrphOn) {
+    console.log("  - skipped: this server has QR Ph on (restart it with PAYMENT_GATEWAY=off to run these; test:gateway covers it on)");
+  } else {
+    const qrphId = track(randomUUID());
+    const cashId = track(randomUUID());
+    const at = new Date().toISOString();
+    const base = { barberId: BARBERS.A.id, serviceId: SERVICE_ID, totalAmount: 200, transactionTime: at };
+    const off = await sync([{ ...base, id: qrphId, paymentMethod: "QRPH" }, { ...base, id: cashId, paymentMethod: "CASH" }]);
+    check("the QRPH sale is refused with GATEWAY_DISABLED", off.body.rejected.some((r) => r.id === qrphId && r.reason === "GATEWAY_DISABLED"), JSON.stringify(off.body.rejected));
+    check("the QRPH sale is not stored", !(await prisma.transaction.findUnique({ where: { id: qrphId } })));
+    check("the cash sale in the same batch is stored", off.body.syncedIds.includes(cashId) && Boolean(await prisma.transaction.findUnique({ where: { id: cashId } })));
+  }
+
   // ── Client (real lib/sync.ts + real Dexie schema on fake-indexeddb) ───────
   console.log("\nClient: real syncNow() against the real route");
   const store = new Map<string, string>();

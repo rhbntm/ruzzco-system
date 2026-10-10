@@ -2,7 +2,7 @@
 
 import { RotateCw, TriangleAlert } from "lucide-react";
 import type { LocalTransaction } from "@/lib/db";
-import { needsReview, rejectLabel } from "@/lib/sync";
+import { rejectHint, rejectLabel } from "@/lib/sync";
 
 const METHOD_LABELS: Record<LocalTransaction["paymentMethod"], string> = {
   CASH: "Cash",
@@ -57,8 +57,8 @@ export function RejectedSales({
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="text-amber-300 font-medium">{rejectLabel(tx.syncError)}</div>
-                {needsReview(tx.syncError) && (
-                  <div className="text-[10px] text-amber-200/70">Needs review. Retrying will not fix this by itself.</div>
+                {rejectHint(tx.syncError) && (
+                  <div className="text-[10px] text-amber-200/70">{rejectHint(tx.syncError)}</div>
                 )}
                 <div className="text-[10px] text-zinc-600 font-mono">{tx.id.slice(0, 8)}…</div>
               </div>

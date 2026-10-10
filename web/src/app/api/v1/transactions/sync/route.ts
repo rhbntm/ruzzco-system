@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { commissionFor } from "@/lib/commission";
 import { readJson, serverError } from "@/lib/api";
 import { isUniqueViolation } from "@/lib/prisma-errors";
+import { gatewayStatus } from "@/lib/gateway";
 import {
   syncBatchSchema,
   syncTransactionItemSchema,
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
     }
 
     const entries = parseResult.data.transactions.map(toEntry);
+    // Read once per request. A QRPH sale is only stored when the gateway can charge it;
+    // otherwise it would sit PENDING forever with no way to pay.
+    const qrphAvailable = gatewayStatus().state === "on";
 
     let processedCount = 0;
     let duplicatesSkipped = 0;
@@ -138,6 +142,13 @@ export async function POST(request: NextRequest) {
 
       if (!item) {
         reject(entryId, "INVALID");
+        continue;
+      }
+
+      // Gateway off or misconfigured: refuse the QRPH sale. The phone keeps it as "needs
+      // attention"; Retry once QR Ph is back on records it and opens the QR payment.
+      if (item.paymentMethod === "QRPH" && !qrphAvailable) {
+        reject(item.id, "GATEWAY_DISABLED");
         continue;
       }
 

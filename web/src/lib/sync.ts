@@ -140,6 +140,7 @@ const REJECT_LABELS: Record<string, string> = {
   UNKNOWN_BARBER: "Unknown barber",
   DEVICE_MISMATCH: "Device/assignment mismatch",
   ASSIGNMENT_UNAVAILABLE: "Barber assignment not found",
+  GATEWAY_DISABLED: "QR Ph is switched off on the server",
 };
 
 /** Understandable text for a stored rejection reason (unknown reasons are shown as-is). */
@@ -150,6 +151,13 @@ export function rejectLabel(reason: string | undefined): string {
 /** A mismatch can't be fixed by retrying: the assignment doesn't belong to this device. */
 export function needsReview(reason: string | undefined): boolean {
   return reason === "DEVICE_MISMATCH";
+}
+
+/** Extra guidance under a rejection, or null. */
+export function rejectHint(reason: string | undefined): string | null {
+  if (reason === "DEVICE_MISMATCH") return "Needs review. Retrying will not fix this by itself.";
+  if (reason === "GATEWAY_DISABLED") return "Retry when QR Ph is back on; the QR payment opens after it syncs.";
+  return null;
 }
 
 /** Unsynced sale the server refused: kept, not auto-retried, shown to the user. */
@@ -178,6 +186,27 @@ export async function clearRejection(id: string): Promise<boolean> {
     if (t.synced === 0) delete t.syncError;
   });
   return changed > 0;
+}
+
+export type RetryResult = {
+  outcome: SyncOutcome;
+  /** Set when the retried sale is a QRPH sale that is now on the server: take its QR payment. */
+  qrCharge?: { id: string; amount: number };
+};
+
+/**
+ * Explicit Retry of a rejected sale: re-queue it unchanged (clearRejection), run the normal
+ * sync, and report whether a QRPH sale now needs its QR payment. The server creates at most
+ * one charge per sale, so opening the payment again is always safe.
+ */
+export async function retryRejected(id: string): Promise<RetryResult> {
+  await clearRejection(id);
+  const outcome = await syncNow();
+  const sale = await db.transactions.get(id);
+  if (sale?.paymentMethod === "QRPH" && sale.synced === 1) {
+    return { outcome, qrCharge: { id: sale.id, amount: Number(sale.totalAmount) } };
+  }
+  return { outcome };
 }
 
 /** One line for the sync toast; mentions sales that need attention. */

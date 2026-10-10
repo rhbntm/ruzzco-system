@@ -16,10 +16,11 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { db, type LocalTransaction } from "@/lib/db";
-import { clearRejection, countPending, isRejected, listRejected, summarizeSync, syncNow } from "@/lib/sync";
+import { countPending, isRejected, listRejected, retryRejected, summarizeSync, syncNow } from "@/lib/sync";
 import { useLiveQuery } from "dexie-react-hooks";
 import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { RejectedSales } from "@/components/RejectedSales";
+import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
 
 function subscribeOnline(callback: () => void) {
@@ -43,6 +44,8 @@ export default function ShiftLogPage() {
   const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, () => true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  // QR payment for a synced QRPH sale (after a Retry, or the row's "QR payment" button).
+  const [qrSale, setQrSale] = useState<{ id: string; amount: number } | null>(null);
 
   const localTransactions = useLiveQuery(
     async () => {
@@ -106,11 +109,32 @@ export default function ShiftLogPage() {
     }
   }, []);
 
-  // Explicit retry of a rejected sale: re-queue it unchanged, then run the normal sync.
+  // Explicit retry of a rejected sale: re-queue it unchanged, then run the normal sync. A QRPH
+  // sale that now reached the server goes straight to its QR payment (one charge per sale).
   const handleRetryRejected = useCallback(async (id: string) => {
-    await clearRejection(id);
-    await handleSync();
-  }, [handleSync]);
+    if (!navigator.onLine) return;
+    setIsSyncing(true);
+    try {
+      const { outcome, qrCharge } = await retryRejected(id);
+      setSyncFeedback(outcome.status === "failed" ? "Sync failed — queued locally" : summarizeSync(outcome));
+      setTimeout(() => setSyncFeedback(null), 3000);
+      if (qrCharge) setQrSale(qrCharge);
+    } catch (err) {
+      console.error("Retry error:", err);
+      setSyncFeedback("Sync failed — queued locally");
+      setTimeout(() => setSyncFeedback(null), 3000);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  // The QR checkout only charges a sale that is on the server; it is already synced here.
+  const qrSaleId = qrSale?.id;
+  const ensureQrSaleSynced = useCallback(async () => {
+    if (!qrSaleId || !navigator.onLine) return false;
+    await syncNow();
+    return (await db.transactions.get(qrSaleId))?.synced === 1;
+  }, [qrSaleId]);
 
   // Auto-sync on reconnect
   useEffect(() => {
@@ -129,6 +153,15 @@ export default function ShiftLogPage() {
 
   return (
     <div className="min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white">
+      {qrSale && (
+        <QrPhCheckout
+          transactionId={qrSale.id}
+          amount={qrSale.amount}
+          ensureSynced={ensureQrSaleSynced}
+          onClose={() => setQrSale(null)}
+        />
+      )}
+
       {/* Ambient Crimson Glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-48 bg-red-600/10 blur-3xl pointer-events-none" />
 
@@ -291,10 +324,25 @@ export default function ShiftLogPage() {
                         GCash
                       </span>
                     ) : tx.paymentMethod === "QRPH" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-semibold" title="Paid status is on the server">
-                        <QrCode className="w-2.5 h-2.5" />
-                        QR Ph (test)
-                      </span>
+                      tx.synced === 1 ? (
+                        // "Retry QR payment": opens the sale's QR (or shows its status). The server
+                        // returns the existing charge, so this never charges a sale twice.
+                        <button
+                          type="button"
+                          onClick={() => setQrSale({ id: tx.id, amount: Number(tx.totalAmount) })}
+                          disabled={!isOnline}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-300 text-[10px] font-semibold hover:bg-violet-500/20 disabled:opacity-40 cursor-pointer"
+                          title="Show this sale's QR payment and its status"
+                        >
+                          <QrCode className="w-2.5 h-2.5" />
+                          QR payment
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-semibold" title="Paid status is on the server">
+                          <QrCode className="w-2.5 h-2.5" />
+                          QR Ph (test)
+                        </span>
+                      )
                     ) : tx.paymentMethod === "MAYA" ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
                         <Smartphone className="w-2.5 h-2.5" />

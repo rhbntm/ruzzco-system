@@ -20,6 +20,8 @@
     "test:pin-attempts": "tsx scripts/test-pin-attempts.ts",
     "test:pricing": "tsx scripts/test-pricing.ts",
     "test:qr-cache": "tsx scripts/test-qr-cache.ts",
+    "test:qrph-charge": "tsx scripts/test-qrph-charge.ts",
+    "test:qrph-policy": "tsx scripts/test-qrph-policy.ts",
     "test:reconciliation": "tsx scripts/test-reconciliation.ts",
     "test:submit-lock": "tsx scripts/test-submit-lock.ts",
     "test:sync-queue": "tsx scripts/test-sync-queue.ts",

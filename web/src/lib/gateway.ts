@@ -2,6 +2,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Prisma, type PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isUniqueViolation } from "@/lib/prisma-errors";
+import { readGatewayStatus, type GatewayConfig, type GatewayStatus } from "@/lib/gateway-config";
+
+export type { GatewayConfig, GatewayStatus } from "@/lib/gateway-config";
 
 /**
  * PayMongo QR Ph, test mode only (slice 5). Server-side only: the secret key never
@@ -15,23 +18,32 @@ const API = "https://api.paymongo.com/v1";
 // A PayMongo call that takes longer fails like any gateway error (the routes answer 502).
 const PAYMONGO_TIMEOUT_MS = 15_000;
 
-export type GatewayConfig = { secretKey: string; webhookSecret: string };
+const warned = new Set<string>();
+function warnOnce(message: string) {
+  if (warned.has(message)) return;
+  warned.add(message);
+  console.warn(`[gateway] ${message}`);
+}
 
-let warned = false;
+/**
+ * off, misconfigured or on (see src/lib/gateway-config.ts). Misconfiguration is warned about
+ * once and treated as off. Never logs key values.
+ */
+export function gatewayStatus(): GatewayStatus {
+  const status = readGatewayStatus({
+    PAYMENT_GATEWAY: process.env.PAYMENT_GATEWAY,
+    PAYMONGO_SECRET_KEY: process.env.PAYMONGO_SECRET_KEY,
+    PAYMONGO_WEBHOOK_SECRET: process.env.PAYMONGO_WEBHOOK_SECRET,
+  });
+  if (status.state === "misconfigured") warnOnce(`${status.problem} Gateway disabled.`);
+  if (status.state === "on" && status.warning) warnOnce(status.warning);
+  return status;
+}
 
-/** Null when the gateway is off or misconfigured. Never logs key values. */
+/** The config when the gateway is on; null when it is off or misconfigured. */
 export function gatewayConfig(): GatewayConfig | null {
-  if (process.env.PAYMENT_GATEWAY !== "paymongo_test") return null;
-  const secretKey = process.env.PAYMONGO_SECRET_KEY ?? "";
-  const webhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET ?? "";
-  if (!secretKey.startsWith("sk_test_")) {
-    if (!warned) {
-      console.warn("[gateway] PAYMENT_GATEWAY=paymongo_test but PAYMONGO_SECRET_KEY is not a test key (sk_test_...). Gateway disabled.");
-      warned = true;
-    }
-    return null;
-  }
-  return { secretKey, webhookSecret };
+  const status = gatewayStatus();
+  return status.state === "on" ? status.config : null;
 }
 
 // ── Webhook signature ────────────────────────────────────────────────────────
@@ -139,6 +151,56 @@ export async function retrieveIntentStatus(config: GatewayConfig, intentId: stri
     status = "EXPIRED";
   }
   return { status, paidAt, qr };
+}
+
+// ── One charge per sale ──────────────────────────────────────────────────────
+
+/** The PayMongo calls ensureQrphCharge needs. Tests pass a fake; routes pass paymongoClient(). */
+export type QrphClient = {
+  createCharge: (amount: Prisma.Decimal, transactionId: string) => Promise<{ intentId: string; qr: QrCode | null }>;
+};
+
+export function paymongoClient(config: GatewayConfig): QrphClient {
+  return { createCharge: (amount, transactionId) => createQrphCharge(config, amount, transactionId) };
+}
+
+export type ChargeResult =
+  | { kind: "not_synced" }
+  | { kind: "not_qrph" }
+  | { kind: "created"; intentId: string; qr: QrCode | null }
+  | { kind: "existing"; payment: { intentId: string; status: PaymentStatus } };
+
+// Long enough for the three PayMongo calls in createQrphCharge (15 s each at most).
+const CHARGE_TRANSACTION_TIMEOUT_MS = 50_000;
+
+/**
+ * Creates the sale's QR Ph charge, or returns the one it already has. Exactly one PayMongo
+ * charge per sale: the sale's row is locked (SELECT ... FOR UPDATE) while the charge is
+ * created and stored, so a second request for the same sale (a double tap, a retry, the
+ * shift log and the POS at once) waits, then finds the stored charge instead of making
+ * another. An existing charge is returned as is; the caller refreshes its status.
+ */
+export async function ensureQrphCharge(transactionId: string, client: QrphClient): Promise<ChargeResult> {
+  return prisma.$transaction(
+    async (tx) => {
+      const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM transactions WHERE id = ${transactionId} FOR UPDATE`;
+      if (locked.length === 0) return { kind: "not_synced" } as const;
+      const sale = await tx.transaction.findUniqueOrThrow({
+        where: { id: transactionId },
+        select: { paymentMethod: true, totalAmount: true, gatewayPayment: { select: { intentId: true, status: true } } },
+      });
+      if (sale.paymentMethod !== "QRPH") return { kind: "not_qrph" } as const;
+      if (sale.gatewayPayment) return { kind: "existing", payment: sale.gatewayPayment } as const;
+
+      // Amount = the sale's totalAmount (amount paid, tip excluded).
+      const charge = await client.createCharge(sale.totalAmount, transactionId);
+      await tx.gatewayPayment.create({
+        data: { transactionId, intentId: charge.intentId, amount: sale.totalAmount, provider: "PAYMONGO_TEST" },
+      });
+      return { kind: "created", intentId: charge.intentId, qr: charge.qr } as const;
+    },
+    { timeout: CHARGE_TRANSACTION_TIMEOUT_MS, maxWait: CHARGE_TRANSACTION_TIMEOUT_MS }
+  );
 }
 
 // ── Status transitions ───────────────────────────────────────────────────────
