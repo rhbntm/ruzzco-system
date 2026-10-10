@@ -1,4 +1,5 @@
 import { db, generateUUID, getOrCreateDeviceKey, type LocalDeviceBinding, type LocalTransaction } from "@/lib/db";
+import { REQUEST_TIMEOUT_MS, fetchWithTimeout } from "@/lib/fetch-timeout";
 
 /**
  * Shared POS sync lifecycle, used by /pos and /shift-log.
@@ -20,7 +21,14 @@ import { db, generateUUID, getOrCreateDeviceKey, type LocalDeviceBinding, type L
  * synced; sales in `rejected` stay in Dexie unchanged, get `syncError`, and are excluded from
  * automatic sync until the user retries them (clearRejection). A rejected sale never blocks
  * the others, and nothing about it (barber, assignment, amount, id) is ever rewritten.
+ *
+ * One run at a time: syncNow() calls never overlap. A call made while a run is in progress
+ * waits for it and then runs once more (calls that pile up share that one extra run), so a
+ * sale saved or retried mid-run is still picked up. Queued sales go SYNC_CHUNK_SIZE per request.
  */
+
+/** Sales per sync request. The server accepts up to SYNC_BATCH_MAX (src/lib/schemas.ts). */
+export const SYNC_CHUNK_SIZE = 50;
 
 const PENDING_KEY = "ruzzco_pending_bind";
 
@@ -104,11 +112,11 @@ export async function registerPendingAssignment(): Promise<RegisterResult> {
   const pending = readPendingBind();
   if (!pending) return { status: "none", bindingCleared: false };
   try {
-    const res = await fetch("/api/v1/devices/bind", {
+    const res = await fetchWithTimeout("/api/v1/devices/bind", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(pending),
-    });
+    }, REQUEST_TIMEOUT_MS.bind);
     if (res.ok) {
       clearPendingBindIfSame(pending);
       return { status: "registered", bindingCleared: false };
@@ -198,8 +206,29 @@ export type SyncOutcome = {
   bind: RegisterResult;
 };
 
-/** Steps A then B. */
-export async function syncNow(): Promise<SyncOutcome> {
+let running: Promise<SyncOutcome> | null = null;
+let rerun: Promise<SyncOutcome> | null = null;
+
+/** Steps A then B, one run at a time (see the header). */
+export function syncNow(): Promise<SyncOutcome> {
+  if (!running) {
+    running = runSync().finally(() => {
+      running = null;
+    });
+    return running;
+  }
+  if (!rerun) {
+    rerun = running
+      .catch(() => undefined)
+      .then(() => {
+        rerun = null;
+        return syncNow();
+      });
+  }
+  return rerun;
+}
+
+async function runSync(): Promise<SyncOutcome> {
   const outcome: SyncOutcome = {
     status: "offline",
     processed: 0,
@@ -228,8 +257,22 @@ export async function syncNow(): Promise<SyncOutcome> {
   }
 
   const currentDeviceKey = getOrCreateDeviceKey();
+  for (let start = 0; start < toSend.length; start += SYNC_CHUNK_SIZE) {
+    const sent = await sendChunk(toSend.slice(start, start + SYNC_CHUNK_SIZE), currentDeviceKey, outcome);
+    if (!sent) {
+      // Earlier chunks are already marked; the rest stay queued for the next run.
+      outcome.status = "failed";
+      return outcome;
+    }
+  }
+  outcome.status = "synced";
+  return outcome;
+}
+
+/** Sends one chunk and applies the per-sale results to Dexie. False when the request failed. */
+async function sendChunk(chunk: LocalTransaction[], currentDeviceKey: string, outcome: SyncOutcome): Promise<boolean> {
   const payload = {
-    transactions: toSend.map((t) => ({
+    transactions: chunk.map((t) => ({
       id: t.id,
       barberId: t.barberId,
       serviceId: t.serviceId,
@@ -251,11 +294,11 @@ export async function syncNow(): Promise<SyncOutcome> {
   };
 
   try {
-    const response = await fetch("/api/v1/transactions/sync", {
+    const response = await fetchWithTimeout("/api/v1/transactions/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-    });
+    }, REQUEST_TIMEOUT_MS.sync);
     if (!response.ok) throw new Error(`Sync failed: HTTP ${response.status}`);
     const result = await response.json();
     if (result.success && Array.isArray(result.syncedIds)) {
@@ -277,19 +320,17 @@ export async function syncNow(): Promise<SyncOutcome> {
           });
         }
       });
-      outcome.status = "synced";
-      outcome.processed = result.processedCount ?? 0;
-      outcome.duplicates = result.duplicatesSkipped ?? 0;
-      outcome.rejected = rejections.length;
+      outcome.processed += result.processedCount ?? 0;
+      outcome.duplicates += result.duplicatesSkipped ?? 0;
+      outcome.rejected += rejections.length;
       outcome.attention += rejections.length;
-    } else {
-      outcome.status = "failed";
+      return true;
     }
+    return false;
   } catch (err) {
     console.error("Sync error:", err);
-    outcome.status = "failed";
+    return false;
   }
-  return outcome;
 }
 
 /**
@@ -304,7 +345,11 @@ export async function verifyCurrentAssignment(): Promise<boolean> {
   // Still waiting for /bind: the server cannot know it yet.
   if (readPendingBind()?.assignmentId && readPendingBind()?.assignmentId === local.assignmentId) return false;
   try {
-    const res = await fetch(`/api/v1/devices/binding?deviceKey=${encodeURIComponent(deviceKey)}`);
+    const res = await fetchWithTimeout(
+      `/api/v1/devices/binding?deviceKey=${encodeURIComponent(deviceKey)}`,
+      {},
+      REQUEST_TIMEOUT_MS.bindingCheck
+    );
     if (!res.ok) return false;
     const data = await res.json();
     const stale = !data.bound || (local.assignmentId !== undefined && data.assignment?.id !== local.assignmentId);

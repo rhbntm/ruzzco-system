@@ -9,11 +9,16 @@ services:
       MYSQL_USER: ${MYSQL_USER:?set MYSQL_USER in .env (see .env.example)}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env (see .env.example)}
     ports:
-      - "3307:3306"
+      # Localhost only: Next.js runs on this PC, phones only need port 3000.
+      - "127.0.0.1:3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -21,8 +26,10 @@ services:
   ml-service:
     build: ./ml-service
     container_name: ruzzco-ml
+
     ports:
-      - "8001:8000"
+      # Localhost only: /forecast has no PIN; the owner sees it through Next.js.
+      - "127.0.0.1:8001:8000"
     volumes:
       - ./ml-service:/app
 

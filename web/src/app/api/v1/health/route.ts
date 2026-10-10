@@ -34,7 +34,8 @@ export async function GET() {
           api: "online",
           database: "disconnected",
         },
-        error: error instanceof Error ? error.message : "Unknown database error",
+        // Details stay in the server log; the response only says the database is down.
+        error: "Database unreachable",
       },
       { status: 503 }
     );

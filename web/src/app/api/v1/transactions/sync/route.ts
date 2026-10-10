@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { commissionFor } from "@/lib/commission";
+import { readJson, serverError } from "@/lib/api";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 import {
   syncBatchSchema,
   syncTransactionItemSchema,
@@ -10,10 +12,6 @@ import {
 } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
-
-function isUniqueViolation(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-}
 
 // Errors caused by the sale's own data (unknown service, value too long, value out of
 // range). They fail the same way on every retry, so they reject that sale only.
@@ -38,8 +36,10 @@ function toEntry(raw: unknown): Entry {
 
 export async function POST(request: NextRequest) {
   try {
-    const rawBody = await request.json();
-    const parseResult = syncBatchSchema.safeParse(rawBody);
+    // A body that is not JSON is a bad outer shape too: 400, like a failed schema check.
+    const body = await readJson(request, "Invalid sync payload format");
+    if (!body.ok) return body.response;
+    const parseResult = syncBatchSchema.safeParse(body.data);
 
     if (!parseResult.success) {
       return NextResponse.json(
@@ -276,13 +276,6 @@ export async function POST(request: NextRequest) {
       serverTime: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Batch sync error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Internal batch sync error",
-      },
-      { status: 500 }
-    );
+    return serverError("Batch sync error:", error, "Internal batch sync error");
   }
 }

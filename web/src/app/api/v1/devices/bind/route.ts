@@ -2,20 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deviceBindSchema } from "@/lib/schemas";
+import { readJson, serverError } from "@/lib/api";
+import { isUniqueViolation, isWriteConflict } from "@/lib/prisma-errors";
 
 type AssignmentRow = { id: string; deviceKey: string; barberId: string; assignedAt: Date; revokedAt: Date | null };
 type BarberRow = { id: string; fullName: string; commissionRate: Prisma.Decimal; isActive: boolean };
 
 const assignmentSelect = { id: true, deviceKey: true, barberId: true, assignedAt: true, revokedAt: true } as const;
 const barberSelect = { id: true, fullName: true, commissionRate: true, isActive: true } as const;
-
-function isUniqueViolation(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-}
-
-function isWriteConflict(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034";
-}
 
 function success(assignment: AssignmentRow, barber: BarberRow) {
   return NextResponse.json({
@@ -65,8 +59,9 @@ function respondToExisting(existing: AssignmentRow, deviceKey: string, barber: B
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const parsed = deviceBindSchema.safeParse(body);
+    const body = await readJson(request, "Invalid request");
+    if (!body.ok) return body.response;
+    const parsed = deviceBindSchema.safeParse(body.data);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -140,10 +135,6 @@ export async function POST(request: NextRequest) {
       }
     }
   } catch (error) {
-    console.error("[POST /api/v1/devices/bind]", error);
-    return NextResponse.json(
-      { success: false, error: "Internal server error" },
-      { status: 500 }
-    );
+    return serverError("[POST /api/v1/devices/bind]", error);
   }
 }

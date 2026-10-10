@@ -38,10 +38,17 @@ export const syncTransactionItemSchema = z.object({
   path: ["deviceKey"],
 });
 
+// Most sales one sync request may carry. The phone sends SYNC_CHUNK_SIZE at a time
+// (src/lib/sync.ts); the cap only stops a runaway payload from tying up the server.
+export const SYNC_BATCH_MAX = 500;
+
 // Only the outer shape is validated here. Each item is validated on its own with
 // syncTransactionItemSchema, so one malformed sale is rejected without failing the batch.
 export const syncBatchSchema = z.object({
-  transactions: z.array(z.unknown()).min(1, "At least one transaction required for sync"),
+  transactions: z
+    .array(z.unknown())
+    .min(1, "At least one transaction required for sync")
+    .max(SYNC_BATCH_MAX, "Too many transactions in one sync"),
 });
 
 export type DeviceBindPayload = z.infer<typeof deviceBindSchema>;

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { readJson, serverError } from "@/lib/api";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
 import { isBusinessDate, manilaToday, parseBusinessDate } from "@/lib/business-date";
 import {
@@ -26,10 +28,6 @@ const reconcileSchema = z.object({
 });
 
 const MAX_REVISION_ATTEMPTS = 3;
-
-function isUniqueViolation(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-}
 
 /**
  * GET /api/v1/reports/reconciliation?date=YYYY-MM-DD
@@ -59,8 +57,7 @@ export async function GET(request: NextRequest) {
       staleness: staleness ? serializeStaleness(staleness) : null,
     });
   } catch (error) {
-    console.error("[GET /api/v1/reports/reconciliation]", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+    return serverError("[GET /api/v1/reports/reconciliation]", error);
   }
 }
 
@@ -73,8 +70,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (!hasOwnerAccess(request)) return ownerRequiredResponse();
   try {
-    const body = await request.json();
-    const parsed = reconcileSchema.safeParse(body);
+    const body = await readJson(request, "Invalid payload");
+    if (!body.ok) return body.response;
+    const parsed = reconcileSchema.safeParse(body.data);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -138,7 +136,6 @@ export async function POST(request: NextRequest) {
       }
     }
   } catch (error) {
-    console.error("[POST /api/v1/reports/reconciliation]", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+    return serverError("[POST /api/v1/reports/reconciliation]", error);
   }
 }

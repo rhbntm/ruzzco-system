@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Prisma, type PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 
 /**
  * PayMongo QR Ph, test mode only (slice 5). Server-side only: the secret key never
@@ -11,6 +12,8 @@ import { prisma } from "@/lib/prisma";
  */
 
 const API = "https://api.paymongo.com/v1";
+// A PayMongo call that takes longer fails like any gateway error (the routes answer 502).
+const PAYMONGO_TIMEOUT_MS = 15_000;
 
 export type GatewayConfig = { secretKey: string; webhookSecret: string };
 
@@ -76,6 +79,7 @@ async function paymongo<T>(config: GatewayConfig, path: string, body?: unknown):
     },
     body: body === undefined ? undefined : JSON.stringify({ data: { attributes: body } }),
     cache: "no-store",
+    signal: AbortSignal.timeout(PAYMONGO_TIMEOUT_MS),
   });
   const json = await res.json().catch(() => null);
   if (!res.ok) {
@@ -180,7 +184,7 @@ export async function applyGatewayStatus(
       return "applied" as const;
     });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return "duplicate";
+    if (isUniqueViolation(error)) return "duplicate";
     throw error;
   }
 }

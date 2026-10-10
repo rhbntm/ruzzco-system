@@ -47,11 +47,13 @@ import {
   ensureAssignmentId,
   isRejected,
   listRejected,
+  readPendingBind,
   registerPendingAssignment,
   summarizeSync,
   syncNow,
   verifyCurrentAssignment,
 } from "@/lib/sync";
+import { REQUEST_TIMEOUT_MS, fetchWithTimeout } from "@/lib/fetch-timeout";
 import { refreshPaymentQrs } from "@/lib/payment-qr-cache";
 import { qrCacheId } from "@/lib/payment-qr-plan";
 import { RejectedSales } from "@/components/RejectedSales";
@@ -67,6 +69,10 @@ const SALE_REPEAT_GUARD_MS = 800;
 type PaymentMethod = LocalTransaction["paymentMethod"];
 
 // ─── Online status hooks ───────────────────────────────────────────────────────
+
+// While sales (or a barber binding) are waiting, retry the sync this often. Otherwise a
+// failed sync waits for the next sale, a reconnect or a reload.
+const AUTO_RETRY_MS = 60_000;
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -194,20 +200,24 @@ export default function MobilePOSPage() {
   }, []);
 
   // Register the pending assignment, then sync queued sales (see lib/sync.ts).
-  const triggerSync = useCallback(async () => {
+  // quiet: the background retry; it only speaks up when something actually synced.
+  const triggerSync = useCallback(async (options: { quiet?: boolean } = {}) => {
     if (typeof window === "undefined" || !navigator.onLine) return;
+    const { quiet = false } = options;
     try {
-      setIsSyncing(true);
+      if (!quiet) setIsSyncing(true);
       const outcome = await syncNow();
       if (outcome.bind.bindingCleared) requireRebind();
+      if (quiet && outcome.status !== "synced") return;
       setSyncFeedback(outcome.status === "failed" ? "Sync failed. Queued locally." : summarizeSync(outcome));
       setTimeout(() => setSyncFeedback(null), 3000);
     } catch (err) {
       console.error("Auto-sync error:", err);
+      if (quiet) return;
       setSyncFeedback("Sync failed. Queued locally.");
       setTimeout(() => setSyncFeedback(null), 3000);
     } finally {
-      setIsSyncing(false);
+      if (!quiet) setIsSyncing(false);
     }
   }, [requireRebind]);
 
@@ -228,6 +238,20 @@ export default function MobilePOSPage() {
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
   }, [reconcileWithServer]);
+
+  // Background retry: the server may be down while the phone still counts as online.
+  // Only while the page is visible and something is waiting (queued sales or a pending bind).
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+      void countPending()
+        .then((pending) => {
+          if (pending > 0 || readPendingBind()) void triggerSync({ quiet: true });
+        })
+        .catch(() => {});
+    }, AUTO_RETRY_MS);
+    return () => window.clearInterval(timer);
+  }, [triggerSync]);
 
   // Gateway availability: 200 = on, 404 = off (PAYMENT_GATEWAY). Rechecked when back online.
   useEffect(() => {
@@ -263,16 +287,19 @@ export default function MobilePOSPage() {
         // Refresh catalog from server if online
         if (navigator.onLine) {
           try {
-            const res = await fetch("/api/v1/catalog");
+            const res = await fetchWithTimeout("/api/v1/catalog", {}, REQUEST_TIMEOUT_MS.catalog);
             if (res.ok && active) {
               const data = await res.json();
               if (data.barbers && data.services) {
                 setBarbers(data.barbers);
                 setServices(data.services);
-                await db.barbers.clear();
-                await db.barbers.bulkPut(data.barbers);
-                await db.services.clear();
-                await db.services.bulkPut(data.services);
+                // One transaction: an interrupted refresh never leaves an empty cache.
+                await db.transaction("rw", db.barbers, db.services, async () => {
+                  await db.barbers.clear();
+                  await db.barbers.bulkPut(data.barbers);
+                  await db.services.clear();
+                  await db.services.bulkPut(data.services);
+                });
               }
             }
           } catch (e) {
@@ -691,7 +718,7 @@ export default function MobilePOSPage() {
 
             {/* Manual sync */}
             <button
-              onClick={triggerSync}
+              onClick={() => void triggerSync()}
               disabled={isSyncing || !isOnline}
               title="Sync pending transactions"
               className="relative p-2 rounded-lg bg-[#12141a] border border-[#232734] text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-40 transition-all cursor-pointer"

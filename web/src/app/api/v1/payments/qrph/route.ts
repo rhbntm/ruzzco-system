@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { isUniqueViolation } from "@/lib/prisma-errors";
 import { applyGatewayStatus, createQrphCharge, gatewayConfig, retrieveIntentStatus } from "@/lib/gateway";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (error) {
       // A concurrent call stored its intent first; that one is the sale's charge.
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+      if (!isUniqueViolation(error)) throw error;
       const winner = await prisma.gatewayPayment.findUniqueOrThrow({ where: { transactionId } });
       return NextResponse.json(await existingCharge(config, winner));
     }

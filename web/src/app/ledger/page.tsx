@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, LockKeyhole, RefreshCw, Save, Scissors } from "lucide-react";
+import { manilaToday } from "@/lib/business-date";
 
 type Base = "LIST_PRICE" | "AMOUNT_PAID";
 type LedgerRow = { barberId: string; barberName: string; commissionTotal: string; tipTotal: string; totalOwed: string; cashPaid: string; gcashPaid: string; paid: boolean; paidAt: string | null; additionalOwed: boolean };
 
-function todayPHT() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date()); }
-
 export default function LedgerPage() {
-  const [date, setDate] = useState(todayPHT());
+  const [date, setDate] = useState(manilaToday());
   const [pin, setPin] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [base, setBase] = useState<Base>("LIST_PRICE");

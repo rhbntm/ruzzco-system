@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { readJson, serverError } from "@/lib/api";
 import { commissionFor } from "@/lib/commission";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
 import { isBusinessDate, parseBusinessDate } from "@/lib/business-date";
@@ -130,24 +131,34 @@ export async function GET(request: NextRequest) {
   if (!hasOwnerAccess(request)) return ownerRequiredResponse();
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return NextResponse.json({ success: false, error: "date and valid commissionBase are required" }, { status: 400 });
-  const totals = await totalsForDate(parsed.data.date, parsed.data.commissionBase);
-  const rows = await syncLedgerRows(parsed.data.date, totals);
-  return NextResponse.json({ success: true, date: parsed.data.date, commissionBase: parsed.data.commissionBase, expenseSharing: "SHOP_ONLY", rows: serialize(rows, parsed.data.commissionBase, totals) });
+  try {
+    const totals = await totalsForDate(parsed.data.date, parsed.data.commissionBase);
+    const rows = await syncLedgerRows(parsed.data.date, totals);
+    return NextResponse.json({ success: true, date: parsed.data.date, commissionBase: parsed.data.commissionBase, expenseSharing: "SHOP_ONLY", rows: serialize(rows, parsed.data.commissionBase, totals) });
+  } catch (error) {
+    return serverError("[GET /api/v1/reports/payouts]", error, "Could not load ledger");
+  }
 }
 
 export async function POST(request: NextRequest) {
   if (!hasOwnerAccess(request)) return ownerRequiredResponse();
-  const parsed = paymentSchema.safeParse(await request.json());
+  const body = await readJson(request, "Invalid payout payload");
+  if (!body.ok) return body.response;
+  const parsed = paymentSchema.safeParse(body.data);
   if (!parsed.success) return NextResponse.json({ success: false, error: "Invalid payout payload", details: parsed.error.flatten() }, { status: 400 });
   const { date, barberId, commissionBase, cashPaid, gcashPaid, paid } = parsed.data;
-  const totals = await totalsForDate(date, commissionBase);
-  const rows = await syncLedgerRows(date, totals);
-  const current = rows.find((row) => row.barberId === barberId);
-  if (!current) return NextResponse.json({ success: false, error: "Unknown barber" }, { status: 404 });
-  const updated = await prisma.dailyPayoutLedger.update({
-    where: { barberId_businessDate: { barberId, businessDate: dateValue(date) } },
-    data: { cashPaid, gcashPaid, paidAt: paid ? new Date() : null },
-    include: { barber: { select: { fullName: true } } },
-  });
-  return NextResponse.json({ success: true, row: serialize([updated], commissionBase, totals)[0] });
+  try {
+    const totals = await totalsForDate(date, commissionBase);
+    const rows = await syncLedgerRows(date, totals);
+    const current = rows.find((row) => row.barberId === barberId);
+    if (!current) return NextResponse.json({ success: false, error: "Unknown barber" }, { status: 404 });
+    const updated = await prisma.dailyPayoutLedger.update({
+      where: { barberId_businessDate: { barberId, businessDate: dateValue(date) } },
+      data: { cashPaid, gcashPaid, paidAt: paid ? new Date() : null },
+      include: { barber: { select: { fullName: true } } },
+    });
+    return NextResponse.json({ success: true, row: serialize([updated], commissionBase, totals)[0] });
+  } catch (error) {
+    return serverError("[POST /api/v1/reports/payouts]", error, "Could not save payout");
+  }
 }

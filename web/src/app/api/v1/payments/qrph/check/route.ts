@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { serverError } from "@/lib/api";
 import { applyGatewayStatus, gatewayConfig, retrieveIntentStatus } from "@/lib/gateway";
 
 export const dynamic = "force-dynamic";
@@ -12,12 +13,16 @@ export async function GET(request: NextRequest) {
   if (!gatewayConfig()) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
   const parsed = bodySchema.safeParse({ transactionId: request.nextUrl.searchParams.get("transactionId") });
   if (!parsed.success) return NextResponse.json({ success: false, error: "transactionId (UUID) is required" }, { status: 400 });
-  const payment = await prisma.gatewayPayment.findUnique({
-    where: { transactionId: parsed.data.transactionId },
-    select: { status: true, paidAt: true },
-  });
-  if (!payment) return NextResponse.json({ success: false, error: "NO_CHARGE" }, { status: 404 });
-  return NextResponse.json({ success: true, status: payment.status, paidAt: payment.paidAt });
+  try {
+    const payment = await prisma.gatewayPayment.findUnique({
+      where: { transactionId: parsed.data.transactionId },
+      select: { status: true, paidAt: true },
+    });
+    if (!payment) return NextResponse.json({ success: false, error: "NO_CHARGE" }, { status: 404 });
+    return NextResponse.json({ success: true, status: payment.status, paidAt: payment.paidAt });
+  } catch (error) {
+    return serverError("[GET /api/v1/payments/qrph/check]", error, "Could not read the payment status");
+  }
 }
 
 /**

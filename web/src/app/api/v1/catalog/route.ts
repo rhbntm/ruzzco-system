@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { serverError } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -40,13 +41,6 @@ export async function GET() {
       })),
     });
   } catch (error) {
-    console.error("Catalog fetch error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to fetch catalog",
-      },
-      { status: 500 }
-    );
+    return serverError("Catalog fetch error:", error, "Failed to fetch catalog");
   }
 }
