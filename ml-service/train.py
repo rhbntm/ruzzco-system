@@ -32,6 +32,7 @@ def find_logbook(data_dir=DATA_DIR):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--logbook", type=Path, help="workbook to read instead of the one in data/")
+    parser.add_argument("--evaluate-only", action="store_true", help="print the tables and write evaluation.json; leave the served model and metadata alone")
     args = parser.parse_args()
     logbook = args.logbook or find_logbook()
 
@@ -50,22 +51,50 @@ def main():
         f"(₱{ticket['amount_total']:,.0f} / {ticket['rows_with_amount']} rows with an amount)"
     )
 
-    evaluation = pipeline.walk_forward(daily)
+    reference = pipeline.walk_forward(daily)
+    test = pipeline.walk_forward(daily, test_from=pipeline.TEST_FROM)
+    evaluation, basis = choose_evaluation(reference, test)
     print()
-    print_comparison(evaluation, ticket["avg_ticket"])
+    print_comparison(reference, "Reference, not the test (last 4 weeks, whatever their dates)")
+    print()
+    print_comparison(test, f"Test: weeks starting {pipeline.TEST_FROM.date()} or later")
+    print()
+    print_verdicts(evaluation, basis)
+    print(f"Typical error: {evaluation['mean']['random_forest']:.2f} customers a day "
+          f"(about ₱{evaluation['mean']['random_forest'] * ticket['avg_ticket']:,.0f} "
+          f"at ₱{ticket['avg_ticket']:,.2f} per customer, {basis} weeks).")
+
+    if args.evaluate_only:
+        ARTIFACTS_DIR.mkdir(exist_ok=True)
+        path = ARTIFACTS_DIR / "evaluation.json"
+        path.write_text(json.dumps(evaluation_summary(evaluation, reference, test, basis), indent=2), encoding="utf-8")
+        print()
+        print(f"Wrote {path.relative_to(Path(__file__).parent)} (model and metadata untouched)")
+        return
 
     model = pipeline.train_final_model(daily)
-    paths = write_artifacts(model, daily, ticket, evaluation, ARTIFACTS_DIR)
+    paths = write_artifacts(model, daily, ticket, evaluation, ARTIFACTS_DIR, reference, test, basis)
     print()
     for path in paths:
         print(f"Wrote {path.relative_to(Path(__file__).parent)}")
 
 
-def write_artifacts(model, daily, ticket, evaluation, out_dir):
-    """Save evaluation.json, model.joblib and metadata.json (section 7). Returns the three paths."""
+def choose_evaluation(reference, test):
+    """The evaluation that feeds the dashboard fields: the test weeks, else the reference (slice 8 Decision 7)."""
+    if test["weeks_tested"] > 0:
+        return test, "test"
+    return reference, "reference"
+
+
+def write_artifacts(model, daily, ticket, evaluation, out_dir, reference=None, test=None, basis="reference"):
+    """Save evaluation.json, model.joblib and metadata.json (section 7). Returns the three paths.
+
+    `evaluation` feeds the top-level fields; `basis` says whether it is the test weeks or the
+    reference weeks (slice 8 Decision 7). reference and test, when given, are written in full.
+    """
     out_dir.mkdir(exist_ok=True)
     evaluation_path = out_dir / "evaluation.json"
-    evaluation_path.write_text(json.dumps(evaluation_summary(evaluation), indent=2), encoding="utf-8")
+    evaluation_path.write_text(json.dumps(evaluation_summary(evaluation, reference, test, basis), indent=2), encoding="utf-8")
 
     model_path = out_dir / "model.joblib"
     joblib.dump(model, model_path)
@@ -89,6 +118,8 @@ def write_artifacts(model, daily, ticket, evaluation, out_dir):
             "best_baseline": best,
             "best_baseline_mae": round(evaluation["mean"][best], 2),
             "weeks_rf_won": evaluation["weeks_rf_won"],
+            "basis": basis,
+            "test_from": pipeline.TEST_FROM.date().isoformat(),
         },
         "sklearn_version": sklearn.__version__,
     }
@@ -102,35 +133,49 @@ def week_label(week):
     return f"{start:%b} {start.day} – {end:%b} {end.day}"
 
 
-def print_comparison(evaluation, avg_ticket):
-    """The section 6 table: MAE in customers per day for each test week and the mean."""
-    print(f"{'Test week':<24} {'Days':>4}  {'Average':>7}  {'Weekday':>7}  {'Last-7':>6}  Random Forest")
+COLUMNS = [
+    ("average", "Average"), ("weekday", "Weekday"), ("last7", "Last-7"), ("naive", "Naive"),
+    ("linear", "Linear*"), ("gboost", "GBoost*"), ("random_forest", "RF"), ("random_forest_last7", "RF+last7"),
+]
+
+
+def print_comparison(evaluation, title):
+    """MAE in customers per day for each week, the mean and the spread. * = evidence for Chapter 3, not a simple method."""
+    print(title)
+    if not evaluation["weeks"]:
+        print(f"No full test week after {pipeline.TEST_FROM.date() - dt.timedelta(days=1)} yet.")
+        return
+    print(f"{'Week':<18} {'Days':>4}  " + "  ".join(f"{label:>8}" for _, label in COLUMNS))
+
+    def row(label, days, values):
+        print(f"{label:<18} {days:>4}  " + "  ".join(f"{values[m]:>8.2f}" for m, _ in COLUMNS))
+
     for week in evaluation["weeks"]:
-        mae = week["mae"]
-        print(
-            f"{week_label(week):<24} {week['days']:>4}  {mae['average']:>7.2f}  {mae['weekday']:>7.2f}  "
-            f"{mae['last7']:>6.2f}  {mae['random_forest']:>8.2f}"
-        )
-    mean = evaluation["mean"]
-    print(
-        f"{'Mean':<24} {'':>4}  {mean['average']:>7.2f}  {mean['weekday']:>7.2f}  "
-        f"{mean['last7']:>6.2f}  {mean['random_forest']:>8.2f}"
-    )
-    spread = evaluation["spread"]
-    print(
-        f"{'Spread (SD of weeks)':<24} {'':>4}  {spread['average']:>7.2f}  {spread['weekday']:>7.2f}  "
-        f"{spread['last7']:>6.2f}  {spread['random_forest']:>8.2f}"
-    )
-    print(
-        f"Random Forest beats the best simple average ({evaluation['best_baseline']}) "
-        f"in {evaluation['weeks_rf_won']} of {evaluation['weeks_tested']} weeks."
-    )
-    rf = mean["random_forest"]
-    print(f"Typical error: {rf:.2f} customers a day (about ₱{rf * avg_ticket:,.0f} at ₱{avg_ticket:,.2f} per customer).")
+        row(week_label(week), week["days"], week["mae"])
+    row("Mean", "", evaluation["mean"])
+    row("Spread (SD weeks)", "", evaluation["spread"])
 
 
-def evaluation_summary(evaluation):
-    """What goes in evaluation.json: per-week numbers, means, best baseline, weeks won and tested."""
+def print_verdicts(evaluation, basis):
+    """Whether each Random Forest beat the best simple method, week by week (slice 8 Decision 7)."""
+    best = evaluation["best_baseline"]
+    for method, name in (("random_forest_last7", "Random Forest + last-7"), ("random_forest", "Random Forest")):
+        won = sum(w["mae"][method] < w["mae"][best] for w in evaluation["weeks"])
+        print(f"{name} beats the best simple method ({best}) in {won} of {evaluation['weeks_tested']} {basis} weeks.")
+
+
+def evaluation_summary(evaluation, reference=None, test=None, basis="reference"):
+    """What goes in evaluation.json: the dashboard fields, plus the reference and test sections in full."""
+    return {
+        **weeks_summary(evaluation),
+        "basis": basis,
+        "reference": weeks_summary(reference) if reference else None,
+        "test": weeks_summary(test) if test else None,
+    }
+
+
+def weeks_summary(evaluation):
+    """Per-week numbers, means, best simple method, weeks won and tested."""
     return {
         "weeks": [
             {

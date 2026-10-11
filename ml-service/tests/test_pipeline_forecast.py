@@ -64,7 +64,7 @@ def test_write_artifacts(tmp_path, daily, model):
     assert metadata["training_days"] == 74
     assert metadata["features"] == pipeline.FEATURES
     assert metadata["avg_ticket"] == TICKET
-    assert set(metadata["evaluation"]) == {"weeks_tested", "rf_mae", "best_baseline", "best_baseline_mae", "weeks_rf_won"}
+    assert set(metadata["evaluation"]) == {"weeks_tested", "rf_mae", "best_baseline", "best_baseline_mae", "weeks_rf_won", "basis", "test_from"}
 
     reloaded = joblib.load(tmp_path / "model.joblib")
     assert list(pipeline.forecast(reloaded, pd.Timestamp("2026-10-12"), 7, TICKET)["customers"]) == \

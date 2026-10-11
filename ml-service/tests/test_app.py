@@ -55,7 +55,7 @@ def test_forecast_seven_days(client):
         assert day["revenue"] == round(day["customers"] * body["avg_ticket"], 2)
     assert body["avg_ticket"] == TICKET
     assert body["training_days"] == 75
-    assert set(body["evaluation"]) == {"weeks_tested", "rf_mae", "best_baseline", "best_baseline_mae", "weeks_rf_won"}
+    assert set(body["evaluation"]) == {"weeks_tested", "rf_mae", "best_baseline", "best_baseline_mae", "weeks_rf_won", "basis", "test_from"}
 
 
 def test_forecast_defaults_to_today_in_manila_and_seven_days(client):

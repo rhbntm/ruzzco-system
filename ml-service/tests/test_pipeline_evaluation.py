@@ -35,7 +35,7 @@ def test_closed_and_unknown_days_are_never_scored():
 def test_constant_series_gives_zero_error_for_every_baseline():
     result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 6))
     for week in result["weeks"]:
-        for method in pipeline.BASELINES:
+        for method in pipeline.SIMPLE_METHODS:
             assert week["mae"][method] == pytest.approx(0)
 
 
@@ -55,7 +55,7 @@ def test_last7_uses_the_last_seven_training_days():
 def test_best_baseline_and_weeks_won_are_consistent():
     result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 3 + d.dayofweek))
     best = result["best_baseline"]
-    assert result["mean"][best] == min(result["mean"][m] for m in pipeline.BASELINES)
+    assert result["mean"][best] == min(result["mean"][m] for m in pipeline.SIMPLE_METHODS)
     assert result["weeks_rf_won"] == sum(w["mae"]["random_forest"] < w["mae"][best] for w in result["weeks"])
 
 
@@ -74,5 +74,5 @@ def test_spread_is_the_standard_deviation_of_the_weekly_errors():
 
 def test_constant_series_has_no_spread():
     result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 6))
-    for method in pipeline.BASELINES:
+    for method in pipeline.SIMPLE_METHODS:
         assert result["spread"][method] == pytest.approx(0)

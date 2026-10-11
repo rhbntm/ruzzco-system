@@ -1,7 +1,8 @@
-"""Slice 7 forecasting pipeline: paper logbook -> daily table -> model -> forecast.
+"""Slice 7 and 8 forecasting pipeline: paper logbook -> daily table -> model -> forecast.
 
 Each function is one step, in the order train.py calls them. Decisions are numbered as in
-docs/slices/slice-7.md section 2. Nothing here reads POS transactions.
+docs/slices/slice-7.md section 2 and, for the last-7 input and the extra methods,
+docs/slices/slice-8.md section 2. Nothing here reads POS transactions.
 """
 
 import calendar
@@ -9,7 +10,8 @@ import datetime as dt
 import statistics
 
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
+from sklearn.linear_model import LinearRegression
 
 # Advisor guidance 2026-10-05: train only on the logbook from this date on (post-gap).
 POST_GAP_START = pd.Timestamp("2026-07-13")
@@ -23,6 +25,10 @@ STATUS_MEANING = {
 NOT_YET_ENCODED = "Not yet encoded"
 
 FEATURES = ["dow", "is_weekend", "day_of_month", "days_since_payday"]
+# Slice 8 Decision 1: the one lag-type input, the same value on all 7 days of a forecast.
+FEATURES_LAST7 = FEATURES + ["last7_mean"]
+# Slice 8 Decision 3: the last-7 input is judged only on test weeks starting on or after this date.
+TEST_FROM = pd.Timestamp("2026-09-26")
 PAYDAY_RULE = "Paydays are the 15th and the 30th; in February, the 15th and the last day of the month (assumption)."
 
 
@@ -162,38 +168,87 @@ def average_ticket(entries, data_from, data_to):
     }
 
 
-BASELINES = ["average", "weekday", "last7"]
-METHODS = BASELINES + ["random_forest"]
+# Slice 8 Decision 5. The dashboard claim is "beats the simple methods"; linear and gboost are
+# evidence for Chapter 3 ("why Random Forest") and never become best_baseline.
+SIMPLE_METHODS = ["average", "weekday", "last7", "naive"]
+EVIDENCE_METHODS = ["linear", "gboost"]
+METHODS = SIMPLE_METHODS + EVIDENCE_METHODS + ["random_forest", "random_forest_last7"]
 
 
 def baseline_predictions(train, dates):
-    """The three simple averages' guesses for each date, from open training days only (Decision 3).
+    """The comparison methods' guesses for each date, from open training days only (Decision 3; slice 8 Decision 5).
 
     average: mean customers over all training days. weekday: mean for that weekday, falling
     back to the overall average when the weekday has no training rows. last7: mean of the
-    last 7 training days. Returns a DataFrame with one column per baseline.
+    last 7 training days. naive: customers of the last training day, repeated. linear and
+    gboost: scikit-learn models on the four calendar inputs, default settings. Returns a
+    DataFrame with one column per method.
     """
     train = train.sort_values("date")
     overall = train["customers"].astype(float).mean()
     by_weekday = train.groupby("dow")["customers"].mean().astype(float)
     last7 = train["customers"].tail(7).astype(float).mean()
-    weekdays = calendar_features(dates)["dow"]
+    naive = float(train["customers"].iloc[-1])
+    inputs = calendar_features(dates)
+    weekdays = inputs["dow"]
+    actual = train["customers"].astype(float)
     return pd.DataFrame({
         "average": [overall] * len(weekdays),
         "weekday": [by_weekday.get(d, overall) for d in weekdays],
         "last7": [last7] * len(weekdays),
+        "naive": [naive] * len(weekdays),
+        "linear": LinearRegression().fit(train[FEATURES], actual).predict(inputs[FEATURES]),
+        "gboost": GradientBoostingRegressor(random_state=42).fit(train[FEATURES], actual).predict(inputs[FEATURES]),
     })
 
 
-def walk_forward(daily, weeks=4, block_days=7):
+def last7_at(daily, before):
+    """Mean customers of the last 7 open days strictly before `before` (slice 8 Decision 1).
+
+    The one definition of the last-7 value, used for training blocks and for the forecast.
+    Closed and unknown days are skipped. Fails loudly with fewer than 7 open days.
+    """
+    before = pd.Timestamp(before)
+    open_days = daily[daily["use_for_training"] & (daily["date"] < before)].sort_values("date")
+    if len(open_days) < 7:
+        raise ValueError(f"Fewer than 7 open days before {before.date()}; cannot compute the last-7 average.")
+    return float(open_days["customers"].tail(7).astype(float).mean())
+
+
+def add_last7_mean(train, range_end=None):
+    """Training rows with the `last7_mean` input (slice 8 Decision 2).
+
+    The calendar is cut into blocks of 7 days laid back from range_end (default: the last
+    training date), because a forecast always starts the day after the data ends. Every
+    row in a block gets last7_at(block's first date): the same value for the whole block,
+    from dates before it. Rows of early blocks with fewer than 7 open days before them are
+    left out. Returns a copy of the open rows that have a value.
+    """
+    rows = train[train["use_for_training"]].sort_values("date")
+    range_end = pd.Timestamp(range_end) if range_end is not None else rows["date"].max()
+    block_number = (range_end - rows["date"]).dt.days // 7
+    block_first = range_end - pd.to_timedelta(block_number * 7 + 6, unit="D")
+    value_by_block = {}
+    for first in block_first.unique():
+        try:
+            value_by_block[first] = last7_at(rows, first)
+        except ValueError:
+            value_by_block[first] = float("nan")
+    rows = rows.assign(last7_mean=block_first.map(value_by_block).astype(float))
+    return rows.dropna(subset=["last7_mean"])
+
+
+def walk_forward(daily, weeks=4, block_days=7, test_from=None):
     """Test every method on the last `weeks` blocks of 7 calendar days, ending on data_to (Decision 2).
 
     Each block trains only on open days before the block starts and is scored only on its
-    open days. Score = mean absolute error (MAE) in customers per day. Returns per-week
-    results (oldest first), the mean MAE per method, the best baseline (lowest mean), and
-    the number of weeks Random Forest beat that baseline (Decision 6: no tuning here).
-    spread is the sample standard deviation of each method's weekly MAEs: how much the
-    error moves from one test week to the next.
+    open days. Score = mean absolute error (MAE) in customers per day. With `test_from`
+    (slice 8 Decision 3) only blocks starting on or after that date are used; if none fit,
+    the result has no weeks and no best baseline. Returns per-week results (oldest first),
+    the mean MAE per method, the best simple method (lowest mean; linear and gboost never
+    count), and the number of weeks Random Forest beat it (Decision 6: no tuning here;
+    slice 8 Decision 7). spread is the sample standard deviation of each method's weekly
+    MAEs: how much the error moves from one test week to the next.
     """
     data_to = daily["date"].max()
     training_rows = daily[daily["use_for_training"]]
@@ -201,6 +256,8 @@ def walk_forward(daily, weeks=4, block_days=7):
     for k in reversed(range(weeks)):
         end = data_to - pd.Timedelta(days=block_days * k)
         start = end - pd.Timedelta(days=block_days - 1)
+        if test_from is not None and start < pd.Timestamp(test_from):
+            continue
         train = training_rows[training_rows["date"] < start]
         test = training_rows[(training_rows["date"] >= start) & (training_rows["date"] <= end)]
         if train.empty or test.empty:
@@ -208,6 +265,11 @@ def walk_forward(daily, weeks=4, block_days=7):
 
         guesses = baseline_predictions(train, test["date"])
         guesses["random_forest"] = _fit_random_forest(train).predict(test[FEATURES])
+        train_last7 = add_last7_mean(train)
+        if train_last7.empty:
+            raise ValueError(f"Test week {start.date()} to {end.date()} has too few open days before it for the last-7 input.")
+        test_last7 = test.assign(last7_mean=last7_at(train, start))
+        guesses["random_forest_last7"] = _fit_random_forest(train_last7, FEATURES_LAST7).predict(test_last7[FEATURES_LAST7])
         actual = test["customers"].astype(float).to_numpy()
         results.append({
             "start": start,
@@ -218,9 +280,11 @@ def walk_forward(daily, weeks=4, block_days=7):
             "mae": {m: float(abs(guesses[m].to_numpy() - actual).mean()) for m in METHODS},
         })
 
+    if not results:
+        return {"weeks": [], "mean": {}, "spread": {}, "best_baseline": None, "weeks_rf_won": 0, "weeks_tested": 0}
     mean = {m: sum(w["mae"][m] for w in results) / len(results) for m in METHODS}
     spread = {m: statistics.stdev(w["mae"][m] for w in results) if len(results) > 1 else 0.0 for m in METHODS}
-    best = min(BASELINES, key=lambda m: mean[m])
+    best = min(SIMPLE_METHODS, key=lambda m: mean[m])
     return {
         "weeks": results,
         "mean": mean,
@@ -254,10 +318,10 @@ def forecast(model, start, days, avg_ticket):
     })
 
 
-def _fit_random_forest(train):
-    """Random Forest on the four calendar inputs, default settings, fixed seed (Decision 6)."""
+def _fit_random_forest(train, features=FEATURES):
+    """Random Forest on the given inputs, default settings, fixed seed (Decision 6)."""
     model = RandomForestRegressor(random_state=42)
-    model.fit(train[FEATURES], train["customers"].astype(float))
+    model.fit(train[features], train["customers"].astype(float))
     return model
 
 

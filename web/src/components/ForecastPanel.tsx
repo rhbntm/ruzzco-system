@@ -11,6 +11,7 @@ const BASELINE_NAMES: Record<string, string> = {
   average: "the plain average",
   weekday: "the average for that weekday",
   last7: "the average of the last 7 open days",
+  naive: "the last open day's count",
 };
 
 const peso = (value: number) => `₱${Math.round(value).toLocaleString("en-PH")}`;
