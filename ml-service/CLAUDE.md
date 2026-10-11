@@ -1,0 +1,3 @@
+# ml-service
+
+- `ml-service/` (run from the repo root): `docker compose run --rm ml-service python train.py` (reads the only `.xlsx` in `ml-service/data/`, prints the summary and the reference and test comparison tables, writes `ml-service/artifacts/`; `--evaluate-only` prints the tables and writes only `evaluation.json`, leaving the served model and metadata alone), `docker compose run --rm ml-service pytest -q`, `docker compose up -d ml-service`. The service loads the model at startup: run `docker compose restart ml-service` after retraining. `npm run test:forecast-parse` needs nothing; `npm run test:forecast` needs the dev server and a trained, running ml-service.

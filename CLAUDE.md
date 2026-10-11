@@ -9,11 +9,10 @@ Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). T
 
 - Repo root: `docker-compose.yml` (MySQL 8, host port 3307, db `ruzzco_db`; `ml-service` on host port 8001), `web/` and `ml-service/`.
 - `web/`: Next.js 16.3.5 (App Router, Turbopack), React 19, Tailwind 4, Prisma 6 (MySQL), Dexie 4, Zod 4.
-- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation`, `npm run test:gateway` and `npm run test:payment-qr` (need the dev server; gateway: started with the gateway env vars; attribution T17 also needs `TEST_ADMIN_DATABASE_URL`, a MySQL user that can create a scratch database, e.g. the local Docker root), `npm run test:owner-unlock` (needs the dev server; at most 5 runs per 15 minutes, see the script), `npm run test:submit-lock`, `npm run test:pricing`, `npm run test:payload-compat`, `npm run test:qr-cache`, `npm run test:pin-attempts`, `npm run test:sync-queue`, `npm run test:qrph-policy`; `npm run test:qrph-charge` needs MySQL only; `npm run test:api-errors`, `npm run test:sync-clock` and `npm run test:time-review` need the dev server.
-- `ml-service/` (run from the repo root): `docker compose run --rm ml-service python train.py` (reads the only `.xlsx` in `ml-service/data/`, prints the summary and the model-vs-averages table, writes `ml-service/artifacts/`), `docker compose run --rm ml-service pytest -q`, `docker compose up -d ml-service`. The service loads the model at startup: run `docker compose restart ml-service` after retraining. `npm run test:forecast-parse` needs nothing; `npm run test:forecast` needs the dev server and a trained, running ml-service.
+- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npm run seed:demo` (placeholder demo data), `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation`, `npm run test:gateway` and `npm run test:payment-qr` (need the dev server; gateway: started with the gateway env vars; attribution T17 also needs `TEST_ADMIN_DATABASE_URL`, a MySQL user that can create a scratch database, e.g. the local Docker root), `npm run test:owner-unlock` (needs the dev server; at most 5 runs per 15 minutes, see the script), `npm run test:submit-lock`, `npm run test:pricing`, `npm run test:payload-compat`, `npm run test:qr-cache`, `npm run test:pin-attempts`, `npm run test:sync-queue`, `npm run test:qrph-policy`; `npm run test:qrph-charge` needs MySQL only; `npm run test:api-errors`, `npm run test:sync-clock` and `npm run test:time-review` need the dev server.
+- `ml-service/` commands (train, tests, serving, forecast suites): see `ml-service/CLAUDE.md`, which loads when you work under `ml-service/`.
 - Root `.env` (copy `.env.example`) holds the MySQL passwords that Docker Compose reads; MySQL uses them only when its volume is first created. Never print, log, or commit them.
 - `web/.env` needs `DATABASE_URL` and `OWNER_PIN`; optional `ML_SERVICE_URL` (default `http://localhost:8001`); the optional QR Ph demo uses `PAYMENT_GATEWAY` (`off` default | `paymongo_test`), `PAYMONGO_SECRET_KEY` (must be `sk_test_`) and `PAYMONGO_WEBHOOK_SECRET`. Never print, log, or commit their values.
-- Next.js 16 differs from older versions. Read `node_modules/next/dist/docs/` before using an API you are unsure about.
 
 ## Business facts (locked)
 Code must respect these. Don't build features from this list unless a slice spec asks for them. Reasoning lives in `../ruzzco-barbers` (`20_Decisions/`, `30_Meetings/`); link there, don't copy it here.
@@ -29,9 +28,10 @@ Code must respect these. Don't build features from this list unless a slice spec
 ## Environment (Windows)
 - Shell is Windows PowerShell. Claude settings live in `.claude/settings.json`; never create `.claudesettings.json` or other variants.
 - MySQL runs in Docker (host port 3307). Before seeding, migrating or querying, run `docker ps`; if the container is down, tell me instead of failing midway.
-- Before `prisma generate` or `prisma migrate`, check whether the dev server is running (it locks the Prisma engine, EPERM). Ask me to stop it; don't retry.
+- Run `scripts/dev-reset.ps1` before `prisma generate`/`migrate`, builds and verification: it frees port 3000, starts the DB container, runs `prisma generate` (`-Start` also starts the dev server). A running dev server locks the Prisma engine (EPERM).
+- After stopping a server, confirm port 3000 is free (the script exits non-zero if not). Never hand the taskkill step to me.
 - When writing files from Python or PowerShell, set UTF-8 explicitly (`encoding='utf-8'`, `-Encoding utf8`).
-- Never run `prisma db push`, `prisma migrate dev`, or `prisma migrate reset`. Never kill node processes, never delete `.next` wholesale.
+- Never run `prisma db push`, `prisma migrate dev`, or `prisma migrate reset`. Never kill node processes outside this repo (the script only kills this repo's), never delete `.next` wholesale.
 - Schema changes are additive with defaults and committed as migrations in `web/prisma/migrations/` (baseline `0_init`). Write the SQL with `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script` (from Git Bash, to avoid a BOM), review it, apply with `npx prisma migrate deploy`. See README.
 
 ## Git
@@ -43,10 +43,11 @@ Code must respect these. Don't build features from this list unless a slice spec
 ## How to work
 - One task per session. When done: show a diff summary and a 2-minute manual test, then stop.
 - Verify with `npm run lint`. Run `npm run build` only when I ask.
+- For UI changes: hard-reload the changed page in the browser and confirm the new content is visible. If you can't verify it, say so explicitly; don't call it done.
 - Don't read `packed.md` (repo root), `.env`, or `tsconfig.tsbuildinfo`. Outside slice audits, grep and open only the files you edit.
 - **Slices:** specs live in `docs/slices/slice-N.md`. On "run slice N": read the file in full, tell me the last section number and confirm the `<!-- END OF SPEC -->` marker, do a read-only audit before any edits, then implement, verify (all test suites, `npm run lint`, `npx tsc --noEmit`) and report. If the slice is already implemented, say so instead of redoing it.
 - **Business rules before code:** before attribution, commission, payout or reconciliation logic, state the rule in plain language with 3 edge cases and wait for my OK.
-- **Where things go:** how to build it (specs, conventions, environment) → this repo. What was decided and why → `../ruzzco-barbers`, following its folder and naming (`20_Decisions/YYYY-MM-DD-kebab-title.md`).
+- **Where things go:** how to build it (specs, conventions, environment) → this repo. What was decided and why → `../ruzzco-barbers`, following its folder and naming (`20_Decisions/YYYY-MM-DD-kebab-title.md`). Which source wins: code, tests, migrations and this file's locked sections over specs; specs (`docs/slices/`) over session logs (`docs/sessions/`, gitignored, local only); anything in `../ruzzco-barbers` or other private planning notes describes intent and may lag the code; treat architecture notes there as possibly stale.
 - **"Wrap up":** record the session's decisions in `../ruzzco-barbers` with reasoning, update Business facts if one changed, show me the changes in both repos, and commit each repo only after I OK it.
 
 ## Invariants (do not break)

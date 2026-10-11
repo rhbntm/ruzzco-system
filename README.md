@@ -58,6 +58,17 @@ cd web
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the Slice 0 Walking Skeleton, or test the API health route at [http://localhost:3000/api/v1/health](http://localhost:3000/api/v1/health).
+Open [http://localhost:3000](http://localhost:3000) for the POS, or test the API health route at [http://localhost:3000/api/v1/health](http://localhost:3000/api/v1/health).
+
+### 4. Forecasting service (optional)
+
+From the repo root, with the logbook workbook in `ml-service/data/` (not committed):
+
+```bash
+docker compose run --rm ml-service python train.py   # train and write ml-service/artifacts/
+docker compose up -d ml-service                       # serve on http://localhost:8001
+```
+
+Commands, tests and the rules around the forecast are in `CLAUDE.md`.
 
 ---

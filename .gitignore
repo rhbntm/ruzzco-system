@@ -9,3 +9,7 @@ ml-service/.pytest_cache/
 
 # Local database backups (contain client data); never committed
 /backups/
+
+
+# Per-machine Claude Code settings (permissions granted locally); never committed
+/.claude/settings.local.json
