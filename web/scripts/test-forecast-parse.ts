@@ -4,7 +4,7 @@
  *
  *   npm run test:forecast-parse
  */
-import { addDays, parseForecastResponse } from "../src/lib/forecast";
+import { addDays, parseForecastResponse, parseSavedComparison } from "../src/lib/forecast";
 
 let passed = 0;
 const failures: string[] = [];
@@ -76,6 +76,26 @@ const evaluation: Record<string, unknown> = { ...valid().evaluation };
 delete evaluation.rf_mae;
 expectRejected("missing evaluation.rf_mae", { ...valid(), evaluation });
 expectRejected("null body", null);
+
+// Slice 9: the optional method comparison. Invented numbers only.
+function comparison(change: Record<string, unknown> = {}) {
+  const methods = ["average", "weekday", "last7", "naive", "linear", "gboost", "random_forest", "random_forest_last7"];
+  const numbers = (offset: number) => Object.fromEntries(methods.map((m, i) => [m, 1 + offset + i / 10]));
+  return { basis: "reference", test_from: "2026-09-26", served: "random_forest", mean: numbers(0), spread: numbers(0.5), ...change };
+}
+
+console.log("\nComparison (optional)");
+check("a response with a valid comparison passes", parseForecastResponse({ ...valid(), comparison: comparison() }, START, 7).ok);
+check("a response with a null comparison passes", parseForecastResponse({ ...valid(), comparison: null }, START, 7).ok);
+check("a response without a comparison still passes", parseForecastResponse(valid(), START, 7).ok);
+expectRejected("comparison with a bad basis", { ...valid(), comparison: comparison({ basis: "maybe" }) });
+expectRejected("comparison without served", { ...valid(), comparison: comparison({ served: undefined }) });
+expectRejected("comparison whose served method has no mean", { ...valid(), comparison: comparison({ served: "ridge" }) });
+expectRejected("comparison with a negative error", { ...valid(), comparison: comparison({ mean: { random_forest: -1 } }) });
+expectRejected("comparison with a non-numeric mean", { ...valid(), comparison: comparison({ mean: { random_forest: "3.1" } }) });
+expectRejected("comparison with a bad test_from date", { ...valid(), comparison: comparison({ test_from: "2026-02-30" }) });
+check("a saved comparison that is malformed reads back as null", parseSavedComparison({ basis: "test" }) === null && parseSavedComparison(null) === null);
+check("a saved valid comparison reads back", parseSavedComparison(comparison()) !== null);
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

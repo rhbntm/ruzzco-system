@@ -259,6 +259,9 @@ model ForecastRun {
   bestBaselineError     Decimal  @db.Decimal(6, 2) @map("best_baseline_error")
   weeksRfWon            Int      @map("weeks_rf_won")
   weeksTested           Int      @map("weeks_tested")
+  // Slice 9: every method's mean error and spread (customers a day) for the owner's comparison table;
+  // NULL for runs saved before it or from an older ml-service.
+  comparison            Json?    @map("comparison")
   days                  DailyRevenueForecast[]
 
   @@map("forecast_runs")

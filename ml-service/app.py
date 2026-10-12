@@ -47,7 +47,7 @@ def create_app(artifacts_dir=ARTIFACTS_DIR):
             raise HTTPException(status_code=503, detail="No model loaded. Run train.py, then restart the service.")
         start = start or dt.datetime.now(MANILA).date()
         rows = pipeline.forecast(model, start, days, metadata["avg_ticket"])
-        return {
+        body = {
             "model_version": metadata["model_version"],
             "trained_at": metadata["trained_at"],
             "data_from": metadata["data_from"],
@@ -60,6 +60,10 @@ def create_app(artifacts_dir=ARTIFACTS_DIR):
                 for row in rows.itertuples()
             ],
         }
+        # Slice 9: the method comparison saved with the model; absent for models trained before it.
+        if metadata.get("comparison"):
+            body["comparison"] = metadata["comparison"]
+        return body
 
     return app
 

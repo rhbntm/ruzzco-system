@@ -80,6 +80,12 @@ async function main() {
     afterFirst.every((r) => Math.abs(Number(r.predictedCustomers) * Number(firstRun?.avgTicket) - Number(r.predictedRevenue)) <= 0.01)
   );
 
+  // Slice 9: the method comparison is saved with the run (needs a model trained with slice 9 code).
+  const savedComparison = firstRun?.comparison ?? null;
+  const stored = firstRun ? await prisma.forecastRun.findUnique({ where: { id: firstRun.id } }) : null;
+  check("the run's comparison was saved and is returned", savedComparison !== null && stored?.comparison !== null, "retrain the ml-service with the slice 9 code first (python train.py, then restart)");
+  check("the comparison names the served method and has a mean for it", savedComparison !== null && savedComparison.served in savedComparison.mean);
+
   console.log("\nSecond refresh the same day");
   const second = await call("POST", "/api/v1/forecast/refresh");
   const secondRun = second.body?.success ? second.body.run : null;

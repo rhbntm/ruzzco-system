@@ -19,6 +19,8 @@ DATA_DIR = Path(__file__).parent / "data"
 ARTIFACTS_DIR = Path(__file__).parent / "artifacts"
 # Asia/Manila is UTC+8 all year (no daylight saving), so a fixed offset is exact.
 MANILA = dt.timezone(dt.timedelta(hours=8), "Asia/Manila")
+# Which method the service forecasts with. Slice 8 step 2 may make this configurable.
+SERVED_METHOD = "random_forest"
 
 
 def find_logbook(data_dir=DATA_DIR):
@@ -86,6 +88,22 @@ def choose_evaluation(reference, test):
     return reference, "reference"
 
 
+def comparison_summary(evaluation, basis, served=SERVED_METHOD):
+    """Every method's mean error and spread, for the owner's comparison table (slice 9 Decision 7).
+
+    Built from the evaluation that feeds the dashboard (the test weeks, else the reference
+    weeks) and saved in metadata.json next to the model it describes. Errors are in customers
+    per day, rounded to 2 decimals. Per-week errors are not included.
+    """
+    return {
+        "basis": basis,
+        "test_from": pipeline.TEST_FROM.date().isoformat(),
+        "served": served,
+        "mean": {method: round(value, 2) for method, value in evaluation["mean"].items()},
+        "spread": {method: round(value, 2) for method, value in evaluation["spread"].items()},
+    }
+
+
 def write_artifacts(model, daily, ticket, evaluation, out_dir, reference=None, test=None, basis="reference"):
     """Save evaluation.json, model.joblib and metadata.json (section 7). Returns the three paths.
 
@@ -121,6 +139,7 @@ def write_artifacts(model, daily, ticket, evaluation, out_dir, reference=None, t
             "basis": basis,
             "test_from": pipeline.TEST_FROM.date().isoformat(),
         },
+        "comparison": comparison_summary(evaluation, basis),
         "sklearn_version": sklearn.__version__,
     }
     metadata_path = out_dir / "metadata.json"

@@ -13,6 +13,7 @@
     "test:commission": "tsx scripts/test-commission.ts",
     "test:forecast": "tsx scripts/test-forecast.ts",
     "test:forecast-parse": "tsx scripts/test-forecast-parse.ts",
+    "test:forecast-comparison": "tsx scripts/test-forecast-comparison.ts",
     "test:gateway": "tsx scripts/test-gateway.ts",
     "test:owner-unlock": "tsx scripts/test-owner-unlock.ts",
     "test:payload-compat": "tsx scripts/test-payload-compat.ts",

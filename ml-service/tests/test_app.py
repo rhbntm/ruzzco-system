@@ -74,3 +74,27 @@ def test_forecast_fourteen_days(client):
     body = client.get("/forecast", params={"start": "2026-10-12", "days": 14}).json()
     assert len(body["days"]) == 14
     assert pd.Timestamp(body["days"][-1]["date"]) == pd.Timestamp("2026-10-25")
+
+
+def test_forecast_includes_the_saved_comparison(client):
+    body = client.get("/forecast", params={"start": "2026-10-12", "days": 7}).json()
+    comparison = body["comparison"]
+    assert set(comparison) == {"basis", "test_from", "served", "mean", "spread"}
+    assert comparison["served"] == "random_forest"
+    assert set(comparison["mean"]) == set(pipeline.METHODS) == set(comparison["spread"])
+    assert all(isinstance(v, float) and v >= 0 for v in comparison["mean"].values())
+
+
+def test_forecast_leaves_the_comparison_out_for_an_older_model(tmp_path):
+    import json
+
+    daily = make_daily("2026-07-13", "2026-09-25", customers=lambda d: 3 + d.dayofweek)
+    ticket = {"avg_ticket": TICKET, "rows_with_amount": 10, "amount_total": 2105.0}
+    train.write_artifacts(pipeline.train_final_model(daily), daily, ticket, pipeline.walk_forward(daily), tmp_path)
+    path = tmp_path / "metadata.json"
+    metadata = json.loads(path.read_text(encoding="utf-8"))
+    del metadata["comparison"]
+    path.write_text(json.dumps(metadata), encoding="utf-8")
+    body = TestClient(service.create_app(tmp_path)).get("/forecast", params={"start": "2026-10-12", "days": 7}).json()
+    assert "comparison" not in body
+    assert len(body["days"]) == 7

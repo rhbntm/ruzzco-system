@@ -2,7 +2,7 @@
 // this file only asks it for a start date and a number of days, checks the answer, and saves it
 // so the dashboard still has numbers when the service is down. Never reads or writes transactions.
 import { z } from "zod";
-import type { DailyRevenueForecast, ForecastRun } from "@prisma/client";
+import type { DailyRevenueForecast, ForecastRun, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isBusinessDate, manilaToday, parseBusinessDate } from "@/lib/business-date";
 
@@ -13,6 +13,20 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const isoDate = z.string().refine(isBusinessDate, "must be a real calendar date (YYYY-MM-DD)");
 const nonNegative = z.number().finite().nonnegative();
 const count = z.number().int().nonnegative();
+
+// Slice 9: every method's mean error and spread (customers a day), saved with each run for the
+// owner's comparison table. Optional: an older ml-service, or a model trained before slice 9, omits it.
+export const comparisonSchema = z
+  .object({
+    basis: z.enum(["test", "reference"]),
+    test_from: isoDate,
+    served: z.string().min(1),
+    mean: z.record(z.string(), nonNegative),
+    spread: z.record(z.string(), nonNegative),
+  })
+  .refine((c) => c.served in c.mean, "served method must have a mean error");
+
+export type Comparison = z.infer<typeof comparisonSchema>;
 
 const forecastResponseSchema = z.object({
   model_version: z.string().min(1),
@@ -28,6 +42,7 @@ const forecastResponseSchema = z.object({
     best_baseline_mae: nonNegative,
     weeks_rf_won: count,
   }),
+  comparison: comparisonSchema.nullish(),
   days: z.array(z.object({ date: isoDate, customers: nonNegative, revenue: nonNegative })),
 });
 
@@ -84,6 +99,7 @@ export async function saveForecast(forecast: ForecastResponse) {
         bestBaselineError: forecast.evaluation.best_baseline_mae.toFixed(2),
         weeksRfWon: forecast.evaluation.weeks_rf_won,
         weeksTested: forecast.evaluation.weeks_tested,
+        comparison: forecast.comparison ? (forecast.comparison as Prisma.InputJsonValue) : undefined,
       },
     });
     const days = [];
@@ -122,6 +138,11 @@ export async function latestForecast(today = manilaToday()) {
   return { run, days };
 }
 
+export function parseSavedComparison(value: unknown): Comparison | null {
+  const parsed = comparisonSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 export function serializeForecast(run: ForecastRun | null, days: DailyRevenueForecast[]) {
   return {
     run: run && {
@@ -138,6 +159,8 @@ export function serializeForecast(run: ForecastRun | null, days: DailyRevenueFor
       bestBaselineError: run.bestBaselineError.toFixed(2),
       weeksRfWon: run.weeksRfWon,
       weeksTested: run.weeksTested,
+      // Validated again on read: anything malformed becomes null and the panel shows no table.
+      comparison: parseSavedComparison(run.comparison),
     },
     days: days.map((day) => ({
       date: day.forecastDate.toISOString().slice(0, 10),

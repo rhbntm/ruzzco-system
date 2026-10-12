@@ -136,3 +136,42 @@ def test_choose_evaluation_falls_back_to_the_reference():
     reference = pipeline.walk_forward(daily)
     test = pipeline.walk_forward(daily, test_from=pipeline.TEST_FROM)
     assert train.choose_evaluation(reference, test) == (reference, "reference")
+
+
+def test_comparison_summary_uses_the_chosen_weeks_and_rounds_to_two_decimals():
+    import train
+
+    daily = make_daily("2026-07-13", "2026-10-18", customers=lambda d: 3 + d.dayofweek)
+    reference = pipeline.walk_forward(daily)
+    test = pipeline.walk_forward(daily, test_from=pipeline.TEST_FROM)
+    chosen, basis = train.choose_evaluation(reference, test)
+    summary = train.comparison_summary(chosen, basis)
+    assert summary["basis"] == "test" and summary["test_from"] == "2026-09-26" and summary["served"] == "random_forest"
+    assert set(summary["mean"]) == set(pipeline.METHODS) == set(summary["spread"])
+    assert summary["mean"]["average"] == round(chosen["mean"]["average"], 2)
+    assert all(round(v, 2) == v for v in summary["mean"].values())
+
+
+def test_comparison_summary_falls_back_to_the_reference_weeks():
+    import train
+
+    daily = make_daily("2026-07-13", "2026-09-25", customers=lambda d: 3 + d.dayofweek)
+    reference = pipeline.walk_forward(daily)
+    test = pipeline.walk_forward(daily, test_from=pipeline.TEST_FROM)
+    chosen, basis = train.choose_evaluation(reference, test)
+    summary = train.comparison_summary(chosen, basis)
+    assert summary["basis"] == "reference"
+    assert summary["mean"]["random_forest"] == round(reference["mean"]["random_forest"], 2)
+
+
+def test_write_artifacts_saves_the_comparison_in_metadata(tmp_path):
+    import json
+
+    import train
+
+    daily = make_daily("2026-07-13", "2026-09-25", customers=lambda d: 3 + d.dayofweek)
+    ticket = {"avg_ticket": 100.0, "rows_with_amount": 10, "amount_total": 1000.0}
+    evaluation = pipeline.walk_forward(daily)
+    train.write_artifacts(pipeline.train_final_model(daily), daily, ticket, evaluation, tmp_path)
+    saved = json.loads((tmp_path / "metadata.json").read_text(encoding="utf-8"))["comparison"]
+    assert saved == train.comparison_summary(evaluation, "reference")
