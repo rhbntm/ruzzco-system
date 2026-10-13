@@ -102,32 +102,34 @@ export default function PaymentQrPage() {
 
   if (!unlocked) {
     return (
-      <main className="min-h-screen bg-[#0b0c10] text-zinc-100 flex items-center justify-center p-6">
+      <main className="min-h-dvh bg-[#0b0c10] text-zinc-100 flex items-center justify-center p-6">
         <form onSubmit={(event) => { event.preventDefault(); void unlock(); }} className="w-full max-w-sm p-6 rounded-2xl bg-[#12141a] border border-[#232734] space-y-4">
           <LockKeyhole className="w-8 h-8 text-red-400" />
           <h1 className="text-2xl font-bold">Payment QR codes</h1>
           <p className="text-sm text-zinc-400">Enter the owner PIN to add or change the GCash and Maya QR shown for each barber.</p>
-          <input autoFocus type="password" inputMode="numeric" value={pin} onChange={(event) => setPin(event.target.value)} className="w-full px-3 py-3 rounded-xl bg-[#181b24] border border-[#232734] text-white" placeholder="Owner PIN" />
+          <input autoFocus type="password" inputMode="numeric" aria-label="Owner PIN" value={pin} onChange={(event) => setPin(event.target.value)} className="w-full px-3 py-3 rounded-xl bg-[#181b24] border border-[#232734] text-white" placeholder="Owner PIN" />
           <button disabled={busy || !pin} className="w-full py-3 rounded-xl bg-red-600 text-white font-bold disabled:opacity-50">{busy ? "Checking…" : "Unlock"}</button>
-          {error && <p className="text-sm text-red-300">{error}</p>}
-          <Link href="/" className="block text-center text-xs text-zinc-500 hover:text-white">Back to home</Link>
+          {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+          <Link href="/" className="block py-2 pointer-coarse:py-3.5 text-center text-xs text-zinc-400 hover:text-white">Back to home</Link>
         </form>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#0b0c10] text-zinc-100">
+    <main className="min-h-dvh bg-[#0b0c10] text-zinc-100">
       <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-5">
         <header className="flex items-center justify-between border-b border-zinc-800 pb-4">
-          <Link href="/" className="text-zinc-400 hover:text-white"><ArrowLeft className="w-4 h-4 inline mr-1" />Home</Link>
+          <Link href="/" className="inline-flex items-center -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-zinc-400 hover:text-white"><ArrowLeft className="w-4 h-4 inline mr-1" />Home</Link>
           <h1 className="text-xl font-bold uppercase tracking-wide">Payment QR codes</h1>
-          <button onClick={() => void load()} title="Reload" className="text-zinc-400 hover:text-white"><RefreshCw className={`w-4 h-4 ${busy ? "animate-spin" : ""}`} /></button>
+          <button onClick={() => void load()} title="Reload" aria-label="Reload the QR codes" className="inline-flex items-center justify-center -my-2 min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg text-zinc-400 hover:text-white"><RefreshCw className={`w-4 h-4 ${busy ? "animate-spin" : ""}`} /></button>
         </header>
         <p className="text-sm text-zinc-400">
           The POS shows these in the GCash and Maya payment screen, for the barber the sale is recorded under. PNG, JPEG or WebP, up to 1 MB.
         </p>
-        {error && <div className="p-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300">{error}</div>}
+        {error && <div role="alert" className="p-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300">{error}</div>}
+        {/* Announces "Saved", "Removed" and upload errors to screen readers; out of the layout flow. */}
+        <p aria-live="polite" className="sr-only">{slotMessage?.text ?? ""}</p>
 
         <div className="space-y-3">
           {barbers.map((barber) => (
@@ -147,11 +149,11 @@ export default function PaymentQrPage() {
                           // eslint-disable-next-line @next/next/no-img-element -- owner-uploaded image served by our API
                           <img src={`${qrUrl(barber.id, method)}?v=${qr.sha256}`} alt={`${label} QR for ${barber.fullName}`} className="w-full h-full object-contain bg-white p-1.5" />
                         ) : (
-                          <div className="text-center text-xs text-zinc-500 space-y-1"><ImageOff className="w-5 h-5 mx-auto" /><div>No {label} QR yet</div></div>
+                          <div className="text-center text-xs text-zinc-400 space-y-1"><ImageOff className="w-5 h-5 mx-auto" /><div>No {label} QR yet</div></div>
                         )}
                       </div>
                       <div className="flex gap-2">
-                        <label className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-bold cursor-pointer ${working ? "opacity-50 pointer-events-none" : ""}`}>
+                        <label className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 pointer-coarse:min-h-11 rounded-lg bg-red-600 text-white text-sm font-bold cursor-pointer ${working ? "opacity-50 pointer-events-none" : ""}`}>
                           <Upload className="w-4 h-4" />{working ? "Saving…" : qr ? "Replace" : "Upload"}
                           <input
                             type="file"
@@ -166,7 +168,7 @@ export default function PaymentQrPage() {
                           />
                         </label>
                         {qr && (
-                          <button onClick={() => void remove(barber.id, method)} disabled={working} className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-semibold disabled:opacity-50 ${confirmRemove === key ? "border-red-500 bg-red-500/15 text-red-200" : "border-[#2c3140] text-zinc-300 hover:text-white"}`}>
+                          <button onClick={() => void remove(barber.id, method)} disabled={working} className={`inline-flex items-center gap-1.5 px-3 py-2 pointer-coarse:min-h-11 rounded-lg border text-sm font-semibold disabled:opacity-50 ${confirmRemove === key ? "border-red-500 bg-red-500/15 text-red-200" : "border-[#2c3140] text-zinc-300 hover:text-white"}`}>
                             <Trash2 className="w-4 h-4" />{confirmRemove === key ? "Tap again" : "Remove"}
                           </button>
                         )}
@@ -178,7 +180,7 @@ export default function PaymentQrPage() {
               </div>
             </section>
           ))}
-          {!busy && barbers.length === 0 && <div className="p-8 text-center text-zinc-500">No active barbers found.</div>}
+          {!busy && barbers.length === 0 && <div className="p-8 text-center text-zinc-400">No active barbers found.</div>}
         </div>
       </div>
     </main>

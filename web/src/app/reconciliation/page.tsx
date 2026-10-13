@@ -214,6 +214,14 @@ export default function ReconciliationPage() {
     }
   };
 
+  // Escape closes the owner PIN dialog, like its Cancel button.
+  useEffect(() => {
+    if (!showOwnerUnlock) return;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setShowOwnerUnlock(false); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showOwnerUnlock]);
+
   const variance = saved ? parseFloat(saved.variance) : null;
   const previewExpectedDrawer = expected
     ? parseFloat(expected.expectedDrawerCash) - (parseFloat(pettyCashAmount) || 0) + parseFloat(expected.pettyCash)
@@ -224,13 +232,13 @@ export default function ReconciliationPage() {
       : null;
 
   return (
-    <div className="min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white">
+    <div className="min-h-dvh bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white">
       {showOwnerUnlock && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <form onSubmit={async (event) => { event.preventDefault(); const res = await fetch("/api/v1/owner/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: ownerPin }) }); if (res.ok) { setShowOwnerUnlock(false); setOwnerPin(""); setFeedback({ msg: "Owner access granted. Save again.", ok: true }); } else { const data = await res.json().catch(() => null); setFeedback({ msg: data?.error ?? "Invalid owner PIN.", ok: false }); } }} className="w-full max-w-sm p-5 rounded-2xl bg-[#12141a] border border-[#232734] space-y-3">
-            <h2 className="font-bold text-lg">Owner PIN required</h2>
-            <input autoFocus type="password" inputMode="numeric" value={ownerPin} onChange={(event) => setOwnerPin(event.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-[#181b24] border border-[#232734] text-white" placeholder="Owner PIN" />
-            <div className="flex gap-2"><button type="button" onClick={() => setShowOwnerUnlock(false)} className="flex-1 py-2 rounded-lg border border-[#232734] text-zinc-300">Cancel</button><button type="submit" className="flex-1 py-2 rounded-lg bg-red-600 text-white font-bold">Unlock</button></div>
+          <form role="dialog" aria-modal="true" aria-labelledby="owner-pin-title" onSubmit={async (event) => { event.preventDefault(); const res = await fetch("/api/v1/owner/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: ownerPin }) }); if (res.ok) { setShowOwnerUnlock(false); setOwnerPin(""); setFeedback({ msg: "Owner access granted. Save again.", ok: true }); } else { const data = await res.json().catch(() => null); setFeedback({ msg: data?.error ?? "Invalid owner PIN.", ok: false }); } }} className="w-full max-w-sm p-5 rounded-2xl bg-[#12141a] border border-[#232734] space-y-3">
+            <h2 id="owner-pin-title" className="font-bold text-lg">Owner PIN required</h2>
+            <input autoFocus type="password" inputMode="numeric" aria-label="Owner PIN" value={ownerPin} onChange={(event) => setOwnerPin(event.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-[#181b24] border border-[#232734] text-white" placeholder="Owner PIN" />
+            <div className="flex gap-2"><button type="button" onClick={() => setShowOwnerUnlock(false)} className="flex-1 py-2 pointer-coarse:min-h-11 rounded-lg border border-[#232734] text-zinc-300">Cancel</button><button type="submit" className="flex-1 py-2 pointer-coarse:min-h-11 rounded-lg bg-red-600 text-white font-bold">Unlock</button></div>
           </form>
         </div>
       )}
@@ -240,22 +248,23 @@ export default function ReconciliationPage() {
       <div className="relative max-w-2xl mx-auto px-4 py-4 space-y-5">
         {/* Header */}
         <header className="flex items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+          {/* Padding with matching negative margins: bigger targets without moving the layout. */}
           <Link
             href="/shift-log"
-            className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-xs text-zinc-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Shift Log</span>
           </Link>
           <div className="flex items-center gap-2">
-            <RuzzcoLogoBadge size={28} showBorder={false} />
-            <span className="font-extrabold tracking-wider text-base text-white uppercase font-[family-name:var(--font-oswald)]">
+            <RuzzcoLogoBadge size={28} showBorder={false} alt="" />
+            <h1 className="font-extrabold tracking-wider text-base text-white uppercase font-(family-name:--font-oswald)">
               EOD CASH RECONCILIATION
-            </span>
+            </h1>
           </div>
           <Link
             href="/pos"
-            className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors"
+            className="inline-flex items-center justify-center gap-1 min-w-6 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 pointer-coarse:min-w-11 text-xs text-zinc-400 hover:text-white transition-colors"
           >
             <span>POS</span>
           </Link>
@@ -263,22 +272,25 @@ export default function ReconciliationPage() {
 
         {/* Date picker */}
         <div className="flex items-center gap-3 p-3 rounded-xl bg-[#12141a] border border-[#232734]">
-          <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] shrink-0 flex items-center gap-1.5">
+          <label htmlFor="reconciliation-date" className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-(family-name:--font-oswald) shrink-0 flex items-center gap-1.5">
             <BarberPoleIcon className="w-2 h-3.5" />
             Select Date:
           </label>
+          {/* 16px text on phones so iOS does not zoom in on focus. */}
           <input
+            id="reconciliation-date"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             max={todayStr}
-            className="flex-1 px-3 py-1.5 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+            className="flex-1 min-w-0 px-3 py-1.5 pointer-coarse:min-h-11 rounded-lg bg-[#181b24] border border-[#232734] text-white text-base sm:text-sm scheme-dark focus:border-red-500 transition-colors"
           />
           <button
             onClick={() => setRefreshKey((k) => k + 1)}
             disabled={isLoading}
             title="Refresh expected totals"
-            className="p-2 rounded-lg bg-[#181b24] border border-[#232734] text-zinc-400 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+            aria-label="Refresh expected totals"
+            className="inline-flex items-center justify-center min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg bg-[#181b24] border border-[#232734] text-zinc-400 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-red-400" : ""}`} />
           </button>
@@ -287,9 +299,9 @@ export default function ReconciliationPage() {
         {/* Expected totals from server */}
         {expected && (
           <section className="space-y-2">
-            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] flex items-center gap-1.5">
+            <h2 className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-(family-name:--font-oswald) flex items-center gap-1.5">
               Synced Totals From Register
-            </span>
+            </h2>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
                 { label: "Cash Sales", value: `₱${expected.cashTotal}`, icon: Banknote, color: "text-emerald-400" },
@@ -300,11 +312,11 @@ export default function ReconciliationPage() {
               ].map((c) => (
                 <div key={c.label} className="p-3.5 rounded-xl bg-[#12141a] border border-[#232734] space-y-1 relative overflow-hidden">
                   <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-                  <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold flex items-center gap-1">
+                  <div className="text-xs text-zinc-400 uppercase tracking-wider font-semibold flex items-center gap-1">
                     <c.icon className={`w-3 h-3 ${c.color}`} />
                     {c.label}
                   </div>
-                  <div className={`text-xl font-extrabold font-[family-name:var(--font-oswald)] ${c.color}`}>{c.value}</div>
+                  <div className={`text-xl font-extrabold font-(family-name:--font-oswald) ${c.color}`}>{c.value}</div>
                 </div>
               ))}
             </div>
@@ -314,28 +326,28 @@ export default function ReconciliationPage() {
                   <span className="flex items-center gap-1.5 text-violet-300 font-semibold">
                     <QrCode className="w-3.5 h-3.5" /> QR Ph (PayMongo test) collected
                   </span>
-                  <span className="font-extrabold text-violet-200 font-[family-name:var(--font-oswald)]">₱{expected.qrphTotal}</span>
+                  <span className="font-extrabold text-violet-200 font-(family-name:--font-oswald)">₱{expected.qrphTotal}</span>
                 </div>
-                <p className="text-[11px] text-zinc-500">Gateway money is not in the drawer. Only paid QR sales count.</p>
+                <p className="text-xs text-zinc-400">Gateway money is not in the drawer. Only paid QR sales count.</p>
                 <ul className="space-y-1">
                   {expected.gatewaySales.map((g) => (
                     <li key={g.id} className="flex items-center justify-between gap-2 text-xs p-2 rounded-lg bg-[#181b24] border border-[#232734]">
                       <span className="text-zinc-400">
                         {new Date(g.transactionTime).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}
-                        <span className="font-mono text-zinc-600 ml-1.5">{g.id.slice(0, 8)}…</span>
+                        <span className="font-mono text-zinc-400 ml-1.5">{g.id.slice(0, 8)}…</span>
                       </span>
                       <span className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${g.status === "PAID" ? "bg-emerald-500/15 text-emerald-300" : g.status === "PENDING" ? "bg-amber-500/15 text-amber-300" : "bg-red-500/15 text-red-300"}`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${g.status === "PAID" ? "bg-emerald-500/15 text-emerald-300" : g.status === "PENDING" ? "bg-amber-500/15 text-amber-300" : "bg-red-500/15 text-red-300"}`}>
                           {g.status}{g.late ? " · late confirmation" : ""}
                         </span>
-                        <span className={`font-bold font-[family-name:var(--font-oswald)] ${g.status === "PAID" ? "text-zinc-100" : "text-zinc-500 line-through"}`}>₱{g.amount}</span>
+                        <span className={`font-bold font-(family-name:--font-oswald) ${g.status === "PAID" ? "text-zinc-100" : "text-zinc-400 line-through"}`}>₱{g.amount}</span>
                       </span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            <p className="text-[11px] text-zinc-500">
+            <p className="text-xs text-zinc-400">
               {expected.transactionCount} paid synced transactions on {date}
             </p>
           </section>
@@ -348,7 +360,7 @@ export default function ReconciliationPage() {
               <AlertTriangle className="w-4 h-4 shrink-0" />
               {needsReview.length} {needsReview.length === 1 ? "sale needs" : "sales need"} a date
             </div>
-            <p className="text-[11px] text-amber-200/80 leading-relaxed">
+            <p className="text-xs text-amber-200 leading-relaxed">
               The phone&apos;s clock looked wrong when {needsReview.length === 1 ? "this sale" : "these sales"} synced, so{" "}
               {needsReview.length === 1 ? "it is" : "they are"} not counted in any day&apos;s cash, revenue or payouts yet. Pick the day each
               one belongs to.
@@ -357,13 +369,13 @@ export default function ReconciliationPage() {
               <div key={sale.id} className="p-3 rounded-lg bg-[#12141a] border border-amber-500/20 text-xs space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-zinc-200">{sale.barberName} · {sale.paymentMethod}</span>
-                  <span className="font-bold text-zinc-100 font-[family-name:var(--font-oswald)]">₱{sale.amount}</span>
+                  <span className="font-bold text-zinc-100 font-(family-name:--font-oswald)">₱{sale.amount}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-400">
+                <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
                   <div>Phone said: <span className="text-zinc-200">{manilaTime(sale.transactionTime)}</span></div>
                   <div>Server got it: <span className="text-zinc-200">{manilaTime(sale.receivedAt)}</span></div>
                 </div>
-                <div className="text-[10px] text-amber-300/80">
+                <div className="text-xs text-amber-300">
                   {sale.flag === "FUTURE_TIMESTAMP"
                     ? "Stamped later than it reached the server."
                     : `The phone's clock was off by about ${Math.round(Math.abs(sale.skewSeconds ?? 0) / 60)} minutes.`}
@@ -373,7 +385,7 @@ export default function ReconciliationPage() {
                     type="button"
                     onClick={() => handleReview(sale.id, "STATED_DATE")}
                     disabled={reviewingId !== null || sale.statedDate > todayStr}
-                    className="flex-1 px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 font-semibold hover:bg-zinc-800 disabled:opacity-40 cursor-pointer"
+                    className="flex-1 px-3 py-2 pointer-coarse:min-h-11 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 font-semibold hover:bg-zinc-800 disabled:opacity-40 cursor-pointer"
                     title={sale.statedDate > todayStr ? "That date has not happened yet" : undefined}
                   >
                     Keep {sale.statedDate}
@@ -382,7 +394,7 @@ export default function ReconciliationPage() {
                     type="button"
                     onClick={() => handleReview(sale.id, "RECEIVED_DATE")}
                     disabled={reviewingId !== null}
-                    className="flex-1 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200 font-semibold hover:bg-amber-500/20 disabled:opacity-40 cursor-pointer"
+                    className="flex-1 px-3 py-2 pointer-coarse:min-h-11 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200 font-semibold hover:bg-amber-500/20 disabled:opacity-40 cursor-pointer"
                   >
                     Use {sale.receivedDate}
                   </button>
@@ -395,13 +407,14 @@ export default function ReconciliationPage() {
         {/* Drawer count form */}
         <section className="space-y-3.5 p-4 rounded-xl bg-[#12141a] border border-[#232734] relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-          <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider font-[family-name:var(--font-oswald)]">
+          <h2 className="text-xs font-bold text-zinc-200 uppercase tracking-wider font-(family-name:--font-oswald)">
             Physical Drawer Cash Count
-          </span>
+          </h2>
 
           <div>
-            <label className="block text-xs text-zinc-400 mb-1 font-medium">Actual cash counted in drawer (₱)</label>
+            <label htmlFor="counted-cash" className="block text-xs text-zinc-400 mb-1 font-medium">Actual cash counted in drawer (₱)</label>
             <input
+              id="counted-cash"
               type="number"
               inputMode="decimal"
               min="0"
@@ -409,7 +422,7 @@ export default function ReconciliationPage() {
               placeholder="e.g. 2100.00"
               value={countedCash}
               onChange={(e) => setCountedCash(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[#181b24] border border-[#232734] text-white text-base font-[family-name:var(--font-oswald)] placeholder:text-zinc-600 focus:outline-none focus:border-red-500 transition-colors"
+              className="w-full px-3.5 py-2.5 pointer-coarse:min-h-11 rounded-xl bg-[#181b24] border border-[#232734] text-white text-base font-(family-name:--font-oswald) placeholder:text-zinc-500 focus:border-red-500 transition-colors"
             />
           </div>
 
@@ -444,31 +457,32 @@ export default function ReconciliationPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-zinc-400 mb-1 font-medium">Petty cash taken from drawer (₱)</label>
-              <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="e.g. 150.00" value={pettyCashAmount} onChange={(e) => setPettyCashAmount(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-[#181b24] border border-[#232734] text-white text-sm" />
+              <label htmlFor="petty-cash-amount" className="block text-xs text-zinc-400 mb-1 font-medium">Petty cash taken from drawer (₱)</label>
+              <input id="petty-cash-amount" type="number" inputMode="decimal" min="0" step="0.01" placeholder="e.g. 150.00" value={pettyCashAmount} onChange={(e) => setPettyCashAmount(e.target.value)} className="w-full px-3.5 py-2.5 pointer-coarse:min-h-11 rounded-xl bg-[#181b24] border border-[#232734] text-white text-base sm:text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1 font-medium">Petty cash note</label>
-              <input type="text" maxLength={255} placeholder="Ice, snacks, supplies" value={pettyCashNote} onChange={(e) => setPettyCashNote(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-[#181b24] border border-[#232734] text-white text-sm" />
+              <label htmlFor="petty-cash-note" className="block text-xs text-zinc-400 mb-1 font-medium">Petty cash note</label>
+              <input id="petty-cash-note" type="text" maxLength={255} placeholder="Ice, snacks, supplies" value={pettyCashNote} onChange={(e) => setPettyCashNote(e.target.value)} className="w-full px-3.5 py-2.5 pointer-coarse:min-h-11 rounded-xl bg-[#181b24] border border-[#232734] text-white text-base sm:text-sm" />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-400 mb-1 font-medium">Audit note (optional)</label>
+            <label htmlFor="audit-note" className="block text-xs text-zinc-400 mb-1 font-medium">Audit note (optional)</label>
             <input
+              id="audit-note"
               type="text"
               placeholder="e.g. Short ₱50 — discrepancy in coin change"
               value={note}
               onChange={(e) => setNote(e.target.value)}
               maxLength={500}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[#181b24] border border-[#232734] text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:border-red-500 transition-colors"
+              className="w-full px-3.5 py-2.5 pointer-coarse:min-h-11 rounded-xl bg-[#181b24] border border-[#232734] text-white text-base sm:text-sm placeholder:text-zinc-500 focus:border-red-500 transition-colors"
             />
           </div>
 
           <button
             onClick={handleSubmit}
             disabled={isSaving || !countedCash || !expected}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 active:scale-[0.98] text-white font-extrabold text-sm uppercase tracking-wider font-[family-name:var(--font-oswald)] shadow-xl shadow-red-950/60 ring-1 ring-red-400/40 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+            className="w-full py-3.5 rounded-xl bg-linear-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 active:scale-[0.98] text-white font-extrabold text-sm uppercase tracking-wider font-(family-name:--font-oswald) shadow-xl shadow-red-950/60 ring-1 ring-red-400/40 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
           >
             {isSaving ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -477,6 +491,9 @@ export default function ReconciliationPage() {
             )}
           </button>
         </section>
+
+        {/* Announces save and review results to screen readers; out of the layout flow. */}
+        <p aria-live="polite" className="sr-only">{feedback?.msg ?? ""}</p>
 
         {/* Feedback */}
         {feedback && (
@@ -499,9 +516,9 @@ export default function ReconciliationPage() {
         {/* Saved record */}
         {saved && (
           <section className="p-4 rounded-xl bg-[#12141a] border border-[#232734] space-y-3">
-            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)]">
+            <h2 className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-(family-name:--font-oswald)">
               Saved Audit Record · Revision {saved.revision}
-            </span>
+            </h2>
             {staleness?.stale && (
               <div className="flex items-start gap-2 p-2.5 rounded-lg text-xs border bg-amber-500/10 border-amber-500/30 text-amber-300">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -533,8 +550,8 @@ export default function ReconciliationPage() {
                 { label: "Total Revenue", value: `₱${saved.totalRevenue}` },
               ].map((r) => (
                 <div key={r.label} className="flex justify-between gap-2 text-xs p-2 rounded-lg bg-[#181b24] border border-[#232734]">
-                  <span className="text-zinc-500">{r.label}</span>
-                  <span className="font-bold text-zinc-200 font-[family-name:var(--font-oswald)]">{r.value}</span>
+                  <span className="text-zinc-400">{r.label}</span>
+                  <span className="font-bold text-zinc-200 font-(family-name:--font-oswald)">{r.value}</span>
                 </div>
               ))}
             </div>
@@ -565,8 +582,8 @@ export default function ReconciliationPage() {
             {saved.pettyCashNote && (
               <p className="text-xs text-zinc-400 italic">Petty cash: {saved.pettyCashNote}</p>
             )}
-            <p className="text-[10px] text-zinc-600">
-              Reconciled at {new Date(saved.reconciledAt).toLocaleString()}
+            <p className="text-xs text-zinc-400">
+              Reconciled at {manilaTime(saved.reconciledAt)} (Manila time)
             </p>
           </section>
         )}

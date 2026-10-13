@@ -28,6 +28,39 @@ body {
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
 }
 
+@layer base {
+  /* Tailwind 4 gives buttons the default arrow cursor; anything clickable gets the pointer back. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label:has(> input[type="file"]:not(:disabled)) {
+    cursor: pointer;
+  }
+
+  /* One visible keyboard focus ring on every control; the browser default is faint on these dark surfaces. */
+  :focus-visible {
+    outline: 2px solid var(--color-red-400, #f87171);
+    outline-offset: 2px;
+  }
+
+  /* A visually hidden file input still takes focus: show the ring on its button-styled label. */
+  label:has(> input[type="file"]:focus-visible) {
+    outline: 2px solid var(--color-red-400, #f87171);
+    outline-offset: 2px;
+  }
+}
+
+/* Respect the system "reduce motion" setting: no pulsing, spinning or sliding. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Barber Shop Signature Barber Pole Striping */
 .bg-barber-pole {
   background-image: repeating-linear-gradient(

@@ -113,17 +113,38 @@ export function QrPhCheckout({
     }
   }, [transactionId]);
 
+  // Escape closes the dialog, like the close button. The charge stays on the server; the shift
+  // log's "QR payment" button reopens it.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   const qr = phase.kind === "charge" ? phase.qr : null;
   const remaining = qr?.expiresAt ? new Date(qr.expiresAt).getTime() - now : null;
+  // What a screen reader announces as the payment moves on (the countdown is left out: it ticks every second).
+  const announcement = phase.kind === "charge" ? `Payment status: ${phase.status.toLowerCase()}` : phase.text;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-      <div className="w-full max-w-sm p-5 rounded-2xl bg-[#12141a] border border-violet-500/40 space-y-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="qrph-checkout-title"
+        className="w-full max-w-sm p-5 rounded-2xl bg-[#12141a] border border-violet-500/40 space-y-4"
+      >
+        <p aria-live="polite" className="sr-only">{announcement}</p>
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-lg flex items-center gap-2 text-violet-200">
+          <h2 id="qrph-checkout-title" className="font-bold text-lg flex items-center gap-2 text-violet-200">
             <QrCode className="w-5 h-5" /> QR Ph (test) · ₱{amount.toFixed(2)}
           </h2>
-          <button type="button" onClick={onClose} className="p-1 text-zinc-400 hover:text-white" aria-label="Close">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg text-zinc-400 hover:text-white"
+            aria-label="Close"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -135,7 +156,7 @@ export function QrPhCheckout({
         {phase.kind === "error" && (
           <div className="space-y-3">
             <p className="flex items-start gap-2 text-sm text-amber-300"><TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" /> {phase.text}</p>
-            <button type="button" onClick={() => { setPhase({ kind: "loading", text: "Syncing sale…" }); setAttempt((a) => a + 1); }} className="w-full py-2 rounded-lg border border-[#232734] text-zinc-200 text-sm">Try again</button>
+            <button type="button" onClick={() => { setPhase({ kind: "loading", text: "Syncing sale…" }); setAttempt((a) => a + 1); }} className="w-full py-2 pointer-coarse:min-h-11 rounded-lg border border-[#232734] text-zinc-200 text-sm">Try again</button>
           </div>
         )}
 
@@ -171,7 +192,7 @@ export function QrPhCheckout({
                 Open PayMongo test page to simulate payment
               </a>
             )}
-            <button type="button" onClick={checkStatus} disabled={checking} className="w-full py-2.5 rounded-lg bg-violet-600 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+            <button type="button" onClick={checkStatus} disabled={checking} className="w-full py-2.5 pointer-coarse:min-h-11 rounded-lg bg-violet-600 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
               <RefreshCw className={`w-4 h-4 ${checking ? "animate-spin" : ""}`} /> Check status
             </button>
           </div>

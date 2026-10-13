@@ -16,6 +16,7 @@ import {
   MapPin,
   CheckCircle2,
   QrCode,
+  LayoutDashboard,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
@@ -35,6 +36,7 @@ const destinations: Destination[] = [
   { href: "/shift-log", title: "Shift Log", body: "Every sale on this phone, its sync status, and anything that needs attention.", icon: History },
   { href: "/reconciliation", title: "End-of-Day Cash", body: "Count the drawer against expected cash after tips, payouts and petty cash.", icon: ClipboardCheck },
   { href: "/ledger", title: "Barber Ledger", body: "Daily 50/50 commission and payouts, from the rates saved at each sale.", icon: Wallet, ownerOnly: true },
+  { href: "/insights", title: "Insights", body: "Dashboards for any day, the math behind each total, and how well the forecast did.", icon: LayoutDashboard, ownerOnly: true },
   { href: "/payment-qr", title: "Payment QR", body: "Add each barber's GCash and Maya QR, shown when a customer pays by phone.", icon: QrCode, ownerOnly: true },
 ];
 
@@ -90,20 +92,20 @@ export default async function HomePage() {
   ];
 
   return (
-    <div className="relative min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white overflow-x-hidden">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-gradient-to-b from-red-600/15 via-red-950/5 to-transparent blur-3xl pointer-events-none" />
+    <div className="relative min-h-dvh bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white overflow-x-hidden">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-linear-to-b from-red-600/15 via-red-950/5 to-transparent blur-3xl pointer-events-none" />
 
       <main className="relative max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-16 space-y-14">
         {/* Hero */}
         <header className="flex flex-col items-center text-center gap-5">
-          <RuzzcoLogoBadge size={96} />
+          <RuzzcoLogoBadge size={96} alt="" />
           <div className="space-y-2">
-            <div className="flex items-center justify-center gap-2 text-[11px] font-semibold tracking-[0.25em] text-red-500 uppercase">
+            <div className="flex items-center justify-center gap-2 text-xs font-semibold tracking-[0.25em] text-red-500 uppercase">
               <span>Cut &amp; Shave</span>
-              <span className="text-zinc-600">•</span>
+              <span aria-hidden="true" className="text-zinc-600">•</span>
               <span className="text-zinc-400 tracking-[0.2em]">Caloocan City</span>
             </div>
-            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white uppercase font-[family-name:var(--font-oswald)] flex items-center justify-center gap-3">
+            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white uppercase font-(family-name:--font-oswald) flex items-center justify-center gap-3">
               Ruzzco Barbers
               <MustacheIcon className="w-8 h-4 text-red-600 shrink-0" />
             </h1>
@@ -116,7 +118,7 @@ export default async function HomePage() {
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             <Link
               href="/pos"
-              className="inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold text-sm shadow-xl shadow-red-950/60 ring-1 ring-red-400/40 transition-all group"
+              className="inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl bg-linear-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold text-sm shadow-xl shadow-red-950/60 ring-1 ring-red-400/40 transition-all group"
             >
               <Scissors className="w-4 h-4 group-hover:rotate-45 transition-transform" />
               Open the POS
@@ -131,7 +133,7 @@ export default async function HomePage() {
             </Link>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-zinc-500">
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-zinc-400">
             <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Usually open daily, 10 AM – 10 PM</span>
             <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Caloocan City</span>
           </div>
@@ -184,10 +186,10 @@ export default async function HomePage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2.5">
                     <d.icon className="w-5 h-5 text-red-500" />
-                    <span className="font-bold text-white uppercase tracking-wide font-[family-name:var(--font-oswald)]">{d.title}</span>
+                    <span className="font-bold text-white uppercase tracking-wide font-(family-name:--font-oswald)">{d.title}</span>
                   </div>
                   {d.ownerOnly ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full shrink-0">
                       <Lock className="w-3 h-3" /> Owner PIN
                     </span>
                   ) : (
@@ -225,7 +227,7 @@ export default async function HomePage() {
               {snapshot.services.map((s) => (
                 <li key={s.id} className="flex items-center justify-between px-4 py-3 text-sm">
                   <span className="text-zinc-200">{s.name}</span>
-                  <span className="font-bold text-white font-[family-name:var(--font-oswald)]">₱{Number(s.standardPrice).toFixed(2)}</span>
+                  <span className="font-bold text-white font-(family-name:--font-oswald)">₱{Number(s.standardPrice).toFixed(2)}</span>
                 </li>
               ))}
             </ul>
@@ -235,7 +237,7 @@ export default async function HomePage() {
         {/* Built */}
         <section>
           <div className="p-5 rounded-xl bg-[#12141a] border border-emerald-500/25 space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-emerald-300 font-[family-name:var(--font-oswald)]">Built so far</div>
+            <div className="text-xs font-bold uppercase tracking-wider text-emerald-300 font-(family-name:--font-oswald)">Built so far</div>
             <ul className="space-y-2">
               {built.map((item) => (
                 <li key={item} className="flex items-start gap-2 text-sm text-zinc-300">
@@ -247,13 +249,13 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <footer className="pt-6 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-4 text-xs text-zinc-500">
+        <footer className="pt-6 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-4 text-xs text-zinc-400">
           <div className="flex items-center gap-2">
             <BarberPoleIcon className="w-2 h-3.5" />
             <span>Ruzzco Barbers • Caloocan City</span>
           </div>
           <div className="flex items-center gap-4 font-mono">
-            <Link href="/api/v1/health" className="hover:text-red-400 transition-colors">health</Link>
+            <Link href="/api/v1/health" className="inline-flex items-center min-h-6 px-1 -mx-1 pointer-coarse:min-h-11 hover:text-red-400 transition-colors">health</Link>
             <span>SPCC BSIT Capstone</span>
           </div>
         </footer>
@@ -264,7 +266,7 @@ export default async function HomePage() {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="flex items-center gap-2 text-lg font-bold text-white tracking-wide uppercase font-[family-name:var(--font-oswald)]">
+    <h2 className="flex items-center gap-2 text-lg font-bold text-white tracking-wide uppercase font-(family-name:--font-oswald)">
       <BarberPoleIcon className="w-3 h-5" />
       {children}
     </h2>
@@ -275,8 +277,8 @@ function Stat({ label, value, note, accent = "text-white" }: { label: string; va
   return (
     <div className="p-4 rounded-xl bg-[#12141a] border border-[#232734] space-y-1 relative overflow-hidden">
       <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-      <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">{label}</div>
-      <div className={`text-2xl font-extrabold font-[family-name:var(--font-oswald)] ${accent}`}>{value}</div>
+      <div className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">{label}</div>
+      <div className={`text-2xl font-extrabold font-(family-name:--font-oswald) ${accent}`}>{value}</div>
       {note && <p className="text-xs text-zinc-400 truncate">{note}</p>}
     </div>
   );

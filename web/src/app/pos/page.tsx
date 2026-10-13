@@ -491,6 +491,19 @@ export default function MobilePOSPage() {
     return (await db.transactions.get(qrSaleId))?.synced === 1;
   }, [qrSaleId, triggerSync]);
 
+  // Escape closes the GCash/Maya dialog, like its Cancel button: nothing is recorded.
+  useEffect(() => {
+    if (!digitalMethod) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDigitalMethod(null);
+        setDigitalRef("");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [digitalMethod]);
+
   // ── Derived values ──────────────────────────────────────────────────────────
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
@@ -511,25 +524,25 @@ export default function MobilePOSPage() {
 
   if (!bindingLoaded) {
     return (
-      <div className="min-h-screen bg-[#0b0c10] flex flex-col items-center justify-center text-zinc-400 p-6 space-y-5">
+      <div className="min-h-dvh bg-[#0b0c10] flex flex-col items-center justify-center text-zinc-400 p-6 space-y-5">
         <div className="flex flex-col items-center gap-3">
-          <RuzzcoLogoBadge size={72} />
+          <RuzzcoLogoBadge size={72} alt="" />
           <div className="text-center space-y-1">
-            <h2 className="text-xl font-extrabold uppercase font-[family-name:var(--font-oswald)] tracking-wider text-white">
+            <h1 className="text-xl font-extrabold uppercase font-(family-name:--font-oswald) tracking-wider text-white">
               Ruzzco Barbers
-            </h2>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-red-500 font-semibold">
+            </h1>
+            <p className="text-xs uppercase tracking-[0.2em] text-red-500 font-semibold">
               Premium Cut &amp; Shave
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-400 pt-2">
+          <div role="status" className="flex items-center gap-2 text-xs text-zinc-400 pt-2">
             <RefreshCw className="w-4 h-4 animate-spin text-red-500" />
             <span>Initializing POS station…</span>
           </div>
         </div>
         {loadTimeout && (
           <div className="text-center space-y-2 max-w-xs pt-4">
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-zinc-400">
               Taking longer to initialize local cache.
             </p>
             <button
@@ -537,7 +550,7 @@ export default function MobilePOSPage() {
                 setBindingLoaded(true);
                 setShowBindModal(true);
               }}
-              className="px-4 py-2 text-xs font-semibold bg-[#161822] hover:bg-zinc-800 active:scale-95 text-red-400 rounded-lg border border-[#232734] cursor-pointer transition-all"
+              className="px-4 py-2 pointer-coarse:min-h-11 text-xs font-semibold bg-[#161822] hover:bg-zinc-800 active:scale-95 text-red-400 rounded-lg border border-[#232734] cursor-pointer transition-all"
             >
               Skip Loading &amp; Continue
             </button>
@@ -551,17 +564,17 @@ export default function MobilePOSPage() {
 
   if (showBindModal) {
     return (
-      <div className="min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased flex items-center justify-center p-6">
+      <div className="min-h-dvh bg-[#0b0c10] text-zinc-100 font-sans antialiased flex items-center justify-center p-6">
         <div className="w-full max-w-sm space-y-6">
           <div className="text-center space-y-3">
             <div className="mx-auto flex justify-center">
-              <RuzzcoLogoBadge size={64} />
+              <RuzzcoLogoBadge size={64} alt="" />
             </div>
             <div>
-              <span className="text-[10px] font-bold tracking-[0.25em] text-red-500 uppercase">
+              <span className="text-xs font-bold tracking-[0.25em] text-red-500 uppercase">
                 Station Setup
               </span>
-              <h1 className="text-2xl font-bold uppercase font-[family-name:var(--font-oswald)] text-white tracking-wide">
+              <h1 className="text-2xl font-bold uppercase font-(family-name:--font-oswald) text-white tracking-wide">
                 Assign Station Barber
               </h1>
             </div>
@@ -576,7 +589,7 @@ export default function MobilePOSPage() {
                 key={barber.id}
                 onClick={() => handleBindDevice(barber)}
                 disabled={isBinding}
-                className="w-full min-h-[64px] p-4 rounded-xl border border-[#232734] bg-[#12141a] hover:border-red-500/70 hover:bg-red-950/20 active:scale-[0.98] text-left transition-all cursor-pointer disabled:opacity-50 flex items-center justify-between gap-3 group"
+                className="w-full min-h-16 p-4 rounded-xl border border-[#232734] bg-[#12141a] hover:border-red-500/70 hover:bg-red-950/20 active:scale-[0.98] text-left transition-all cursor-pointer disabled:opacity-50 flex items-center justify-between gap-3 group"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-red-600/20 border border-red-500/30 text-red-400 group-hover:bg-red-600 group-hover:text-white transition-colors flex items-center justify-center font-bold text-sm">
@@ -584,7 +597,7 @@ export default function MobilePOSPage() {
                   </div>
                   <div>
                     <div className="font-semibold text-white">{barber.fullName}</div>
-                    <div className="text-xs text-zinc-500">
+                    <div className="text-xs text-zinc-400">
                       {Math.round(barber.commissionRate * 100)}% commission rate
                     </div>
                   </div>
@@ -595,7 +608,7 @@ export default function MobilePOSPage() {
           </div>
 
           {!isOnline && (
-            <p className="text-center text-[11px] text-zinc-500">
+            <p className="text-center text-xs text-zinc-400">
               Station is offline — barber assignment will sync upon reconnection.
             </p>
           )}
@@ -607,7 +620,7 @@ export default function MobilePOSPage() {
   // ── Main POS UI ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white">
+    <div className="min-h-dvh bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white">
       {/* Ambient Crimson Glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-64 bg-red-600/10 blur-3xl pointer-events-none" />
 
@@ -623,17 +636,23 @@ export default function MobilePOSPage() {
 
       {digitalMethod && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-[#12141a] border border-[#232734] rounded-2xl p-5 space-y-4 shadow-2xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="digital-payment-title"
+            className="w-full max-w-sm bg-[#12141a] border border-[#232734] rounded-2xl p-5 space-y-4 shadow-2xl"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Smartphone className={`w-5 h-5 ${digitalColor === "emerald" ? "text-emerald-400" : "text-blue-400"}`} />
-                <span className="font-bold text-white font-[family-name:var(--font-oswald)] uppercase tracking-wide">
+                <h2 id="digital-payment-title" className="font-bold text-white font-(family-name:--font-oswald) uppercase tracking-wide">
                   {digitalLabel} Payment
-                </span>
+                </h2>
               </div>
               <button
                 onClick={() => { setDigitalMethod(null); setDigitalRef(""); }}
-                className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                aria-label="Close"
+                className="inline-flex items-center justify-center min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -644,18 +663,18 @@ export default function MobilePOSPage() {
                 <div className="mx-auto mb-1 w-48 space-y-1.5">
                   {/* eslint-disable-next-line @next/next/no-img-element -- cached data URL from IndexedDB */}
                   <img src={modalQr.dataUrl} alt={`${digitalLabel} QR on file for ${binding?.barberName ?? "this barber"}`} className="w-full aspect-square object-contain rounded-xl bg-white p-2" />
-                  <p className="text-[11px] text-zinc-500 text-center">{digitalLabel} QR on file for {binding?.barberName}</p>
+                  <p className="text-xs text-zinc-400 text-center">{digitalLabel} QR on file for {binding?.barberName}</p>
                 </div>
               ) : modalQr === null ? (
                 <div className="mb-1 p-3 rounded-xl border border-dashed border-[#2c3140] text-center text-xs text-zinc-400">
                   No {digitalLabel} QR set up for {binding?.barberName}. Ask the owner to add one.
                 </div>
               ) : null}
-              <div className={`text-3xl font-extrabold text-center pt-2 font-[family-name:var(--font-oswald)] ${digitalColor === "emerald" ? "text-emerald-400" : "text-blue-400"}`}>
+              <div className={`text-3xl font-extrabold text-center pt-2 font-(family-name:--font-oswald) ${digitalColor === "emerald" ? "text-emerald-400" : "text-blue-400"}`}>
                 ₱{digitalTotal.toFixed(2)}
               </div>
               {previewTip > 0 && (
-                <p className="text-[11px] text-zinc-500 text-center">
+                <p className="text-xs text-zinc-400 text-center">
                   ₱{previewAmount.toFixed(2)} + ₱{previewTip.toFixed(2)} tip
                 </p>
               )}
@@ -668,10 +687,11 @@ export default function MobilePOSPage() {
                 type="text"
                 inputMode="numeric"
                 placeholder={`${digitalLabel} ref. no. (optional)`}
+                aria-label={`${digitalLabel} reference number (optional)`}
                 value={digitalRef}
                 onChange={(e) => setDigitalRef(e.target.value)}
                 maxLength={20}
-                className={`w-full px-3 py-2.5 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm placeholder:text-zinc-500 focus:outline-none transition-colors ${digitalColor === "emerald" ? "focus:border-emerald-500" : "focus:border-blue-500"}`}
+                className={`w-full px-3 py-2.5 pointer-coarse:min-h-11 rounded-lg bg-[#181b24] border border-[#232734] text-white text-base sm:text-sm placeholder:text-zinc-500 transition-colors ${digitalColor === "emerald" ? "focus:border-emerald-500" : "focus:border-blue-500"}`}
                 autoFocus
               />
             </div>
@@ -704,10 +724,11 @@ export default function MobilePOSPage() {
 
         {/* Header — full width */}
         <header className="flex items-center justify-between gap-2 border-b border-zinc-800/80 px-4 py-3 bg-[#0b0c10]/95 backdrop-blur-md sticky top-0 z-40">
-          <Link href="/" className="inline-flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group">
-            <RuzzcoLogoBadge size={30} showBorder={false} />
+          <h1 className="sr-only">Point of sale</h1>
+          <Link href="/" className="inline-flex items-center gap-2 pointer-coarse:min-h-11 text-zinc-400 hover:text-white transition-colors group">
+            <RuzzcoLogoBadge size={30} showBorder={false} alt="" />
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold tracking-wider text-base text-white uppercase font-[family-name:var(--font-oswald)]">
+              <span className="font-extrabold tracking-wider text-base text-white uppercase font-(family-name:--font-oswald)">
                 RUZZCO POS
               </span>
               <MustacheIcon className="w-4 h-2 text-red-600 hidden sm:inline-block" />
@@ -716,43 +737,46 @@ export default function MobilePOSPage() {
 
           {/* Bound barber badge */}
           {binding && (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-600/10 border border-red-500/30 text-red-300 text-[11px] font-medium">
-              <User className="w-3 h-3 text-red-400" />
-              <span className="font-bold">{binding.barberName}</span>
+            // One line: on narrow phones the name is shortened here (title has it in full); the card below shows it whole.
+            <div title={binding.barberName} className="flex min-w-0 items-center gap-1.5 px-3 py-1 rounded-full bg-red-600/10 border border-red-500/30 text-red-300 text-xs font-medium">
+              <User className="w-3 h-3 shrink-0 text-red-400" />
+              <span className="font-bold truncate">{binding.barberName}</span>
             </div>
           )}
 
           <div className="flex items-center gap-2">
             {/* Network badge */}
             <div
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
                 isOnline
                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                   : "bg-red-500/10 text-red-400 border-red-500/20"
               }`}
             >
+              {/* The word is visible from sm up; on phones it stays readable for screen readers. */}
               {isOnline ? (
-                <><Wifi className="w-3 h-3" /><span className="hidden sm:inline">Online</span></>
+                <><Wifi className="w-3 h-3" /><span className="sr-only sm:not-sr-only">Online</span></>
               ) : (
-                <><WifiOff className="w-3 h-3" /><span className="hidden sm:inline">Offline</span></>
+                <><WifiOff className="w-3 h-3" /><span className="sr-only sm:not-sr-only">Offline</span></>
               )}
             </div>
 
-            {/* Manual sync */}
+            {/* Manual sync. The counts are in the button's name; the badges only show them. */}
             <button
               onClick={() => void triggerSync()}
               disabled={isSyncing || !isOnline}
               title="Sync pending transactions"
-              className="relative p-2 rounded-lg bg-[#12141a] border border-[#232734] text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-40 transition-all cursor-pointer"
+              aria-label={`Sync now${(pendingCount ?? 0) > 0 ? `, ${pendingCount} waiting` : ""}${(rejectedSales?.length ?? 0) > 0 ? `, ${rejectedSales?.length} need attention` : ""}`}
+              className="relative inline-flex items-center justify-center min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg bg-[#12141a] border border-[#232734] text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-40 transition-all cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-red-400" : ""}`} />
               {(pendingCount ?? 0) > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-extrabold flex items-center justify-center animate-pulse">
+                <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-xs font-extrabold flex items-center justify-center animate-pulse">
                   {pendingCount}
                 </span>
               )}
               {(rejectedSales?.length ?? 0) > 0 && (
-                <span title="Sales needing attention" className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-black text-[9px] font-extrabold flex items-center justify-center">
+                <span aria-hidden="true" title="Sales needing attention" className="absolute -bottom-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-amber-500 text-black text-xs font-extrabold flex items-center justify-center">
                   {rejectedSales?.length}
                 </span>
               )}
@@ -762,15 +786,16 @@ export default function MobilePOSPage() {
             <button
               onClick={() => setShowBindModal(true)}
               title="Change device assignment"
-              className="p-2 rounded-lg bg-[#12141a] border border-[#232734] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-all cursor-pointer"
+              aria-label="Change the barber for this phone"
+              className="inline-flex items-center justify-center min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg bg-[#12141a] border border-[#232734] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-all cursor-pointer"
             >
               <Settings className="w-3.5 h-3.5" />
             </button>
           </div>
         </header>
 
-        {/* Feedback toasts */}
-        <div className="px-4 pt-2 space-y-1.5">
+        {/* Feedback toasts. A polite live region, so screen readers announce a saved sale or a sync result. */}
+        <div aria-live="polite" className="px-4 pt-2 space-y-1.5">
           {syncFeedback && (
             <div className="p-2.5 rounded-lg bg-[#12141a] border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
               <Sparkles className="w-3.5 h-3.5 text-red-400 shrink-0" />
@@ -791,10 +816,10 @@ export default function MobilePOSPage() {
 
           {/* ── Col 1: Service Selection ── */}
           <section className="space-y-3 sm:col-span-1">
-            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] flex items-center gap-1.5">
+            <h2 className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-(family-name:--font-oswald) flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-red-500" />
               Select Service
-            </span>
+            </h2>
 
             <div className="space-y-2.5">
               {services.map((service) => {
@@ -804,9 +829,10 @@ export default function MobilePOSPage() {
                     key={service.id}
                     onClick={() => setSelectedServiceId(service.id)}
                     type="button"
-                    className={`w-full min-h-[64px] p-4 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                    aria-pressed={isSelected}
+                    className={`w-full min-h-16 p-4 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
                       isSelected
-                        ? "bg-gradient-to-r from-red-950/40 via-[#181a24] to-[#12141a] border-red-600/80 text-white shadow-lg shadow-red-950/30 ring-1 ring-red-500/40"
+                        ? "bg-linear-to-r from-red-950/40 via-[#181a24] to-[#12141a] border-red-600/80 text-white shadow-lg shadow-red-950/30 ring-1 ring-red-500/40"
                         : "bg-[#12141a] border-[#232734] text-zinc-300 hover:bg-[#181b24] hover:border-zinc-700"
                     }`}
                   >
@@ -820,11 +846,11 @@ export default function MobilePOSPage() {
                       </div>
                       <div>
                         <div className="font-semibold text-sm text-white">{service.name}</div>
-                        <div className="text-[11px] text-zinc-400">Standard Service</div>
+                        <div className="text-xs text-zinc-400">Standard Service</div>
                       </div>
                     </div>
                     <div
-                      className={`font-extrabold text-lg font-[family-name:var(--font-oswald)] tracking-wide ${
+                      className={`font-extrabold text-lg font-(family-name:--font-oswald) tracking-wide ${
                         isSelected ? "text-white" : "text-zinc-300"
                       }`}
                     >
@@ -838,10 +864,10 @@ export default function MobilePOSPage() {
 
           {/* ── Col 2: Checkout ── */}
           <section className="space-y-3 sm:col-span-1">
-            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] flex items-center gap-1.5">
+            <h2 className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-(family-name:--font-oswald) flex items-center gap-1.5">
               <Banknote className="w-3.5 h-3.5 text-red-500" />
               Checkout — ₱{previewAmount.toFixed(2)}
-            </span>
+            </h2>
 
             {/* Barber attribution display */}
             {binding && (
@@ -853,7 +879,7 @@ export default function MobilePOSPage() {
                   </div>
                   <div>
                     <div className="font-bold text-sm text-white">{binding.barberName}</div>
-                    <div className="text-[11px] text-zinc-500">Attributed Barber for this station</div>
+                    <div className="text-xs text-zinc-400">Attributed Barber for this station</div>
                   </div>
                 </div>
                 <BarberPoleIcon className="w-2.5 h-6 opacity-75 shrink-0" />
@@ -861,16 +887,18 @@ export default function MobilePOSPage() {
             )}
 
             <div className="p-3 rounded-xl bg-[#12141a] border border-[#232734] space-y-2.5">
-              <div className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">Adjust total</div>
-              <div className="flex gap-2">
+              <div id="adjust-total-label" className="text-xs uppercase tracking-wider text-zinc-400 font-semibold">Adjust total</div>
+              {/* aria-pressed tells screen readers which tip is chosen; sighted users see the green fill. */}
+              <div role="group" aria-labelledby="adjust-total-label" className="flex gap-2">
                 {(["NONE", "20", "50"] as const).map((choice) => (
-                  <button key={choice} type="button" onClick={() => setTipChoice(choice)} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${tipChoice === choice ? "bg-emerald-600/30 text-emerald-200 border-emerald-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>{choice === "NONE" ? "No tip" : `+₱${choice} tip`}</button>
+                  <button key={choice} type="button" aria-pressed={tipChoice === choice} onClick={() => setTipChoice(choice)} className={`flex-1 py-2 pointer-coarse:min-h-11 rounded-lg text-xs font-semibold border ${tipChoice === choice ? "bg-emerald-600/30 text-emerald-200 border-emerald-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>{choice === "NONE" ? "No tip" : `+₱${choice} tip`}</button>
                 ))}
-                <button type="button" onClick={() => setTipChoice("CUSTOM")} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${tipChoice === "CUSTOM" ? "bg-emerald-600/30 text-emerald-200 border-emerald-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>Custom tip</button>
+                <button type="button" aria-pressed={tipChoice === "CUSTOM"} onClick={() => setTipChoice("CUSTOM")} className={`flex-1 py-2 pointer-coarse:min-h-11 rounded-lg text-xs font-semibold border ${tipChoice === "CUSTOM" ? "bg-emerald-600/30 text-emerald-200 border-emerald-500/60" : "bg-[#181b24] text-zinc-400 border-[#232734]"}`}>Custom tip</button>
               </div>
-              {tipChoice === "CUSTOM" && <input type="number" min="0" step="0.01" inputMode="decimal" placeholder="Tip amount" value={customTipInput} onChange={(e) => setCustomTipInput(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm" />}
-              <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ₱${previewListPrice.toFixed(2)})`} value={customAmountInput} onChange={(e) => setCustomAmountInput(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm" />
-              <div className="flex justify-between text-[11px] text-zinc-500"><span>List ₱{previewListPrice.toFixed(2)}</span><span className="text-zinc-300">Paid ₱{previewAmount.toFixed(2)} · tip ₱{previewTip.toFixed(2)}</span></div>
+              {/* 16px text on phones so iOS does not zoom in on focus. */}
+              {tipChoice === "CUSTOM" && <input type="number" min="0" step="0.01" inputMode="decimal" placeholder="Tip amount" aria-label="Custom tip amount (₱)" value={customTipInput} onChange={(e) => setCustomTipInput(e.target.value)} className="w-full px-3 py-2 pointer-coarse:min-h-11 rounded-lg bg-[#181b24] border border-[#232734] text-white text-base sm:text-sm" />}
+              <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ₱${previewListPrice.toFixed(2)})`} aria-label={`Custom amount (₱), optional. Default ₱${previewListPrice.toFixed(2)}`} value={customAmountInput} onChange={(e) => setCustomAmountInput(e.target.value)} className="w-full px-3 py-2 pointer-coarse:min-h-11 rounded-lg bg-[#181b24] border border-[#232734] text-white text-base sm:text-sm" />
+              <div className="flex justify-between text-xs text-zinc-400"><span>List ₱{previewListPrice.toFixed(2)}</span><span className="text-zinc-300">Paid ₱{previewAmount.toFixed(2)} · tip ₱{previewTip.toFixed(2)}</span></div>
             </div>
 
             {/* Cash button */}
@@ -878,10 +906,10 @@ export default function MobilePOSPage() {
               onClick={handleCashCheckout}
               disabled={!binding || isRecording}
               type="button"
-              className="w-full min-h-[60px] py-4 px-6 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 active:scale-[0.98] text-white font-extrabold text-base shadow-xl shadow-red-950/60 ring-1 ring-red-400/40 flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50"
+              className="w-full min-h-15 py-4 px-6 rounded-xl bg-linear-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 active:scale-[0.98] text-white font-extrabold text-base shadow-xl shadow-red-950/60 ring-1 ring-red-400/40 flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50"
             >
               <Banknote className="w-5 h-5 stroke-[2.5]" />
-              <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
+              <span className="font-(family-name:--font-oswald) uppercase tracking-wider text-lg">
                 Cash — ₱{previewAmount.toFixed(2)}
               </span>
             </button>
@@ -891,10 +919,10 @@ export default function MobilePOSPage() {
               onClick={() => { setDigitalRef(""); setDigitalMethod("GCASH"); }}
               disabled={!binding || isRecording}
               type="button"
-              className="w-full min-h-[60px] py-4 px-6 rounded-xl border-2 border-blue-500/60 bg-blue-600/15 hover:bg-blue-600/25 active:scale-[0.98] text-blue-300 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50 shadow-lg shadow-blue-950/30"
+              className="w-full min-h-15 py-4 px-6 rounded-xl border-2 border-blue-500/60 bg-blue-600/15 hover:bg-blue-600/25 active:scale-[0.98] text-blue-300 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50 shadow-lg shadow-blue-950/30"
             >
               <Smartphone className="w-5 h-5 stroke-[2.5]" />
-              <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
+              <span className="font-(family-name:--font-oswald) uppercase tracking-wider text-lg">
                 GCash — ₱{previewAmount.toFixed(2)}
               </span>
             </button>
@@ -903,10 +931,10 @@ export default function MobilePOSPage() {
               onClick={() => { setDigitalRef(""); setDigitalMethod("MAYA"); }}
               disabled={!binding || isRecording}
               type="button"
-              className="w-full min-h-[60px] py-4 px-6 rounded-xl border-2 border-emerald-500/60 bg-emerald-600/15 hover:bg-emerald-600/25 active:scale-[0.98] text-emerald-300 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50 shadow-lg shadow-emerald-950/30"
+              className="w-full min-h-15 py-4 px-6 rounded-xl border-2 border-emerald-500/60 bg-emerald-600/15 hover:bg-emerald-600/25 active:scale-[0.98] text-emerald-300 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50 shadow-lg shadow-emerald-950/30"
             >
               <Smartphone className="w-5 h-5 stroke-[2.5]" />
-              <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
+              <span className="font-(family-name:--font-oswald) uppercase tracking-wider text-lg">
                 Maya — ₱{previewAmount.toFixed(2)}
               </span>
             </button>
@@ -917,20 +945,20 @@ export default function MobilePOSPage() {
                   onClick={() => { void handleQrphCheckout(); }}
                   disabled={!binding || isRecording || !isOnline}
                   type="button"
-                  className="w-full min-h-[60px] py-4 px-6 rounded-xl border-2 border-violet-500/60 bg-violet-600/15 hover:bg-violet-600/25 active:scale-[0.98] text-violet-200 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50"
+                  className="w-full min-h-15 py-4 px-6 rounded-xl border-2 border-violet-500/60 bg-violet-600/15 hover:bg-violet-600/25 active:scale-[0.98] text-violet-200 font-extrabold text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <QrCode className="w-5 h-5 stroke-[2.5]" />
-                  <span className="font-[family-name:var(--font-oswald)] uppercase tracking-wider text-lg">
+                  <span className="font-(family-name:--font-oswald) uppercase tracking-wider text-lg">
                     QR Ph (test) — ₱{previewAmount.toFixed(2)}
                   </span>
                 </button>
                 {!isOnline && (
-                  <p className="text-center text-[11px] text-amber-400">Needs internet. Use cash, GCash or Maya.</p>
+                  <p className="text-center text-xs text-amber-400">Needs internet. Use cash, GCash or Maya.</p>
                 )}
               </div>
             )}
 
-            <p className="text-center text-[11px] text-zinc-500">
+            <p className="text-center text-xs text-zinc-400">
               Saves to device immediately — syncs to server when online
             </p>
           </section>
@@ -938,17 +966,19 @@ export default function MobilePOSPage() {
           {/* ── Col 3: Mini shift preview + link ── */}
           <section className="space-y-3 sm:col-span-2 lg:col-span-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] flex items-center gap-1.5">
+              <h2 className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-(family-name:--font-oswald) flex items-center gap-1.5">
                 <List className="w-3.5 h-3.5 text-red-500" />
                 Recent Cuts
-              </span>
+              </h2>
+              {/* Padding with matching negative margins: a bigger target without moving the layout. */}
               <Link
                 href="/shift-log"
-                className="inline-flex items-center gap-1 text-[11px] text-zinc-500 hover:text-red-400 transition-colors"
+                aria-label={`View all cuts${(pendingCount ?? 0) > 0 ? `, ${pendingCount} waiting to sync` : ""}`}
+                className="inline-flex items-center gap-1 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-xs text-zinc-400 hover:text-red-400 transition-colors"
               >
                 View all
                 {(pendingCount ?? 0) > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-extrabold">
+                  <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-xs font-extrabold">
                     {pendingCount}
                   </span>
                 )}
@@ -958,7 +988,7 @@ export default function MobilePOSPage() {
 
             <div className="space-y-2">
               {(!recentTransactions || recentTransactions.length === 0) ? (
-                <div className="p-5 rounded-xl bg-[#12141a]/60 border border-dashed border-[#232734] text-center text-xs text-zinc-500 space-y-1">
+                <div className="p-5 rounded-xl bg-[#12141a]/60 border border-dashed border-[#232734] text-center text-xs text-zinc-400 space-y-1">
                   <p>No cuts logged yet today.</p>
                 </div>
               ) : (
@@ -969,29 +999,30 @@ export default function MobilePOSPage() {
                   >
                     <div className="truncate">
                       <span className="font-medium text-zinc-200">{tx.serviceName}</span>
-                      <span className="text-zinc-500 ml-1">• {tx.barberName}</span>
+                      <span className="text-zinc-400 ml-1">• {tx.barberName}</span>
                     </div>
+                    {/* Icons carry the payment method and sync status, so each one has a name for screen readers. */}
                     <div className="flex items-center gap-1.5 shrink-0">
                       {tx.paymentMethod === "QRPH" ? (
-                        <span className="w-4 h-4 rounded-full flex items-center justify-center bg-violet-500/20 text-violet-300" title="QR Ph (test)">
+                        <span role="img" aria-label="QR Ph (test)" className="w-4 h-4 rounded-full flex items-center justify-center bg-violet-500/20 text-violet-300" title="QR Ph (test)">
                           <QrCode className="w-2.5 h-2.5" />
                         </span>
                       ) : tx.paymentMethod === "GCASH" || tx.paymentMethod === "MAYA" ? (
-                        <span className={`w-4 h-4 rounded-full flex items-center justify-center ${tx.paymentMethod === "MAYA" ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400"}`} title={tx.paymentMethod === "MAYA" ? "Maya" : "GCash"}>
+                        <span role="img" aria-label={tx.paymentMethod === "MAYA" ? "Maya" : "GCash"} className={`w-4 h-4 rounded-full flex items-center justify-center ${tx.paymentMethod === "MAYA" ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400"}`} title={tx.paymentMethod === "MAYA" ? "Maya" : "GCash"}>
                           <Smartphone className="w-2.5 h-2.5" />
                         </span>
                       ) : (
-                        <span className="w-4 h-4 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center" title="Cash">
+                        <span role="img" aria-label="Cash" className="w-4 h-4 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center" title="Cash">
                           <Banknote className="w-2.5 h-2.5" />
                         </span>
                       )}
-                      <span className="font-bold text-zinc-100 font-[family-name:var(--font-oswald)]">₱{Number(tx.totalAmount).toFixed(2)}</span>
+                      <span className="font-bold text-zinc-100 font-(family-name:--font-oswald)">₱{Number(tx.totalAmount).toFixed(2)}</span>
                       {tx.synced === 1 ? (
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        <span role="img" aria-label="Synced" title="Synced"><CheckCircle2 className="w-3 h-3 text-emerald-400" /></span>
                       ) : isRejected(tx) ? (
-                        <span title="Needs attention"><TriangleAlert className="w-3 h-3 text-amber-400" /></span>
+                        <span role="img" aria-label="Needs attention" title="Needs attention"><TriangleAlert className="w-3 h-3 text-amber-400" /></span>
                       ) : (
-                        <Clock className="w-3 h-3 text-red-400" />
+                        <span role="img" aria-label="Waiting to sync" title="Waiting to sync"><Clock className="w-3 h-3 text-red-400" /></span>
                       )}
                     </div>
                   </div>
@@ -1003,7 +1034,7 @@ export default function MobilePOSPage() {
             <div className="space-y-2 pt-1">
               <Link
                 href="/shift-log"
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#232734] bg-[#12141a] text-xs text-zinc-400 hover:text-white hover:border-red-500/40 transition-all"
+                className="w-full flex items-center justify-center gap-2 py-2.5 pointer-coarse:min-h-11 rounded-xl border border-[#232734] bg-[#12141a] text-xs text-zinc-400 hover:text-white hover:border-red-500/40 transition-all"
               >
                 <List className="w-3.5 h-3.5 text-red-500" />
                 Full Shift Log &amp; EOD Summary
@@ -1011,7 +1042,7 @@ export default function MobilePOSPage() {
               </Link>
               <Link
                 href="/reconciliation"
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#232734] bg-[#12141a] text-xs text-zinc-400 hover:text-white hover:border-red-500/40 transition-all"
+                className="w-full flex items-center justify-center gap-2 py-2.5 pointer-coarse:min-h-11 rounded-xl border border-[#232734] bg-[#12141a] text-xs text-zinc-400 hover:text-white hover:border-red-500/40 transition-all"
               >
                 <Banknote className="w-3.5 h-3.5 text-red-500" />
                 Daily Cash Reconciliation

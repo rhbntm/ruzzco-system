@@ -25,24 +25,27 @@ export function BarberPoleIcon({ className = "w-3.5 h-6" }: { className?: string
   return (
     <div
       className={`relative rounded-full overflow-hidden border border-zinc-600 shadow-sm flex flex-col justify-between shrink-0 ${className}`}
-      title="Barber Pole"
+      aria-hidden="true"
     >
-      <div className="h-1 bg-gradient-to-r from-zinc-300 via-zinc-100 to-zinc-400 shrink-0" />
+      <div className="h-1 bg-linear-to-r from-zinc-300 via-zinc-100 to-zinc-400 shrink-0" />
       <div className="w-full h-full bg-barber-pole animate-pulse" style={{ animationDuration: "3s" }} />
-      <div className="h-1 bg-gradient-to-r from-zinc-300 via-zinc-100 to-zinc-400 shrink-0" />
+      <div className="h-1 bg-linear-to-r from-zinc-300 via-zinc-100 to-zinc-400 shrink-0" />
     </div>
   );
 }
 
 /**
- * Circular official crest logo badge
+ * Circular official crest logo badge. Pass alt="" when the shop name is already written next to it,
+ * so screen readers do not read it twice.
  */
 export function RuzzcoLogoBadge({
   size = 40,
   showBorder = true,
+  alt = "Ruzzco Barbers",
 }: {
   size?: number;
   showBorder?: boolean;
+  alt?: string;
 }) {
   return (
     <div
@@ -53,7 +56,7 @@ export function RuzzcoLogoBadge({
     >
       <Image
         src="/ruzzco-logo.jpg"
-        alt="Ruzzco Barbers"
+        alt={alt}
         width={size}
         height={size}
         className="object-cover scale-110"
