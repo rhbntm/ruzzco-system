@@ -4,7 +4,7 @@ Repo: `ruzzco-system`. Status: **BUILT 2026-10-14 (Brent said go ahead; the cons
 Goal: on `/ledger`, above the per-barber payout cards, the owner sees a summary for a day, a week or a month: what came in (by payment method and by service), what goes out (barber commissions, tips, petty cash) and what is left for the shop. Read-only; it never changes how a sale or payout is recorded.
 Goal (Part B): the home page shows a simple forecast, the Random Forest prediction only; a separate owner-only page, `/forecast`, holds the detailed forecast and the method comparison. Part B takes over the on-hold amendment of slice 9 (see §10).
 The sections below are Part A (ledger summary) unless headed Part B.
-Origin: the 2026-10-12 advisor consult asked to "add a summary of the breakdown of the cost to the ledger" (record: `../ruzzco-barbers/30_Decisions/2026-10-12-advisor-consult-ch3-and-system-requests.md`, request 3). Brent reads this as the ledger staying and confirmed on 2026-10-14 that it stays (still to be confirmed with Quiza 2026-10-19). It reverses the 2026-09-28 "remove the ledger" request (CLAUDE.md Client rules).
+Origin: the 2026-10-12 advisor consult asked to "add a summary of the breakdown of the cost to the ledger" (record: `../ruzzco-barbers/20_Decisions/2026-10-12-advisor-consult-ch3-and-system-requests.md`, request 3). Brent reads this as the ledger staying and confirmed on 2026-10-14 that it stays (still to be confirmed with Quiza 2026-10-19). It reverses the 2026-09-28 "remove the ledger" request (CLAUDE.md Client rules).
 
 ## 1. Scope boundary (read first)
 
@@ -83,7 +83,7 @@ Still open: is "Left for the shop" the right bottom line label? Should the Week 
 
 ## 9. Also at build time
 
-- `docs/sessions/` log per CLAUDE.md. A decision record in `../ruzzco-barbers/30_Decisions/` only if Brent wants one.
+- `docs/sessions/` log per CLAUDE.md. A decision record in `../ruzzco-barbers/20_Decisions/` only if Brent wants one.
 - If the consult changes the meaning in §2.1, rewrite §2 to §4 before building.
 
 ## 10. Part B — Forecast: simple home panel and a `/forecast` report page
