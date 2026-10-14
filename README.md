@@ -72,3 +72,5 @@ docker compose up -d ml-service                       # serve on http://localhos
 Commands, tests and the rules around the forecast are in `CLAUDE.md`.
 
 ---
+
+test
