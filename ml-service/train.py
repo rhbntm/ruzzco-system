@@ -93,7 +93,8 @@ def comparison_summary(evaluation, basis, served=SERVED_METHOD):
 
     Built from the evaluation that feeds the dashboard (the test weeks, else the reference
     weeks) and saved in metadata.json next to the model it describes. Errors are in customers
-    per day, rounded to 2 decimals. Per-week errors are not included.
+    per day, rounded to 2 decimals. `weeks` (slice 10) holds each tested week's errors, oldest
+    first, with no day counts.
     """
     return {
         "basis": basis,
@@ -101,6 +102,14 @@ def comparison_summary(evaluation, basis, served=SERVED_METHOD):
         "served": served,
         "mean": {method: round(value, 2) for method, value in evaluation["mean"].items()},
         "spread": {method: round(value, 2) for method, value in evaluation["spread"].items()},
+        "weeks": [
+            {
+                "start": week["start"].date().isoformat(),
+                "end": week["end"].date().isoformat(),
+                "mae": {method: round(value, 2) for method, value in week["mae"].items()},
+            }
+            for week in evaluation["weeks"]
+        ],
     }
 
 

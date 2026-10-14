@@ -4,7 +4,7 @@
  *
  *   npm run test:forecast-comparison
  */
-import { METHOD_NAMES, buildComparisonView } from "../src/lib/forecast-comparison";
+import { METHOD_NAMES, METHOD_NOTES, buildComparisonView, buildReportView } from "../src/lib/forecast-comparison";
 import type { Comparison } from "../src/lib/forecast";
 
 let passed = 0;
@@ -71,6 +71,23 @@ console.log("\nNothing saved");
 check("null gives no view", buildComparisonView(null, date) === null);
 check("undefined gives no view", buildComparisonView(undefined, date) === null);
 check("a comparison of only unknown methods gives no view", buildComparisonView(make({ served: "ridge" }, ["ridge"]), date) === null);
+
+console.log("\nDetailed report (slice 10)");
+const weeks = [
+  { start: "2026-09-26", end: "2026-10-02", mae: Object.fromEntries(ALL.map((m, i) => [m, 2 - i / 10])) },
+  { start: "2026-10-03", end: "2026-10-09", mae: Object.fromEntries(ALL.map((m, i) => [m, 3 - i / 10])) },
+];
+const report = buildReportView(make({ weeks }), date)!;
+check("methods are ranked smallest error first", report.ranked.every((r, i) => i === 0 || report.ranked[i - 1].mean <= r.mean));
+check("the longest bar belongs to the largest error", report.maxMean === Math.max(...report.ranked.map((r) => r.mean)));
+check("the served method is marked once in the ranking", report.ranked.filter((r) => r.served).length === 1);
+check("every ranked method has a note", report.ranked.every((r) => r.note === METHOD_NOTES[r.method] && r.note.length > 0));
+check("table columns follow the group order", report.methodsInTable.join() === ALL.join());
+check("weeks keep their order and name a date range", report.weeks?.length === 2 && report.weeks[0].label === "<2026-09-26> to <2026-10-02>");
+check("spread is carried for the swing row", report.spread.average === 0.5);
+const old = buildReportView(make(), date)!;
+check("a run saved without weeks has no week rows but still ranks", old.weeks === null && old.ranked.length === ALL.length);
+check("nothing saved gives no report", buildReportView(null, date) === null);
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

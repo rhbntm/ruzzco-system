@@ -3,17 +3,10 @@
 // Owner-only 7-day forecast (slice 7). Rendered only when the home page found the owner cookie;
 // starts from the forecast saved in MySQL and tries one refresh when that run is not from today.
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LineChart, LockKeyhole, RefreshCw, WifiOff } from "lucide-react";
 import type { SerializedForecast } from "@/lib/forecast";
-import { buildComparisonView } from "@/lib/forecast-comparison";
-
-const BASELINE_NAMES: Record<string, string> = {
-  average: "the plain average",
-  weekday: "the average for that weekday",
-  last7: "the average of the last 7 open days",
-  naive: "the last open day's count",
-};
 
 const peso = (value: number) => `₱${Math.round(value).toLocaleString("en-PH")}`;
 
@@ -126,7 +119,7 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
             <p>
               On the last {run.weeksTested} weeks of logbook records, this forecast was off by about{" "}
               {Number(run.typicalErrorCustomers)} customers (about {peso(Number(run.typicalErrorCustomers) * Number(run.avgTicket))})
-              a day. Guessing {BASELINE_NAMES[run.bestBaseline] ?? run.bestBaseline} was off by {Number(run.bestBaselineError)}.
+              a day.
             </p>
             <p>
               Based on the logbook from {formatDate(run.dataFrom, { month: "short", day: "numeric", year: "numeric" })} to{" "}
@@ -135,76 +128,14 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
             </p>
           </div>
 
-          <MethodComparison run={run} />
+          <Link href="/forecast" className="inline-block text-sm font-semibold text-red-400 hover:text-red-300">
+            See the detailed forecast →
+          </Link>
         </>
       ) : (
         !busy && <p className="text-sm text-zinc-400">No saved forecast covers today yet. Start the forecast service and press Refresh forecast.</p>
       )}
     </section>
-  );
-}
-
-// Slice 9: how Random Forest did against the other methods, from the comparison saved with the run,
-// so it still shows when the forecast service is down.
-function MethodComparison({ run }: { run: NonNullable<SerializedForecast["run"]> }) {
-  const shortDate = (iso: string) => formatDate(iso, { month: "short", day: "numeric", year: "numeric" });
-  const view = buildComparisonView(run.comparison, shortDate);
-  return (
-    <div className="pt-4 border-t border-[#232734] space-y-3">
-      <h3 className="font-bold text-white uppercase tracking-wide text-sm font-[family-name:var(--font-oswald)]">How the methods compare</h3>
-      {view ? (
-        <>
-          <p className="text-xs text-zinc-400 leading-relaxed">
-            Each method guessed how many customers came on each day of weeks it had not seen. The number is how far off it was, on
-            average, in customers per day. <span className="text-zinc-200 font-semibold">Lower is better.</span> “Week-to-week swing” is
-            how much that changed from one week to the next; smaller means steadier.
-          </p>
-          <p className="text-xs font-semibold text-amber-200">{view.basisLine}</p>
-          {view.groups.map((group) => (
-            <div key={group.title} className="space-y-1">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">{group.title}</p>
-              <div className="rounded-lg border border-[#232734] divide-y divide-[#232734]">
-                <div className="hidden sm:grid grid-cols-[1fr_9rem_9rem] gap-2 px-3 py-1.5 text-[10px] text-zinc-500 uppercase tracking-wider">
-                  <span>Method</span>
-                  <span className="text-right">Off by (customers a day)</span>
-                  <span className="text-right">Week-to-week swing</span>
-                </div>
-                {group.rows.map((row) => (
-                  <div
-                    key={row.method}
-                    className={`px-3 py-2 sm:grid sm:grid-cols-[1fr_9rem_9rem] sm:gap-2 sm:items-center text-sm ${
-                      row.served ? "bg-red-500/10 ring-1 ring-inset ring-red-500/40" : ""
-                    }`}
-                  >
-                    <div className="text-zinc-200">
-                      {row.name}
-                      {row.served && <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-red-300">Used for this forecast</span>}
-                    </div>
-                    <div className="flex justify-between sm:block sm:text-right text-white font-semibold">
-                      <span className="sm:hidden text-xs font-normal text-zinc-500">Off by</span>
-                      {row.mean.toFixed(2)}
-                    </div>
-                    <div className="flex justify-between sm:block sm:text-right text-zinc-300">
-                      <span className="sm:hidden text-xs text-zinc-500">Week-to-week swing</span>
-                      {row.spread === null ? "—" : row.spread.toFixed(2)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          <p className="text-xs text-zinc-300">
-            Random Forest beat the best simple method ({BASELINE_NAMES[run.bestBaseline] ?? run.bestBaseline}) in {run.weeksRfWon} of{" "}
-            {run.weeksTested} weeks.
-          </p>
-          <p className="text-[11px] text-zinc-500">Saved with the forecast on {shortDate(run.createdOn)}.</p>
-        </>
-      ) : (
-        <p className="text-sm text-zinc-400">
-          No comparison was saved with this forecast. Press Refresh forecast once the forecast service has been retrained.
-        </p>
-      )}
-    </div>
   );
 }
 
