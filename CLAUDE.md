@@ -5,6 +5,8 @@ Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). T
 
 @web/AGENTS.md
 
+**Contributor on a fork?** This file is written for the repo owner ("I/me" = Brent). Read `CONTRIBUTING.md`, section "For Claude", first; it says which parts of this file to skip.
+
 ## Layout and commands
 
 - Repo root: `docker-compose.yml` (MySQL 8, host port 3307, db `ruzzco_db`; `ml-service` on host port 8001), `web/` and `ml-service/`.
