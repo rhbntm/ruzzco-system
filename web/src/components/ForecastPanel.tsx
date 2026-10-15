@@ -155,7 +155,12 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
 }
 
 // Shown instead of the panel when the owner cookie is missing. No forecast numbers reach this page.
-export function ForecastLocked() {
+// /insights reuses it with its own wording.
+export function ForecastLocked({
+  title = "Forecast",
+  description = "Expected customers and revenue for the next 7 days. Owner only.",
+  submitLabel = "Show forecast",
+}: { title?: string; description?: string; submitLabel?: string } = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pin, setPin] = useState("");
@@ -191,13 +196,13 @@ export function ForecastLocked() {
           <span aria-hidden="true" className="w-9 h-9 rounded-lg bg-brass/10 ring-1 ring-brass/40 text-brass-bright flex items-center justify-center shrink-0">
             <LineChart className="w-4.5 h-4.5" />
           </span>
-          <span className="rz-title text-xl">Forecast</span>
+          <span className="rz-title text-xl">{title}</span>
         </div>
         <span className="rz-pill rz-pill-brass uppercase tracking-wider">
           <LockKeyhole className="w-3 h-3" /> Owner PIN
         </span>
       </div>
-      <p className="text-sm text-dust leading-relaxed">Expected customers and revenue for the next 7 days. Owner only.</p>
+      <p className="text-sm text-dust leading-relaxed">{description}</p>
       {open ? (
         <form
           onSubmit={(event) => {
@@ -217,7 +222,7 @@ export function ForecastLocked() {
             aria-label="Owner PIN"
           />
           <button disabled={busy || !pin} className="rz-btn rz-btn-primary px-5 pointer-coarse:min-h-11">
-            {busy ? "Checking…" : "Show forecast"}
+            {busy ? "Checking…" : submitLabel}
           </button>
         </form>
       ) : (

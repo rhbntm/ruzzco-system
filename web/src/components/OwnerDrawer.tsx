@@ -2,13 +2,13 @@
 
 // The owner's drawer: the counter's own drawer, under the day's tools. It starts shut: the front
 // carries a brass nameplate, the lock and the pull, and the whole front is its handle. Out slides a
-// tray with the owner's four tools: Barber Ledger, Detailed Forecast and Payment QR (each page
+// tray with the owner's tools: Barber Ledger, Detailed Forecast, Insights and Payment QR (each page
 // still asks for the PIN itself) and the 7-day forecast, which shows its numbers only once the
 // owner PIN has been entered on this device. Until then no figure reaches the page.
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, LineChart, LockKeyhole, LockKeyholeOpen, QrCode, TriangleAlert, Wallet } from "lucide-react";
+import { ArrowRight, LayoutDashboard, LineChart, LockKeyhole, LockKeyholeOpen, QrCode, TriangleAlert, Wallet } from "lucide-react";
 import type { SerializedForecast } from "@/lib/forecast";
 import { ForecastLocked, ForecastPanel } from "@/components/ForecastPanel";
 
@@ -18,6 +18,7 @@ type OwnerPage = { href: string; title: string; body: string; icon: LucideIcon }
 const ownerPages: OwnerPage[] = [
   { href: "/ledger", title: "Barber Ledger", body: "View and record each barber's daily payout.", icon: Wallet },
   { href: "/forecast", title: "Detailed Forecast", body: "How the 7-day forecast compares with simpler guesses and other models.", icon: LineChart },
+  { href: "/insights", title: "Insights", body: "Dashboards, trends and calculations from the shop's own numbers.", icon: LayoutDashboard },
   { href: "/payment-qr", title: "Payment QR", body: "Add or change the GCash and Maya QR shown for each barber.", icon: QrCode },
 ];
 
@@ -89,7 +90,7 @@ export function OwnerDrawer({
         <div inert={!open}>
           <div className="rz-tray-box">
             <div className="grid gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_3px_minmax(0,2.6fr)] lg:gap-5">
-              <ul className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-1 lg:sticky lg:top-6 self-start">
+              <ul className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-1 lg:sticky lg:top-6 self-start">
                 {ownerPages.map((page, i) => (
                   <li key={page.href}>
                     <Link

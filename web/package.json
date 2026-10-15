@@ -15,6 +15,7 @@
     "test:forecast-parse": "tsx scripts/test-forecast-parse.ts",
     "test:forecast-comparison": "tsx scripts/test-forecast-comparison.ts",
     "test:gateway": "tsx scripts/test-gateway.ts",
+    "test:insights-story": "tsx scripts/test-insights-story.ts",
     "test:ledger-summary": "tsx scripts/test-ledger-summary.ts",
     "test:owner-unlock": "tsx scripts/test-owner-unlock.ts",
     "test:payload-compat": "tsx scripts/test-payload-compat.ts",

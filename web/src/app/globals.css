@@ -106,6 +106,18 @@
   to { filter: none; }
 }
 
+/* Chart columns grow up from the baseline. */
+@keyframes rz-grow {
+  from { transform: scaleY(0); }
+  to { transform: none; }
+}
+
+/* Share bars grow out from the left. */
+@keyframes rz-grow-x {
+  from { transform: scaleX(0); }
+  to { transform: none; }
+}
+
 /* A changed amount lights up brass, then settles back to its own colour. */
 @keyframes rz-value {
   from { color: var(--color-brass-bright); }
@@ -119,6 +131,82 @@
 @keyframes rz-shimmer {
   from { background-position: 150% 0; }
   to { background-position: -50% 0; }
+}
+
+/* Presentation mode (Insights). A slide arrives from the way the deck moves (--dir: 1 forward,
+   -1 back)... */
+@keyframes rz-slide-in {
+  from { opacity: 0; transform: translateX(calc(var(--dir, 1) * 3.5rem)); }
+}
+
+/* ...and the slide it replaces recedes the other way, faster. */
+@keyframes rz-slide-out {
+  to { opacity: 0; transform: translateX(calc(var(--dir, 1) * -2.5rem)) scale(0.985); }
+}
+
+/* A title rises from behind its own baseline. */
+@keyframes rz-rise-line {
+  from { transform: translateY(110%); }
+}
+
+/* A word comes into focus. */
+@keyframes rz-focus {
+  from { opacity: 0; filter: blur(7px); transform: translateY(0.35em); }
+}
+
+/* A register wheel turns once into place: from its digit on the strip's first turn to the same
+   digit on the second. */
+@keyframes rz-roll {
+  from { transform: translateY(calc(var(--to) * -1 * var(--wheel-lh, 1.2em))); }
+}
+
+/* The letterbox banners come in from the screen's edges. */
+@keyframes rz-bar-top {
+  from { transform: translateY(-100%); }
+}
+
+@keyframes rz-bar-bottom {
+  from { transform: translateY(100%); }
+}
+
+/* Autoplay's timer fills from the left. */
+@keyframes rz-timer {
+  from { transform: scaleX(0); }
+}
+
+/* Lights on. The LED tube flickers alive: two flickers inside half a second, on a 3px line, far
+   below any flash threshold... */
+@keyframes rz-flicker {
+  0% { opacity: 0; }
+  8% { opacity: 0.85; }
+  15% { opacity: 0.1; }
+  30% { opacity: 1; }
+  38% { opacity: 0.3; }
+  52%, 100% { opacity: 1; }
+}
+
+/* ...the dark lifts off the room... */
+@keyframes rz-dark-lift {
+  to { opacity: 0; }
+}
+
+/* ...the sign, hung on its hooks, sways once and settles... */
+@keyframes rz-sign-hang {
+  0% { opacity: 0.2; transform: rotate(-1.6deg); }
+  40% { opacity: 1; }
+  62% { transform: rotate(0.5deg); }
+  82% { transform: rotate(-0.15deg); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* ...the title is lettered in, its spacing closing up... */
+@keyframes rz-letter-in {
+  from { opacity: 0; letter-spacing: 0.42em; }
+}
+
+/* ...and the intro lifts off the deck. */
+@keyframes rz-intro-out {
+  to { opacity: 0; transform: scale(1.035); }
 }
 
 /* ── Base ───────────────────────────────────────────────────────────────────── */
@@ -1080,7 +1168,7 @@ body {
     border-color: rgb(139 92 246 / 0.85);
   }
 
-  /* Segmented choices: tip amounts. */
+  /* Segmented choices: tip amounts, trend periods. */
   .rz-seg {
     display: flex;
     gap: 0.25rem;
@@ -1319,6 +1407,191 @@ body {
     }
   }
 
+  /* Presentation mode on /insights: a full-screen stage over the page. It covers the room
+     (.rz-room), so it draws the same room light itself (and keeps it in full screen, where only
+     the stage is shown). */
+  .rz-stage {
+    background-color: var(--color-wall);
+    background-image:
+      radial-gradient(60rem 16rem at 50% -7rem, rgb(222 234 255 / 0.06), transparent 70%),
+      radial-gradient(130% 85% at 50% -15%, rgb(196 31 41 / 0.42), transparent 70%),
+      radial-gradient(85% 70% at 105% 105%, rgb(140 26 32 / 0.36), transparent 70%),
+      radial-gradient(70% 60% at -5% 75%, rgb(140 26 32 / 0.18), transparent 70%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0.06 0 0 0 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+    animation: rz-fade 240ms var(--ease-out-expo) both;
+  }
+
+  /* The stage's foot: the banner's black, chrome-edged on top, its shadow cast upward. */
+  .rz-stage-foot {
+    background-color: rgb(8 7 5 / 0.97);
+    border-top: 1px solid rgb(205 214 228 / 0.16);
+    box-shadow: 0 -12px 26px -18px rgb(0 0 0 / 0.95);
+  }
+
+  /* The banners come in from the top and bottom edges, like a film's letterbox. */
+  .rz-letterbox-top {
+    animation: rz-bar-top 520ms var(--ease-out-expo) both;
+  }
+
+  .rz-letterbox-bottom {
+    animation: rz-bar-bottom 520ms var(--ease-out-expo) both;
+  }
+
+  /* Two slides share one grid cell while one leaves and the next arrives. */
+  .rz-slide-in {
+    animation: rz-slide-in 460ms var(--ease-out-expo) both;
+  }
+
+  .rz-slide-out {
+    animation: rz-slide-out 260ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  /* A title behind its baseline: clipped below, with room for a comma's tail. */
+  .rz-rise-line {
+    display: block;
+    overflow: hidden;
+    padding-bottom: 0.08em;
+    margin-bottom: -0.08em;
+  }
+
+  .rz-rise-line > span {
+    display: block;
+    animation: rz-rise-line 760ms var(--ease-out-expo) both;
+  }
+
+  /* The headline's words, into focus in reading order (each sets its own delay). */
+  .rz-word {
+    display: inline-block;
+    animation: rz-focus 620ms var(--ease-out-expo) both;
+  }
+
+  /* A key figure inside a sentence: the figures' face, a step heavier than the words around it. */
+  .rz-em {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--color-bone);
+  }
+
+  /* A figure that is not money lands in brass and settles to bone, like a changed amount. */
+  .rz-em-settle {
+    animation: rz-value 1100ms var(--ease-out-expo) both;
+  }
+
+  /* Register wheels. Each digit is a window one line tall (--wheel-lh, the line height of the text
+     it sits in, so nothing moves when the wheels give way to plain text) over a strip of two turns,
+     0-9 twice, that rests on its digit's second turn. The window clips above and below and lets a
+     wide digit bleed sideways. The digit in the window keeps the width and baseline. */
+  .rz-wheel {
+    position: relative;
+    display: inline-block;
+    line-height: var(--wheel-lh, 1.2em);
+    clip-path: inset(0 -0.3em);
+  }
+
+  .rz-wheel-face {
+    visibility: hidden;
+  }
+
+  .rz-wheel-strip {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    line-height: var(--wheel-lh, 1.2em);
+    text-align: center;
+    white-space: pre;
+    transform: translateY(calc((var(--to) + 10) * -1 * var(--wheel-lh, 1.2em)));
+    animation: rz-roll 1000ms var(--ease-out-expo) both;
+  }
+
+  /* The notes under a slide's figures follow its sentence in. */
+  .rz-notes {
+    animation: rz-fade 520ms ease-out both;
+  }
+
+  /* Autoplay's timer (its duration is the slide's reading time). */
+  .rz-timer {
+    transform-origin: left;
+    animation: rz-timer linear both;
+  }
+
+  /* The lights-on intro, over the whole stage. */
+  .rz-intro {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .rz-intro[data-phase="leaving"] {
+    pointer-events: none;
+    animation: rz-intro-out 420ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  /* The room before the lights: lifts once the tube is on, and the stage's room light shows. */
+  .rz-intro-dark {
+    position: absolute;
+    inset: 0;
+    background-color: #050404;
+    animation: rz-dark-lift 900ms var(--ease-out-expo) 440ms both;
+  }
+
+  .rz-intro-set {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding-inline: 1rem;
+    text-align: center;
+  }
+
+  /* The LED tube over the sign, as on the home page's mirror. */
+  .rz-intro-tube {
+    display: block;
+    width: 60%;
+    height: 3px;
+    margin-bottom: 0.25rem;
+    border-radius: 999px;
+    background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.9) 15%, rgb(255 255 255 / 0.9) 85%, transparent);
+    box-shadow: 0 6px 22px 4px rgb(255 240 225 / 0.28);
+    animation: rz-flicker 760ms linear 120ms both;
+  }
+
+  /* The sign hangs from hooks above it: it comes up from dim as the tube lights, and settles. */
+  .rz-intro-sign {
+    transform-origin: 50% -1.5rem;
+    animation:
+      rz-sign-hang 1300ms cubic-bezier(0.37, 0, 0.63, 1) 240ms both,
+      rz-lights-up 900ms var(--ease-out-expo) 440ms both;
+  }
+
+  .rz-intro-title {
+    white-space: nowrap;
+    animation: rz-letter-in 900ms var(--ease-out-expo) 620ms both;
+  }
+
+  .rz-intro-ornament::before {
+    transform-origin: right;
+    animation: rz-grow-x 700ms var(--ease-out-expo) 900ms both;
+  }
+
+  .rz-intro-ornament::after {
+    transform-origin: left;
+    animation: rz-grow-x 700ms var(--ease-out-expo) 900ms both;
+  }
+
+  .rz-intro-ornament svg {
+    animation: rz-fade 500ms ease-out 820ms both;
+  }
+
+  .rz-intro-date {
+    animation: rz-fade 500ms ease-out 1060ms both;
+  }
+
   /* ── Loading ── */
 
   .rz-skeleton {
@@ -1387,6 +1660,17 @@ html.rz-cursor-live * {
 
 html.rz-cursor-live :is(input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="range"]), textarea, [contenteditable="true"]) {
   cursor: text !important;
+}
+
+/* In full screen only the presentation stage is drawn, so ShopCursor's shears (outside it)
+   can't show: the stage falls back to the still cursor images. */
+html.rz-cursor-live .rz-stage:fullscreen,
+html.rz-cursor-live .rz-stage:fullscreen * {
+  cursor: url("/cursors/scissors.svg") 3 3, auto !important;
+}
+
+html.rz-cursor-live .rz-stage:fullscreen :is(a[href], button:not(:disabled), summary) {
+  cursor: url("/cursors/scissors-open.svg") 3 3, pointer !important;
 }
 
 /* The shears and their clippings ride on one layer over everything. */
@@ -1497,7 +1781,7 @@ html.rz-cursor-live :is(input:not([type="checkbox"], [type="radio"], [type="butt
 }
 
 /* With a mouse, on a desktop screen, the page also goes soft as it leaves and comes into focus as
-   it arrives. */
+   it arrives, as the presentation's words do. */
 @media (pointer: fine) and (prefers-reduced-motion: no-preference) {
   @keyframes rz-page-out {
     to { opacity: 0; filter: blur(2px); }
@@ -1639,6 +1923,42 @@ html:active-view-transition-type(rz-load)::view-transition-new(root) {
   @keyframes rz-sheet {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+
+  @keyframes rz-grow {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes rz-grow-x {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Presentation: slides, titles, words and banners fade instead of moving. The intro and the
+     register wheels are not drawn at all (InsightsPresentation reads the same preference). */
+  @keyframes rz-slide-in {
+    from { opacity: 0; }
+  }
+
+  @keyframes rz-slide-out {
+    to { opacity: 0; }
+  }
+
+  @keyframes rz-rise-line {
+    from { opacity: 0; }
+  }
+
+  @keyframes rz-focus {
+    from { opacity: 0; }
+  }
+
+  @keyframes rz-bar-top {
+    from { opacity: 0; }
+  }
+
+  @keyframes rz-bar-bottom {
+    from { opacity: 0; }
   }
 
   .rz-reflect-far,
