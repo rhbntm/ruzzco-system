@@ -127,22 +127,22 @@ export function QrPhCheckout({
   const announcement = phase.kind === "charge" ? `Payment status: ${phase.status.toLowerCase()}` : phase.text;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+    <div className="rz-overlay items-center">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="qrph-checkout-title"
-        className="w-full max-w-sm p-5 rounded-2xl bg-[#12141a] border border-violet-500/40 space-y-4"
+        className="rz-dialog p-5 space-y-4 border-qrph/40"
       >
         <p aria-live="polite" className="sr-only">{announcement}</p>
-        <div className="flex items-center justify-between">
-          <h2 id="qrph-checkout-title" className="font-bold text-lg flex items-center gap-2 text-violet-200">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="qrph-checkout-title" className="flex items-center gap-2 font-display font-semibold uppercase tracking-wide text-lg text-qrph-ink">
             <QrCode className="w-5 h-5" /> QR Ph (test) · ₱{amount.toFixed(2)}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center justify-center min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg text-zinc-400 hover:text-white"
+            className="rz-btn rz-btn-ghost rz-btn-icon pointer-coarse:min-h-11 pointer-coarse:min-w-11"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -150,49 +150,49 @@ export function QrPhCheckout({
         </div>
 
         {phase.kind === "loading" && (
-          <p className="flex items-center gap-2 text-sm text-zinc-300"><RefreshCw className="w-4 h-4 animate-spin" /> {phase.text}</p>
+          <p className="animate-fade flex items-center gap-2.5 text-sm text-bone-2"><RefreshCw className="w-4 h-4 animate-spin text-qrph-ink" /> {phase.text}</p>
         )}
 
         {phase.kind === "error" && (
-          <div className="space-y-3">
-            <p className="flex items-start gap-2 text-sm text-amber-300"><TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" /> {phase.text}</p>
-            <button type="button" onClick={() => { setPhase({ kind: "loading", text: "Syncing sale…" }); setAttempt((a) => a + 1); }} className="w-full py-2 pointer-coarse:min-h-11 rounded-lg border border-[#232734] text-zinc-200 text-sm">Try again</button>
+          <div className="animate-rise space-y-3">
+            <p className="rz-notice rz-notice-warn"><TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" /> {phase.text}</p>
+            <button type="button" onClick={() => { setPhase({ kind: "loading", text: "Syncing sale…" }); setAttempt((a) => a + 1); }} className="rz-btn rz-btn-secondary w-full pointer-coarse:min-h-11">Try again</button>
           </div>
         )}
 
         {phase.kind === "charge" && phase.status === "PAID" && (
-          <p className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-bold">
+          <p className="animate-pop rz-notice rz-notice-ok items-center text-base font-bold">
             <CheckCircle2 className="w-5 h-5" /> Paid
           </p>
         )}
 
         {phase.kind === "charge" && (phase.status === "EXPIRED" || phase.status === "FAILED") && (
-          <p className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+          <p className="animate-rise rz-notice rz-notice-danger">
             <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
             QR {phase.status === "EXPIRED" ? "expired" : "payment failed"}. This sale stays unpaid. If the customer pays another way, ring a new cash, GCash or Maya sale.
           </p>
         )}
 
         {pending && (
-          <div className="space-y-3">
+          <div className="animate-fade space-y-3">
             {qr ? (
               /* eslint-disable-next-line @next/next/no-img-element -- base64 data URL from PayMongo */
-              <img src={imageSrc(qr.imageUrl)} alt="QR Ph code" className="w-full aspect-square rounded-xl bg-white p-2" />
+              <img src={imageSrc(qr.imageUrl)} alt="QR Ph code" className="w-full aspect-square rounded-xl bg-white p-2.5 shadow-[0_12px_28px_-14px_rgb(0_0_0/0.9)]" />
             ) : (
-              <p className="text-sm text-zinc-400">Waiting for payment. The QR is no longer shown; press Check status.</p>
+              <p className="text-sm text-dust">Waiting for payment. The QR is no longer shown; press Check status.</p>
             )}
-            <p className="p-2.5 rounded-lg bg-red-600/15 border border-red-500/40 text-red-200 text-xs font-semibold">
+            <p className="rz-notice rz-notice-danger text-xs font-semibold">
               TEST MODE. Never scan this QR with a real banking or e-wallet app: PayMongo warns that it processes a real transaction.
             </p>
             {remaining !== null && (
-              <p className="text-center text-sm text-zinc-300">Expires in <span className="font-bold">{formatCountdown(remaining)}</span></p>
+              <p className="text-center text-sm text-bone-2">Expires in <span className="rz-figure text-base text-bone tabular-nums">{formatCountdown(remaining)}</span></p>
             )}
             {qr?.testUrl && (
-              <a href={qr.testUrl} target="_blank" rel="noreferrer" className="block text-center text-xs text-violet-300 underline">
+              <a href={qr.testUrl} target="_blank" rel="noreferrer" className="block text-center text-xs text-qrph-ink underline hover:text-white transition-colors">
                 Open PayMongo test page to simulate payment
               </a>
             )}
-            <button type="button" onClick={checkStatus} disabled={checking} className="w-full py-2.5 pointer-coarse:min-h-11 rounded-lg bg-violet-600 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+            <button type="button" onClick={checkStatus} disabled={checking} className="rz-btn w-full min-h-11 bg-[#7c3aed] hover:bg-[#8b4cf2] text-white border-white/10 shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_22px_-12px_rgb(0_0_0/0.9)]">
               <RefreshCw className={`w-4 h-4 ${checking ? "animate-spin" : ""}`} /> Check status
             </button>
           </div>

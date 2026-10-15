@@ -63,18 +63,19 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
   const totalRevenue = days.reduce((sum, day) => sum + Number(day.revenue), 0);
 
   return (
-    <section className="p-5 rounded-xl bg-[#12141a] border border-[#232734] space-y-4 relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-      <div className="flex items-center justify-between gap-3">
+    <section className="rz-panel p-5 sm:p-6 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <LineChart className="w-5 h-5 text-red-500" />
-          <h2 className="font-bold text-white uppercase tracking-wide font-(family-name:--font-oswald)">Next 7 days</h2>
+          <span aria-hidden="true" className="w-9 h-9 rounded-lg bg-brass/10 ring-1 ring-brass/40 text-brass-bright flex items-center justify-center shrink-0">
+            <LineChart className="w-4.5 h-4.5" />
+          </span>
+          <h3 className="rz-title text-xl whitespace-nowrap">Next 7 days</h3>
         </div>
         <button
           type="button"
           onClick={() => void refresh()}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 px-3 py-2 pointer-coarse:min-h-11 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-zinc-300 disabled:opacity-50"
+          className="rz-btn rz-btn-secondary min-h-9 px-3 text-xs whitespace-nowrap pointer-coarse:min-h-11"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin" : ""}`} />
           {busy ? "Refreshing…" : "Refresh forecast"}
@@ -82,47 +83,47 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
       </div>
 
       {offline && (
-        <p className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-200">
+        <p className="animate-rise rz-notice rz-notice-warn">
           <WifiOff className="w-4 h-4 mt-0.5 shrink-0" />
           {run
             ? `Forecast service is offline. Showing the forecast saved on ${formatDate(run.createdOn, { month: "short", day: "numeric", year: "numeric" })}.`
             : "Forecast service is offline and no forecast has been saved yet."}
         </p>
       )}
-      {error && <p className="p-3 rounded-lg bg-rose-950/30 border border-rose-900/50 text-sm text-rose-300">{error}</p>}
+      {error && <p className="animate-rise rz-notice rz-notice-danger">{error}</p>}
 
       {run && days.length > 0 ? (
         <>
-          <table className="w-full text-sm">
+          <table className="rz-table">
             <thead>
-              <tr className="text-xs text-zinc-400 uppercase tracking-wider">
-                <th className="text-left font-semibold pb-2">Day</th>
-                <th className="text-right font-semibold pb-2">Customers</th>
-                <th className="text-right font-semibold pb-2">Revenue</th>
+              <tr>
+                <th className="text-left">Day</th>
+                <th className="text-right">Customers</th>
+                <th className="text-right">Revenue</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#232734]">
+            <tbody>
               {days.map((day) => (
                 <tr key={day.date}>
-                  <td className="py-2 text-zinc-200">
-                    <span className="inline-block w-10 font-semibold">{formatDate(day.date, { weekday: "short" })}</span>
-                    <span className="text-zinc-400">{formatDate(day.date, { month: "short", day: "numeric" })}</span>
+                  <td className="text-bone">
+                    <span className="inline-block w-11 font-semibold">{formatDate(day.date, { weekday: "short" })}</span>
+                    <span className="text-dust">{formatDate(day.date, { month: "short", day: "numeric" })}</span>
                   </td>
-                  <td className="py-2 text-right text-white font-semibold">{day.customers === null ? "—" : day.customers.toFixed(1)}</td>
-                  <td className="py-2 text-right text-white">{peso(Number(day.revenue))}</td>
+                  <td className="text-right text-bone font-semibold">{day.customers === null ? "—" : day.customers.toFixed(1)}</td>
+                  <td className="text-right text-bone-2">{peso(Number(day.revenue))}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t border-zinc-700">
-                <td className="pt-2 font-bold text-white uppercase text-xs tracking-wider">{days.length === 7 ? "Week total" : `${days.length}-day total`}</td>
-                <td className="pt-2 text-right font-bold text-red-400">{totalCustomers.toFixed(1)}</td>
-                <td className="pt-2 text-right font-bold text-red-400">{peso(totalRevenue)}</td>
+              <tr>
+                <td className="text-bone uppercase text-xs tracking-wider">{days.length === 7 ? "Week total" : `${days.length}-day total`}</td>
+                <td className="text-right text-brass-bright">{totalCustomers.toFixed(1)}</td>
+                <td className="text-right text-brass-bright">{peso(totalRevenue)}</td>
               </tr>
             </tfoot>
           </table>
 
-          <div className="space-y-2 text-xs text-zinc-400 leading-relaxed">
+          <div className="space-y-2 text-xs text-dust leading-relaxed max-w-prose">
             <p>
               On the last {run.weeksTested} weeks of logbook records, this forecast was off by about{" "}
               {Number(run.typicalErrorCustomers)} customers (about {peso(Number(run.typicalErrorCustomers) * Number(run.avgTicket))})
@@ -137,8 +138,18 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
 
           <MethodComparison run={run} />
         </>
+      ) : busy ? (
+        // The first refresh is running: the table's shape, not an empty card.
+        <div aria-hidden="true" className="space-y-2.5">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center justify-between gap-4">
+              <div className="rz-skeleton h-4 w-28" />
+              <div className="rz-skeleton h-4 w-16" />
+            </div>
+          ))}
+        </div>
       ) : (
-        !busy && <p className="text-sm text-zinc-400">No saved forecast covers today yet. Start the forecast service and press Refresh forecast.</p>
+        <p className="text-sm text-dust">No saved forecast covers today yet. Start the forecast service and press Refresh forecast.</p>
       )}
     </section>
   );
@@ -150,21 +161,21 @@ export function MethodComparison({ run }: { run: NonNullable<SerializedForecast[
   const shortDate = (iso: string) => formatDate(iso, { month: "short", day: "numeric", year: "numeric" });
   const view = buildComparisonView(run.comparison, shortDate);
   return (
-    <div className="pt-4 border-t border-[#232734] space-y-3">
-      <h3 className="font-bold text-white uppercase tracking-wide text-sm font-(family-name:--font-oswald)">How the methods compare</h3>
+    <div className="pt-5 border-t border-seam space-y-3.5">
+      <h3 className="rz-heading text-bone">How the methods compare</h3>
       {view ? (
         <>
-          <p className="text-xs text-zinc-400 leading-relaxed">
+          <p className="text-xs text-dust leading-relaxed max-w-prose">
             Each method guessed how many customers came on each day of weeks it had not seen. The number is how far off it was, on
-            average, in customers per day. <span className="text-zinc-200 font-semibold">Lower is better.</span> “Week-to-week swing” is
+            average, in customers per day. <span className="text-bone font-semibold">Lower is better.</span> “Week-to-week swing” is
             how much that changed from one week to the next; smaller means steadier.
           </p>
-          <p className="text-xs font-semibold text-amber-200">{view.basisLine}</p>
+          <p className="text-xs font-semibold text-brass-bright">{view.basisLine}</p>
           {view.groups.map((group) => (
-            <div key={group.title} className="space-y-1">
-              <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">{group.title}</p>
-              <div className="rounded-lg border border-[#232734] divide-y divide-[#232734]">
-                <div className="hidden sm:grid grid-cols-[1fr_9rem_9rem] gap-2 px-3 py-1.5 text-xs text-zinc-400 uppercase tracking-wider">
+            <div key={group.title} className="space-y-1.5">
+              <p className="rz-label">{group.title}</p>
+              <div className="rz-well overflow-hidden divide-y divide-seam tabular-nums">
+                <div className="hidden sm:grid grid-cols-[1fr_9rem_9rem] gap-2 px-3 py-2 text-[0.6875rem] font-semibold text-dust uppercase tracking-[0.08em]">
                   <span>Method</span>
                   <span className="text-right">Off by (customers a day)</span>
                   <span className="text-right">Week-to-week swing</span>
@@ -172,20 +183,20 @@ export function MethodComparison({ run }: { run: NonNullable<SerializedForecast[
                 {group.rows.map((row) => (
                   <div
                     key={row.method}
-                    className={`px-3 py-2 sm:grid sm:grid-cols-[1fr_9rem_9rem] sm:gap-2 sm:items-center text-sm ${
-                      row.served ? "bg-red-500/10 ring-1 ring-inset ring-red-500/40" : ""
+                    className={`px-3 py-2.5 sm:grid sm:grid-cols-[1fr_9rem_9rem] sm:gap-2 sm:items-center text-sm transition-colors duration-150 ${
+                      row.served ? "bg-crimson/12 shadow-[inset_0_0_0_1px_rgb(218_44_53/0.45)]" : "hover:bg-white/2.5"
                     }`}
                   >
-                    <div className="text-zinc-200">
+                    <div className="text-bone">
                       {row.name}
-                      {row.served && <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-red-300">Used for this forecast</span>}
+                      {row.served && <span className="ml-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-crimson-ink">Used for this forecast</span>}
                     </div>
-                    <div className="flex justify-between sm:block sm:text-right text-white font-semibold">
-                      <span className="sm:hidden text-xs font-normal text-zinc-400">Off by</span>
+                    <div className="flex justify-between sm:block sm:text-right text-bone font-semibold">
+                      <span className="sm:hidden text-xs font-normal text-dust">Off by</span>
                       {row.mean.toFixed(2)}
                     </div>
-                    <div className="flex justify-between sm:block sm:text-right text-zinc-300">
-                      <span className="sm:hidden text-xs text-zinc-400">Week-to-week swing</span>
+                    <div className="flex justify-between sm:block sm:text-right text-bone-2">
+                      <span className="sm:hidden text-xs text-dust">Week-to-week swing</span>
                       {row.spread === null ? "—" : row.spread.toFixed(2)}
                     </div>
                   </div>
@@ -193,14 +204,14 @@ export function MethodComparison({ run }: { run: NonNullable<SerializedForecast[
               </div>
             </div>
           ))}
-          <p className="text-xs text-zinc-300">
+          <p className="text-xs text-bone-2">
             Random Forest beat the best simple method ({BASELINE_NAMES[run.bestBaseline] ?? run.bestBaseline}) in {run.weeksRfWon} of{" "}
             {run.weeksTested} weeks.
           </p>
-          <p className="text-xs text-zinc-400">Saved with the forecast on {shortDate(run.createdOn)}.</p>
+          <p className="text-xs text-dust">Saved with the forecast on {shortDate(run.createdOn)}.</p>
         </>
       ) : (
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-dust">
           No comparison was saved with this forecast. Press Refresh forecast once the forecast service has been retrained.
         </p>
       )}
@@ -208,15 +219,11 @@ export function MethodComparison({ run }: { run: NonNullable<SerializedForecast[
   );
 }
 
-// Shown instead of the panel when the owner cookie is missing. No forecast numbers reach this page.
-// /insights reuses it with its own wording.
-export function ForecastLocked({
-  title = "Forecast",
-  description = "Expected customers and revenue for the next 7 days. Owner only.",
-  submitLabel = "Show forecast",
-}: { title?: string; description?: string; submitLabel?: string } = {}) {
+// Sends the owner PIN; on success the server sets the owner cookie and the page re-renders with
+// the owner's numbers. Used by the locked forecast card (on /insights and in the home page's
+// owner drawer).
+function useOwnerUnlock() {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -243,26 +250,40 @@ export function ForecastLocked({
     }
   }
 
+  return { pin, setPin, busy, error, unlock };
+}
+
+// Shown instead of the panel when the owner cookie is missing. No forecast numbers reach this page.
+// /insights reuses it with its own wording.
+export function ForecastLocked({
+  title = "Forecast",
+  description = "Expected customers and revenue for the next 7 days. Owner only.",
+  submitLabel = "Show forecast",
+}: { title?: string; description?: string; submitLabel?: string } = {}) {
+  const [open, setOpen] = useState(false);
+  const { pin, setPin, busy, error, unlock } = useOwnerUnlock();
+
   return (
-    <section className="p-5 rounded-xl bg-[#12141a] border border-[#232734] space-y-3 relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
+    <section className="rz-panel p-5 sm:p-6 space-y-3.5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <LineChart className="w-5 h-5 text-red-500" />
-          <span className="font-bold text-white uppercase tracking-wide font-(family-name:--font-oswald)">{title}</span>
+          <span aria-hidden="true" className="w-9 h-9 rounded-lg bg-brass/10 ring-1 ring-brass/40 text-brass-bright flex items-center justify-center shrink-0">
+            <LineChart className="w-4.5 h-4.5" />
+          </span>
+          <span className="rz-title text-xl">{title}</span>
         </div>
-        <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">
+        <span className="rz-pill rz-pill-brass uppercase tracking-wider">
           <LockKeyhole className="w-3 h-3" /> Owner PIN
         </span>
       </div>
-      <p className="text-sm text-zinc-400">{description}</p>
+      <p className="text-sm text-dust leading-relaxed">{description}</p>
       {open ? (
         <form
           onSubmit={(event) => {
             event.preventDefault();
             void unlock();
           }}
-          className="flex flex-col sm:flex-row gap-2"
+          className="animate-rise flex flex-col sm:flex-row gap-2"
         >
           <input
             autoFocus
@@ -270,13 +291,13 @@ export function ForecastLocked({
             inputMode="numeric"
             value={pin}
             onChange={(event) => setPin(event.target.value)}
-            className="flex-1 px-3 py-2.5 pointer-coarse:min-h-11 rounded-lg bg-[#181b24] border border-[#232734] text-white text-base sm:text-sm"
+            className="rz-field flex-1 sm:text-sm pointer-coarse:min-h-11"
             placeholder="Owner PIN"
             aria-label="Owner PIN"
           />
           <button
             disabled={busy || !pin}
-            className="px-4 py-2.5 pointer-coarse:min-h-11 rounded-lg bg-red-600 text-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+            className="rz-btn rz-btn-primary px-5 pointer-coarse:min-h-11"
           >
             {busy ? "Checking…" : submitLabel}
           </button>
@@ -285,12 +306,12 @@ export function ForecastLocked({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="-my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 rounded-sm text-sm font-semibold text-red-400 hover:text-red-300"
+          className="-my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 rounded-sm text-sm font-semibold text-brass-bright hover:text-bone transition-colors"
         >
           Enter owner PIN
         </button>
       )}
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {error && <p className="animate-rise text-sm text-crimson-ink">{error}</p>}
     </section>
   );
 }

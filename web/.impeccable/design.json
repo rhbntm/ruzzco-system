@@ -1,0 +1,1345 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-15T05:57:10.500Z",
+  "title": "Design System: Ruzzco Barbers System",
+  "extensions": {
+    "colorMeta": {
+      "wall": {
+        "role": "neutral",
+        "displayName": "Black Wall",
+        "canonical": "#0c0b0a",
+        "oklch": "oklch(15.0% 0.003 68)",
+        "tonalRamp": [
+          "oklch(15% 0.003 68)",
+          "oklch(26% 0.003 68)",
+          "oklch(38% 0.003 68)",
+          "oklch(49% 0.003 68)",
+          "oklch(61% 0.003 68)",
+          "oklch(72% 0.003 68)",
+          "oklch(84% 0.003 68)",
+          "oklch(95% 0.003 68)"
+        ]
+      },
+      "wall-raised": {
+        "role": "neutral",
+        "displayName": "Raised Wall",
+        "canonical": "#121110",
+        "oklch": "oklch(17.8% 0.003 68)",
+        "tonalRamp": [
+          "oklch(15% 0.003 68)",
+          "oklch(26% 0.003 68)",
+          "oklch(38% 0.003 68)",
+          "oklch(49% 0.003 68)",
+          "oklch(61% 0.003 68)",
+          "oklch(72% 0.003 68)",
+          "oklch(84% 0.003 68)",
+          "oklch(95% 0.003 68)"
+        ]
+      },
+      "banner": {
+        "role": "neutral",
+        "displayName": "Banner Black",
+        "canonical": "#080705",
+        "oklch": "oklch(12.9% 0.006 87)",
+        "tonalRamp": [
+          "oklch(15% 0.006 87)",
+          "oklch(26% 0.006 87)",
+          "oklch(38% 0.006 87)",
+          "oklch(49% 0.006 87)",
+          "oklch(61% 0.006 87)",
+          "oklch(72% 0.006 87)",
+          "oklch(84% 0.006 87)",
+          "oklch(95% 0.006 87)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Leather Black",
+        "canonical": "#171514",
+        "oklch": "oklch(19.8% 0.004 49)",
+        "tonalRamp": [
+          "oklch(15% 0.004 49)",
+          "oklch(26% 0.004 49)",
+          "oklch(38% 0.004 49)",
+          "oklch(49% 0.004 49)",
+          "oklch(61% 0.004 49)",
+          "oklch(72% 0.004 49)",
+          "oklch(84% 0.004 49)",
+          "oklch(95% 0.004 49)"
+        ]
+      },
+      "panel-2": {
+        "role": "neutral",
+        "displayName": "Leather Black 2",
+        "canonical": "#1e1c1a",
+        "oklch": "oklch(22.8% 0.005 68)",
+        "tonalRamp": [
+          "oklch(15% 0.005 68)",
+          "oklch(26% 0.005 68)",
+          "oklch(38% 0.005 68)",
+          "oklch(49% 0.005 68)",
+          "oklch(61% 0.005 68)",
+          "oklch(72% 0.005 68)",
+          "oklch(84% 0.005 68)",
+          "oklch(95% 0.005 68)"
+        ]
+      },
+      "panel-3": {
+        "role": "neutral",
+        "displayName": "Leather Black 3",
+        "canonical": "#282522",
+        "oklch": "oklch(26.7% 0.007 68)",
+        "tonalRamp": [
+          "oklch(15% 0.007 68)",
+          "oklch(26% 0.007 68)",
+          "oklch(38% 0.007 68)",
+          "oklch(49% 0.007 68)",
+          "oklch(61% 0.007 68)",
+          "oklch(72% 0.007 68)",
+          "oklch(84% 0.007 68)",
+          "oklch(95% 0.007 68)"
+        ]
+      },
+      "seam": {
+        "role": "neutral",
+        "displayName": "Chrome Seam",
+        "canonical": "#2b2c30",
+        "oklch": "oklch(29.4% 0.007 275)",
+        "tonalRamp": [
+          "oklch(15% 0.007 275)",
+          "oklch(26% 0.007 275)",
+          "oklch(38% 0.007 275)",
+          "oklch(49% 0.007 275)",
+          "oklch(61% 0.007 275)",
+          "oklch(72% 0.007 275)",
+          "oklch(84% 0.007 275)",
+          "oklch(95% 0.007 275)"
+        ]
+      },
+      "seam-strong": {
+        "role": "neutral",
+        "displayName": "Strong Chrome Seam",
+        "canonical": "#45484e",
+        "oklch": "oklch(40.1% 0.011 264)",
+        "tonalRamp": [
+          "oklch(15% 0.011 264)",
+          "oklch(26% 0.011 264)",
+          "oklch(38% 0.011 264)",
+          "oklch(49% 0.011 264)",
+          "oklch(61% 0.011 264)",
+          "oklch(72% 0.011 264)",
+          "oklch(84% 0.011 264)",
+          "oklch(95% 0.011 264)"
+        ]
+      },
+      "seam-hover": {
+        "role": "neutral",
+        "displayName": "Seam Hover",
+        "canonical": "#5c5f66",
+        "oklch": "oklch(48.5% 0.012 267)",
+        "tonalRamp": [
+          "oklch(15% 0.012 267)",
+          "oklch(26% 0.012 267)",
+          "oklch(38% 0.012 267)",
+          "oklch(49% 0.012 267)",
+          "oklch(61% 0.012 267)",
+          "oklch(72% 0.012 267)",
+          "oklch(84% 0.012 267)",
+          "oklch(95% 0.012 267)"
+        ]
+      },
+      "chrome": {
+        "role": "neutral",
+        "displayName": "Chrome Trim",
+        "canonical": "#5f6268",
+        "oklch": "oklch(49.6% 0.010 264)",
+        "tonalRamp": [
+          "oklch(15% 0.010 264)",
+          "oklch(26% 0.010 264)",
+          "oklch(38% 0.010 264)",
+          "oklch(49% 0.010 264)",
+          "oklch(61% 0.010 264)",
+          "oklch(72% 0.010 264)",
+          "oklch(84% 0.010 264)",
+          "oklch(95% 0.010 264)"
+        ]
+      },
+      "chrome-hover": {
+        "role": "neutral",
+        "displayName": "Chrome Trim Hover",
+        "canonical": "#7c8089",
+        "oklch": "oklch(59.9% 0.014 267)",
+        "tonalRamp": [
+          "oklch(15% 0.014 267)",
+          "oklch(26% 0.014 267)",
+          "oklch(38% 0.014 267)",
+          "oklch(49% 0.014 267)",
+          "oklch(61% 0.014 267)",
+          "oklch(72% 0.014 267)",
+          "oklch(84% 0.014 267)",
+          "oklch(95% 0.014 267)"
+        ]
+      },
+      "chrome-edge": {
+        "role": "neutral",
+        "displayName": "Banner Chrome Edge",
+        "canonical": "#cdd6e4",
+        "oklch": "oklch(87.3% 0.022 259)",
+        "tonalRamp": [
+          "oklch(15% 0.013 259)",
+          "oklch(26% 0.015 259)",
+          "oklch(38% 0.017 259)",
+          "oklch(49% 0.020 259)",
+          "oklch(61% 0.022 259)",
+          "oklch(72% 0.019 259)",
+          "oklch(84% 0.017 259)",
+          "oklch(95% 0.015 259)"
+        ]
+      },
+      "led": {
+        "role": "neutral",
+        "displayName": "LED Tube",
+        "canonical": "#deeaff",
+        "oklch": "oklch(93.4% 0.031 262)",
+        "tonalRamp": [
+          "oklch(15% 0.019 262)",
+          "oklch(26% 0.022 262)",
+          "oklch(38% 0.025 262)",
+          "oklch(49% 0.028 262)",
+          "oklch(61% 0.031 262)",
+          "oklch(72% 0.028 262)",
+          "oklch(84% 0.025 262)",
+          "oklch(95% 0.021 262)"
+        ]
+      },
+      "led-trim": {
+        "role": "neutral",
+        "displayName": "LED Top Light",
+        "canonical": "#d6e4fa",
+        "oklch": "oklch(91.5% 0.034 259)",
+        "tonalRamp": [
+          "oklch(15% 0.020 259)",
+          "oklch(26% 0.023 259)",
+          "oklch(38% 0.027 259)",
+          "oklch(49% 0.030 259)",
+          "oklch(61% 0.033 259)",
+          "oklch(72% 0.030 259)",
+          "oklch(84% 0.027 259)",
+          "oklch(95% 0.023 259)"
+        ]
+      },
+      "pole-chrome": {
+        "role": "neutral",
+        "displayName": "Pole Chrome",
+        "canonical": "#b3b9c1",
+        "oklch": "oklch(78.3% 0.013 256)",
+        "tonalRamp": [
+          "oklch(56.0% 0.014 256)",
+          "oklch(61.4% 0.014 256)",
+          "oklch(78.3% 0.013 256)",
+          "oklch(97.6% 0.003 265)"
+        ]
+      },
+      "black": {
+        "role": "neutral",
+        "displayName": "Black",
+        "canonical": "#000000",
+        "oklch": "oklch(0.0% 0.000 0)",
+        "tonalRamp": [
+          "oklch(15% 0.000 0)",
+          "oklch(26% 0.000 0)",
+          "oklch(38% 0.000 0)",
+          "oklch(49% 0.000 0)",
+          "oklch(61% 0.000 0)",
+          "oklch(72% 0.000 0)",
+          "oklch(84% 0.000 0)",
+          "oklch(95% 0.000 0)"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 90)",
+        "tonalRamp": [
+          "oklch(15% 0.000 90)",
+          "oklch(26% 0.000 90)",
+          "oklch(38% 0.000 90)",
+          "oklch(49% 0.000 90)",
+          "oklch(61% 0.000 90)",
+          "oklch(72% 0.000 90)",
+          "oklch(84% 0.000 90)",
+          "oklch(95% 0.000 90)"
+        ]
+      },
+      "bone": {
+        "role": "neutral",
+        "displayName": "Bone White",
+        "canonical": "#f5f0e8",
+        "oklch": "oklch(95.7% 0.012 80)",
+        "tonalRamp": [
+          "oklch(15% 0.012 80)",
+          "oklch(26% 0.012 80)",
+          "oklch(38% 0.012 80)",
+          "oklch(49% 0.012 80)",
+          "oklch(61% 0.012 80)",
+          "oklch(72% 0.012 80)",
+          "oklch(84% 0.012 80)",
+          "oklch(95% 0.012 80)"
+        ]
+      },
+      "bone-2": {
+        "role": "neutral",
+        "displayName": "Bone 2",
+        "canonical": "#d8d0c4",
+        "oklch": "oklch(86.1% 0.019 78)",
+        "tonalRamp": [
+          "oklch(15% 0.019 78)",
+          "oklch(26% 0.019 78)",
+          "oklch(38% 0.019 78)",
+          "oklch(49% 0.019 78)",
+          "oklch(61% 0.019 78)",
+          "oklch(72% 0.019 78)",
+          "oklch(84% 0.019 78)",
+          "oklch(95% 0.019 78)"
+        ]
+      },
+      "dust": {
+        "role": "neutral",
+        "displayName": "Dust",
+        "canonical": "#a69e93",
+        "oklch": "oklch(70.3% 0.018 76)",
+        "tonalRamp": [
+          "oklch(15% 0.018 76)",
+          "oklch(26% 0.018 76)",
+          "oklch(38% 0.018 76)",
+          "oklch(49% 0.018 76)",
+          "oklch(61% 0.018 76)",
+          "oklch(72% 0.018 76)",
+          "oklch(84% 0.018 76)",
+          "oklch(95% 0.018 76)"
+        ]
+      },
+      "dust-2": {
+        "role": "neutral",
+        "displayName": "Dust 2",
+        "canonical": "#958d83",
+        "oklch": "oklch(64.7% 0.017 74)",
+        "tonalRamp": [
+          "oklch(15% 0.017 74)",
+          "oklch(26% 0.017 74)",
+          "oklch(38% 0.017 74)",
+          "oklch(49% 0.017 74)",
+          "oklch(61% 0.017 74)",
+          "oklch(72% 0.017 74)",
+          "oklch(84% 0.017 74)",
+          "oklch(95% 0.017 74)"
+        ]
+      },
+      "crimson": {
+        "role": "primary",
+        "displayName": "Accent-Wall Crimson",
+        "canonical": "#c41f29",
+        "oklch": "oklch(52.9% 0.197 25)",
+        "tonalRamp": [
+          "oklch(15% 0.117 25)",
+          "oklch(26% 0.138 25)",
+          "oklch(38% 0.158 25)",
+          "oklch(49% 0.178 25)",
+          "oklch(61% 0.196 25)",
+          "oklch(72% 0.176 25)",
+          "oklch(84% 0.156 25)",
+          "oklch(95% 0.135 25)"
+        ]
+      },
+      "crimson-bright": {
+        "role": "primary",
+        "displayName": "Crimson Bright",
+        "canonical": "#da2c35",
+        "oklch": "oklch(57.9% 0.208 25)",
+        "tonalRamp": [
+          "oklch(15% 0.124 25)",
+          "oklch(26% 0.145 25)",
+          "oklch(38% 0.167 25)",
+          "oklch(49% 0.188 25)",
+          "oklch(61% 0.207 25)",
+          "oklch(72% 0.185 25)",
+          "oklch(84% 0.164 25)",
+          "oklch(95% 0.143 25)"
+        ]
+      },
+      "crimson-deep": {
+        "role": "primary",
+        "displayName": "Crimson Deep",
+        "canonical": "#8c1a20",
+        "oklch": "oklch(41.9% 0.149 24)",
+        "tonalRamp": [
+          "oklch(15% 0.088 24)",
+          "oklch(26% 0.104 24)",
+          "oklch(38% 0.119 24)",
+          "oklch(49% 0.134 24)",
+          "oklch(61% 0.148 24)",
+          "oklch(72% 0.132 24)",
+          "oklch(84% 0.117 24)",
+          "oklch(95% 0.102 24)"
+        ]
+      },
+      "crimson-ink": {
+        "role": "primary",
+        "displayName": "Crimson Ink",
+        "canonical": "#f27f84",
+        "oklch": "oklch(72.7% 0.141 18)",
+        "tonalRamp": [
+          "oklch(15% 0.084 18)",
+          "oklch(26% 0.098 18)",
+          "oklch(38% 0.113 18)",
+          "oklch(49% 0.127 18)",
+          "oklch(61% 0.140 18)",
+          "oklch(72% 0.126 18)",
+          "oklch(84% 0.111 18)",
+          "oklch(95% 0.097 18)"
+        ]
+      },
+      "accent-wall": {
+        "role": "primary",
+        "displayName": "Accent Wall",
+        "canonical": "#a3161e",
+        "oklch": "oklch(46.0% 0.174 25)",
+        "tonalRamp": [
+          "oklch(15% 0.103 25)",
+          "oklch(26% 0.121 25)",
+          "oklch(38% 0.139 25)",
+          "oklch(49% 0.157 25)",
+          "oklch(61% 0.172 25)",
+          "oklch(72% 0.155 25)",
+          "oklch(84% 0.137 25)",
+          "oklch(95% 0.119 25)"
+        ],
+        "purpose": "The wall itself, seen only in the home page's mirror; room, not enamel."
+      },
+      "brass": {
+        "role": "secondary",
+        "displayName": "Antique Brass",
+        "canonical": "#c9a35a",
+        "oklch": "oklch(73.5% 0.102 82)",
+        "tonalRamp": [
+          "oklch(15% 0.061 82)",
+          "oklch(26% 0.071 82)",
+          "oklch(38% 0.082 82)",
+          "oklch(49% 0.092 82)",
+          "oklch(61% 0.101 82)",
+          "oklch(72% 0.091 82)",
+          "oklch(84% 0.080 82)",
+          "oklch(95% 0.070 82)"
+        ]
+      },
+      "brass-bright": {
+        "role": "secondary",
+        "displayName": "Bright Brass",
+        "canonical": "#e4c584",
+        "oklch": "oklch(83.5% 0.090 85)",
+        "tonalRamp": [
+          "oklch(15% 0.054 85)",
+          "oklch(26% 0.063 85)",
+          "oklch(38% 0.072 85)",
+          "oklch(49% 0.081 85)",
+          "oklch(61% 0.090 85)",
+          "oklch(72% 0.080 85)",
+          "oklch(84% 0.071 85)",
+          "oklch(95% 0.062 85)"
+        ]
+      },
+      "pole-blue": {
+        "role": "tertiary",
+        "displayName": "Pole Blue",
+        "canonical": "#2b4aa6",
+        "oklch": "oklch(44.2% 0.153 266)",
+        "tonalRamp": [
+          "oklch(15% 0.091 266)",
+          "oklch(26% 0.107 266)",
+          "oklch(38% 0.122 266)",
+          "oklch(49% 0.138 266)",
+          "oklch(61% 0.152 266)",
+          "oklch(72% 0.136 266)",
+          "oklch(84% 0.120 266)",
+          "oklch(95% 0.105 266)"
+        ]
+      },
+      "gcash": {
+        "role": "wallet",
+        "displayName": "GCash Blue",
+        "canonical": "#2f7cf6",
+        "oklch": "oklch(60.7% 0.198 260)",
+        "tonalRamp": [
+          "oklch(15% 0.118 260)",
+          "oklch(26% 0.138 260)",
+          "oklch(38% 0.158 260)",
+          "oklch(49% 0.179 260)",
+          "oklch(61% 0.197 260)",
+          "oklch(72% 0.176 260)",
+          "oklch(84% 0.156 260)",
+          "oklch(95% 0.136 260)"
+        ]
+      },
+      "gcash-ink": {
+        "role": "wallet",
+        "displayName": "GCash Ink",
+        "canonical": "#8cb8ff",
+        "oklch": "oklch(77.9% 0.113 260)",
+        "tonalRamp": [
+          "oklch(15% 0.067 260)",
+          "oklch(26% 0.079 260)",
+          "oklch(38% 0.090 260)",
+          "oklch(49% 0.102 260)",
+          "oklch(61% 0.112 260)",
+          "oklch(72% 0.100 260)",
+          "oklch(84% 0.089 260)",
+          "oklch(95% 0.077 260)"
+        ]
+      },
+      "gcash-solid": {
+        "role": "wallet",
+        "displayName": "GCash Solid",
+        "canonical": "#1f66d9",
+        "oklch": "oklch(53.6% 0.190 260)",
+        "tonalRamp": [
+          "oklch(15% 0.113 260)",
+          "oklch(26% 0.132 260)",
+          "oklch(38% 0.152 260)",
+          "oklch(49% 0.172 260)",
+          "oklch(61% 0.189 260)",
+          "oklch(72% 0.169 260)",
+          "oklch(84% 0.150 260)",
+          "oklch(95% 0.130 260)"
+        ]
+      },
+      "maya": {
+        "role": "wallet",
+        "displayName": "Maya Green",
+        "canonical": "#17b26a",
+        "oklch": "oklch(67.3% 0.160 156)",
+        "tonalRamp": [
+          "oklch(15% 0.095 156)",
+          "oklch(26% 0.111 156)",
+          "oklch(38% 0.128 156)",
+          "oklch(49% 0.144 156)",
+          "oklch(61% 0.159 156)",
+          "oklch(72% 0.142 156)",
+          "oklch(84% 0.126 156)",
+          "oklch(95% 0.109 156)"
+        ]
+      },
+      "maya-ink": {
+        "role": "wallet",
+        "displayName": "Maya Ink",
+        "canonical": "#78dfab",
+        "oklch": "oklch(82.7% 0.123 160)",
+        "tonalRamp": [
+          "oklch(15% 0.073 160)",
+          "oklch(26% 0.086 160)",
+          "oklch(38% 0.098 160)",
+          "oklch(49% 0.111 160)",
+          "oklch(61% 0.122 160)",
+          "oklch(72% 0.109 160)",
+          "oklch(84% 0.097 160)",
+          "oklch(95% 0.084 160)"
+        ]
+      },
+      "maya-solid": {
+        "role": "wallet",
+        "displayName": "Maya Solid",
+        "canonical": "#0d7f4a",
+        "oklch": "oklch(52.6% 0.125 156)",
+        "tonalRamp": [
+          "oklch(15% 0.074 156)",
+          "oklch(26% 0.087 156)",
+          "oklch(38% 0.100 156)",
+          "oklch(49% 0.113 156)",
+          "oklch(61% 0.124 156)",
+          "oklch(72% 0.111 156)",
+          "oklch(84% 0.098 156)",
+          "oklch(95% 0.086 156)"
+        ]
+      },
+      "qrph": {
+        "role": "wallet",
+        "displayName": "QR Ph Violet",
+        "canonical": "#8b5cf6",
+        "oklch": "oklch(60.6% 0.219 293)",
+        "tonalRamp": [
+          "oklch(15% 0.130 293)",
+          "oklch(26% 0.153 293)",
+          "oklch(38% 0.175 293)",
+          "oklch(49% 0.198 293)",
+          "oklch(61% 0.218 293)",
+          "oklch(72% 0.195 293)",
+          "oklch(84% 0.172 293)",
+          "oklch(95% 0.150 293)"
+        ]
+      },
+      "qrph-ink": {
+        "role": "wallet",
+        "displayName": "QR Ph Ink",
+        "canonical": "#c8b9fd",
+        "oklch": "oklch(82.2% 0.096 294)",
+        "tonalRamp": [
+          "oklch(15% 0.057 294)",
+          "oklch(26% 0.067 294)",
+          "oklch(38% 0.076 294)",
+          "oklch(49% 0.086 294)",
+          "oklch(61% 0.095 294)",
+          "oklch(72% 0.085 294)",
+          "oklch(84% 0.075 294)",
+          "oklch(95% 0.065 294)"
+        ]
+      },
+      "qrph-solid": {
+        "role": "wallet",
+        "displayName": "QR Ph Solid",
+        "canonical": "#7c3aed",
+        "oklch": "oklch(54.1% 0.247 293)",
+        "tonalRamp": [
+          "oklch(15% 0.147 293)",
+          "oklch(26% 0.172 293)",
+          "oklch(38% 0.197 293)",
+          "oklch(49% 0.223 293)",
+          "oklch(61% 0.245 293)",
+          "oklch(72% 0.220 293)",
+          "oklch(84% 0.194 293)",
+          "oklch(95% 0.169 293)"
+        ]
+      },
+      "ok": {
+        "role": "state",
+        "displayName": "Synced Green",
+        "canonical": "#34c27d",
+        "oklch": "oklch(72.3% 0.156 157)",
+        "tonalRamp": [
+          "oklch(15% 0.093 157)",
+          "oklch(26% 0.109 157)",
+          "oklch(38% 0.125 157)",
+          "oklch(49% 0.141 157)",
+          "oklch(61% 0.155 157)",
+          "oklch(72% 0.139 157)",
+          "oklch(84% 0.123 157)",
+          "oklch(95% 0.107 157)"
+        ]
+      },
+      "ok-ink": {
+        "role": "state",
+        "displayName": "Synced Green Ink",
+        "canonical": "#88e0b3",
+        "oklch": "oklch(83.9% 0.107 161)",
+        "tonalRamp": [
+          "oklch(15% 0.064 161)",
+          "oklch(26% 0.075 161)",
+          "oklch(38% 0.086 161)",
+          "oklch(49% 0.097 161)",
+          "oklch(61% 0.106 161)",
+          "oklch(72% 0.095 161)",
+          "oklch(84% 0.084 161)",
+          "oklch(95% 0.073 161)"
+        ]
+      },
+      "warn": {
+        "role": "state",
+        "displayName": "Attention Amber",
+        "canonical": "#ef9f2f",
+        "oklch": "oklch(76.5% 0.151 70)",
+        "tonalRamp": [
+          "oklch(15% 0.090 70)",
+          "oklch(26% 0.106 70)",
+          "oklch(38% 0.121 70)",
+          "oklch(49% 0.137 70)",
+          "oklch(61% 0.150 70)",
+          "oklch(72% 0.135 70)",
+          "oklch(84% 0.119 70)",
+          "oklch(95% 0.104 70)"
+        ]
+      },
+      "warn-ink": {
+        "role": "state",
+        "displayName": "Attention Amber Ink",
+        "canonical": "#f7c67d",
+        "oklch": "oklch(85.4% 0.107 77)",
+        "tonalRamp": [
+          "oklch(15% 0.063 77)",
+          "oklch(26% 0.074 77)",
+          "oklch(38% 0.085 77)",
+          "oklch(49% 0.096 77)",
+          "oklch(61% 0.106 77)",
+          "oklch(72% 0.095 77)",
+          "oklch(84% 0.084 77)",
+          "oklch(95% 0.073 77)"
+        ]
+      },
+      "over": {
+        "role": "state",
+        "displayName": "Cash-Over Blue",
+        "canonical": "#5f9dfb",
+        "oklch": "oklch(69.7% 0.153 258)",
+        "tonalRamp": [
+          "oklch(15% 0.091 258)",
+          "oklch(26% 0.107 258)",
+          "oklch(38% 0.123 258)",
+          "oklch(49% 0.138 258)",
+          "oklch(61% 0.152 258)",
+          "oklch(72% 0.136 258)",
+          "oklch(84% 0.121 258)",
+          "oklch(95% 0.105 258)"
+        ]
+      },
+      "over-ink": {
+        "role": "state",
+        "displayName": "Cash-Over Blue Ink",
+        "canonical": "#a2c6ff",
+        "oklch": "oklch(82.1% 0.090 259)",
+        "tonalRamp": [
+          "oklch(15% 0.053 259)",
+          "oklch(26% 0.063 259)",
+          "oklch(38% 0.072 259)",
+          "oklch(49% 0.081 259)",
+          "oklch(61% 0.089 259)",
+          "oklch(72% 0.080 259)",
+          "oklch(84% 0.071 259)",
+          "oklch(95% 0.061 259)"
+        ]
+      },
+      "bezel-chrome": {
+        "role": "station",
+        "displayName": "Bezel Chrome",
+        "canonical": "#d6dce4",
+        "oklch": "oklch(89.2% 0.013 256)",
+        "tonalRamp": [
+          "#eef1f5",
+          "#8a9098",
+          "#d6dce4",
+          "#6c727a",
+          "#c3c9d1",
+          "#7f858d"
+        ],
+        "purpose": "The mirror bezel: a 160deg gradient #eef1f5 0%, #8a9098 18%, #d6dce4 40%, #6c727a 62%, #c3c9d1 82%, #7f858d 100% (stops in gradient order)."
+      },
+      "nosing-chrome": {
+        "role": "station",
+        "displayName": "Nosing Chrome",
+        "canonical": "#dfe4ea",
+        "oklch": "oklch(91.7% 0.010 253)",
+        "tonalRamp": [
+          "#5f646b",
+          "#dfe4ea",
+          "#8f959d",
+          "#f2f4f7",
+          "#6a7078"
+        ],
+        "purpose": "The counter's 3px front edge: a 90deg gradient #5f646b, #dfe4ea 22%, #8f959d 48%, #f2f4f7 72%, #6a7078 (stops in gradient order)."
+      },
+      "counter": {
+        "role": "station",
+        "displayName": "Counter Black",
+        "canonical": "#0f0e0d",
+        "oklch": "oklch(16.5% 0.003 68)",
+        "tonalRamp": [
+          "oklch(15% 0.003 68)",
+          "oklch(26% 0.003 68)",
+          "oklch(38% 0.003 68)",
+          "oklch(49% 0.003 68)",
+          "oklch(61% 0.003 68)",
+          "oklch(72% 0.003 68)",
+          "oklch(84% 0.003 68)",
+          "oklch(95% 0.003 68)"
+        ],
+        "purpose": "The counter's black, under a fall #1b1918 to #121110 (at 1.75rem) to #0d0c0b."
+      },
+      "glass-ink": {
+        "role": "station",
+        "displayName": "Glass Ink",
+        "canonical": "#f3dcd8",
+        "oklch": "oklch(91.2% 0.026 29)",
+        "tonalRamp": [
+          "oklch(15% 0.026 29)",
+          "oklch(26% 0.026 29)",
+          "oklch(38% 0.026 29)",
+          "oklch(49% 0.026 29)",
+          "oklch(61% 0.026 29)",
+          "oklch(72% 0.026 29)",
+          "oklch(84% 0.026 29)",
+          "oklch(95% 0.026 29)"
+        ],
+        "purpose": "Lettering on the mirror glass that is not a figure: the hook's description, the day line's labels."
+      },
+      "glass-ink-quiet": {
+        "role": "station",
+        "displayName": "Glass Ink Quiet",
+        "canonical": "#ecc9c4",
+        "oklch": "oklch(86.4% 0.040 28)",
+        "tonalRamp": [
+          "oklch(15% 0.040 28)",
+          "oklch(26% 0.040 28)",
+          "oklch(38% 0.040 28)",
+          "oklch(49% 0.040 28)",
+          "oklch(61% 0.040 28)",
+          "oklch(72% 0.040 28)",
+          "oklch(84% 0.040 28)",
+          "oklch(95% 0.040 28)"
+        ],
+        "purpose": "The day line's notes on the glass."
+      },
+      "brass-pull": {
+        "role": "station",
+        "displayName": "Brass Pull",
+        "canonical": "#ecd39a",
+        "oklch": "oklch(87.4% 0.079 87)",
+        "tonalRamp": [
+          "#8a6d36",
+          "#c9a35a",
+          "#ecd39a"
+        ],
+        "purpose": "The drawer pull: 180deg #ecd39a, brass at 45%, #8a6d36."
+      },
+      "brass-escutcheon": {
+        "role": "station",
+        "displayName": "Brass Escutcheon",
+        "canonical": "#f3dfae",
+        "oklch": "oklch(90.8% 0.067 88)",
+        "tonalRamp": [
+          "#7d6231",
+          "#c9a35a",
+          "#f3dfae"
+        ],
+        "purpose": "The drawer's lock plate: radial at 35% 30%, #f3dfae, brass at 48%, #7d6231."
+      },
+      "keyhole": {
+        "role": "station",
+        "displayName": "Keyhole",
+        "canonical": "#1b1510",
+        "oklch": "oklch(20.1% 0.014 62)",
+        "tonalRamp": [
+          "oklch(15% 0.014 62)",
+          "oklch(26% 0.014 62)",
+          "oklch(38% 0.014 62)",
+          "oklch(49% 0.014 62)",
+          "oklch(61% 0.014 62)",
+          "oklch(72% 0.014 62)",
+          "oklch(84% 0.014 62)",
+          "oklch(95% 0.014 62)"
+        ],
+        "purpose": "The keyhole cut into the lock plate, with a white 25% lower lip."
+      },
+      "felt": {
+        "role": "station",
+        "displayName": "Felt",
+        "canonical": "#080706",
+        "oklch": "oklch(13.0% 0.004 70)",
+        "tonalRamp": [
+          "oklch(15% 0.004 70)",
+          "oklch(26% 0.004 70)",
+          "oklch(38% 0.004 70)",
+          "oklch(49% 0.004 70)",
+          "oklch(61% 0.004 70)",
+          "oklch(72% 0.004 70)",
+          "oklch(84% 0.004 70)",
+          "oklch(95% 0.004 70)"
+        ],
+        "purpose": "The floor of the drawer's tray, lined in the wall's fine grain, under a black 60% fall from the counter's edge."
+      },
+      "tray-divider": {
+        "role": "station",
+        "displayName": "Tray Divider",
+        "canonical": "#24211f",
+        "oklch": "oklch(25.0% 0.006 56)",
+        "tonalRamp": [
+          "oklch(15% 0.006 56)",
+          "oklch(26% 0.006 56)",
+          "oklch(38% 0.006 56)",
+          "oklch(49% 0.006 56)",
+          "oklch(61% 0.006 56)",
+          "oklch(72% 0.006 56)",
+          "oklch(84% 0.006 56)",
+          "oklch(95% 0.006 56)"
+        ],
+        "purpose": "The raised divider standing in the drawer's tray, lit along its top (white 7%)."
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles in Oswald caps (.rz-title)."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headings in Oswald caps, tracked (.rz-heading)."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "Prices, totals and counts in Oswald (.rz-figure); standalone figures only."
+      },
+      "pay": {
+        "displayName": "Pay",
+        "purpose": "The POS checkout buttons (.rz-pay)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Prose, rules, notes; system sans, max 65ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Stat labels and panel legends, uppercase (.rz-label)."
+      },
+      "field-label": {
+        "displayName": "Field label",
+        "purpose": "Form labels in sentence case (.rz-field-label)."
+      },
+      "input": {
+        "displayName": "Input",
+        "purpose": "Typed text in fields: 16px so iOS never zooms (14px from sm where set: the ledger, the drawer's PIN field)."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Table headers, small uppercase tags and the walkthrough's sync connector, uppercase and tracked."
+      },
+      "hook": {
+        "displayName": "Hook",
+        "purpose": "The home h1: 2.5rem phones, 3.75rem from sm, clamp(3rem, 4.4vw, 4rem) from lg; three set lines."
+      },
+      "section-title": {
+        "displayName": "Home section title",
+        "purpose": "Home section titles: 2rem, 2.75rem from sm."
+      },
+      "plate-pos": {
+        "displayName": "POS plate title",
+        "purpose": "Open the POS: 2.125rem, 2.5rem from sm, 2.75rem from xl."
+      },
+      "plate-title": {
+        "displayName": "Plate title",
+        "purpose": "Counter plate titles: 1.25rem, 1.5rem from sm, 1.625rem from lg."
+      },
+      "vinyl-label": {
+        "displayName": "Vinyl label",
+        "purpose": "Day line labels lettered on the glass, in glass ink."
+      },
+      "vinyl-figure": {
+        "displayName": "Vinyl figure",
+        "purpose": "Day line figures on the label's baseline, bone or brass-bright."
+      }
+    },
+    "shadows": [
+      {
+        "name": "panel",
+        "value": "inset 0 1px 0 rgb(214 228 250 / 0.13), 0 18px 36px -26px rgb(0 0 0 / 0.95)",
+        "purpose": "Panels and figure strips: the cool LED tube catching the top edge, plus a falling shadow. Paired with a 3.5rem LED wash (rgb(214 228 250 / 0.04) to transparent)."
+      },
+      {
+        "name": "banner",
+        "value": "0 12px 26px -18px rgb(0 0 0 / 0.95)",
+        "purpose": "The black header banner (rgb(8 7 5 / 0.97) with a rgb(205 214 228 / 0.16) chrome edge)."
+      },
+      {
+        "name": "primary-action",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.2), 0 10px 20px -12px rgb(0 0 0 / 0.95)",
+        "purpose": "Crimson primary buttons: a black shadow, so the enamel sits on the panel instead of glowing."
+      },
+      {
+        "name": "selected-service",
+        "value": "inset 0 1px 0 rgb(214 228 250 / 0.14), 0 14px 26px -18px rgb(0 0 0 / 0.95)",
+        "purpose": "The chosen service card on the POS, lifted on panel-2 with a chrome border."
+      },
+      {
+        "name": "segment-selected",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 6px -2px rgb(0 0 0 / 0.6)",
+        "purpose": "The chosen item in a segmented choice."
+      },
+      {
+        "name": "dialog",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.06), 0 32px 80px -24px rgb(0 0 0 / 0.95)",
+        "purpose": "Dialogs and the payment sheet."
+      },
+      {
+        "name": "hung-sign",
+        "value": "0 26px 40px -18px rgb(0 0 0 / 0.9), 0 2px 6px rgb(0 0 0 / 0.5)",
+        "purpose": "The logo banner: in the home mirror, and alone on the POS loading screens."
+      },
+      {
+        "name": "mirror-bezel",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.7), inset 0 -1px 0 rgb(0 0 0 / 0.45), 0 2px 4px rgb(0 0 0 / 0.5), 0 44px 70px -36px rgb(0 0 0 / 0.95)",
+        "purpose": "The home mirror's chrome bezel on the wall."
+      },
+      {
+        "name": "mirror-glass",
+        "value": "inset 0 2px 8px rgb(0 0 0 / 0.65)",
+        "purpose": "The glass set into the bezel."
+      },
+      {
+        "name": "mirror-led-band",
+        "value": "0 2px 18px rgb(222 234 255 / 0.32), inset 0 2px 18px rgb(222 234 255 / 0.22)",
+        "purpose": "A light source, not a shadow: the frosted LED band (3px rgb(240 245 255 / 0.62), 1px blur)."
+      },
+      {
+        "name": "led-tube",
+        "value": "0 6px 22px 4px rgb(255 240 225 / 0.28)",
+        "purpose": "A light source: the LED tube over the sign in the mirror (3px white 90%, 60% wide)."
+      },
+      {
+        "name": "counter",
+        "value": "0 30px 50px -30px rgb(0 0 0 / 0.95)",
+        "purpose": "The full-bleed counter; its nosing casts 0 1px 0 rgb(0 0 0 / 0.75), 0 8px 14px -6px rgb(0 0 0 / 0.85)."
+      },
+      {
+        "name": "plate",
+        "value": "inset 0 1px 0 rgb(214 228 250 / 0.13), 0 1px 0 rgb(0 0 0 / 0.55), 0 18px 26px -18px rgb(0 0 0 / 0.95)",
+        "purpose": "A tool plate lying on the counter."
+      },
+      {
+        "name": "plate-lifted",
+        "value": "inset 0 1px 0 rgb(214 228 250 / 0.15), 0 1px 0 rgb(0 0 0 / 0.4), 0 28px 34px -20px rgb(0 0 0 / 0.95)",
+        "purpose": "A plate lifted on hover (motion allowed only)."
+      },
+      {
+        "name": "plate-primary",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.24), 0 1px 0 rgb(0 0 0 / 0.55), 0 18px 26px -16px rgb(0 0 0 / 0.95)",
+        "purpose": "Open the POS at rest; lifted: inset 0 1px 0 rgb(255 255 255 / 0.26), 0 1px 0 rgb(0 0 0 / 0.4), 0 28px 34px -18px rgb(0 0 0 / 0.95)."
+      },
+      {
+        "name": "brass-pull",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.5), 0 5px 8px -2px rgb(0 0 0 / 0.85)",
+        "purpose": "The drawer's brass bar pull; its two round mounts cast 0 2px 3px rgb(0 0 0 / 0.75)."
+      },
+      {
+        "name": "escutcheon",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.45), inset 0 -1px 1px rgb(0 0 0 / 0.35), 0 2px 4px rgb(0 0 0 / 0.7)",
+        "purpose": "The drawer's brass lock plate."
+      },
+      {
+        "name": "drawer-front-out",
+        "value": "inset 0 1px 0 rgb(214 228 250 / 0.13), 0 1px 0 rgb(0 0 0 / 0.6), 0 32px 44px -24px rgb(0 0 0 / 0.95)",
+        "purpose": "The drawer front pulled out, nearer the chair (the plate shadow at rest, lifted 2px when pointed at)."
+      },
+      {
+        "name": "tray",
+        "value": "inset 0 1px 0 rgb(214 228 250 / 0.06), inset 10px 0 14px -12px rgb(0 0 0 / 0.9), inset -10px 0 14px -12px rgb(0 0 0 / 0.9)",
+        "purpose": "The drawer's tray, in shadow under the counter's edge and between its walls."
+      },
+      {
+        "name": "nameplate",
+        "value": "inset 0 1px 0 rgb(255 255 255 / 0.45), inset 0 -1px 0 rgb(0 0 0 / 0.3), 0 2px 4px rgb(0 0 0 / 0.65)",
+        "purpose": "The drawer's brass nameplate; its black card sits in it: inset 0 1px 3px rgb(0 0 0 / 0.85)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Every arrival and state change."
+      },
+      {
+        "name": "page",
+        "value": "out: rz-page-out 180ms cubic-bezier(0.4, 0, 1, 1); in: rz-page-in 360ms ease-out-expo, 120ms later; first load: rz-fade 320ms",
+        "purpose": "Pages fade through on every navigation (app/template.tsx view transition; back and forward through a still copy, HistoryFade). With a mouse the old page goes soft (2px) and the new comes into focus (from 4px). The room, ribbon and shears carry on. A first load fades the page in; the animate-fade utility is 240ms."
+      },
+      {
+        "name": "room-air",
+        "value": "fall 2-18px/s by depth; scroll parallax 10%-55% by depth; shears' reach 160px (drag 1.2, part 1, 24px a step); snip puff 240px/s over 200px; settle 2.2/s; switch-on 1.4s",
+        "purpose": "The room's air drifts, answers the shears and the scroll. Mouse for the shears; phones at 30fps. Never under reduced motion."
+      },
+      {
+        "name": "room-tilt",
+        "value": "translate3d(0, -min(7% of scroll, 12vh), 0), eased at 14/s",
+        "purpose": "The room light tilts up the wall as a page scrolls down, and glides back after a navigation. Still under reduced motion."
+      },
+      {
+        "name": "stagger",
+        "value": "rz-rise 380ms, 35ms steps, capped at 245ms",
+        "purpose": "List children rise in turn (.rz-stagger)."
+      },
+      {
+        "name": "dialog",
+        "value": "overlay rz-fade 200ms; panel rz-pop 320ms; phones rz-sheet",
+        "purpose": "Dialogs pop; the phone payment dialog rises as a sheet."
+      },
+      {
+        "name": "toast",
+        "value": "rz-drop 280ms",
+        "purpose": "Sale and sync toasts."
+      },
+      {
+        "name": "value",
+        "value": "rz-value 700ms",
+        "purpose": "A changed checkout amount flashes brass."
+      },
+      {
+        "name": "station-switch-on",
+        "value": "LED band rz-fade 700ms, 120ms delay; room and sign rz-lights-up 1100ms, 160ms delay",
+        "purpose": "The home station switches on: brightness 0.45 and saturate 0.85 to full. Still plays under reduced motion (no movement)."
+      },
+      {
+        "name": "pointer-depth",
+        "value": "transform 900ms ease-out-expo; far room up to ±16px x / ±8px y (--fx/--fy), sign half that (--nx/--ny); sheen background-position (--sx) 900ms",
+        "purpose": "The mirror's reflection shifts against a mouse pointer; lettering stays still. Never for touch or reduced motion."
+      },
+      {
+        "name": "plate-lift",
+        "value": "translateY(-3px) 240ms on hover; translateY(-1px) scale(0.99) on press",
+        "purpose": "A tool lifts off the counter and presses back down. Motion allowed only."
+      },
+      {
+        "name": "keyhole-turn",
+        "value": "rotate(90deg) 500ms ease-out-expo",
+        "purpose": "The drawer's keyhole turns a quarter once the owner PIN is accepted in the drawer."
+      },
+      {
+        "name": "pole-spin",
+        "value": "rz-pole 1.1s linear infinite",
+        "purpose": "The station light turns while the station works."
+      },
+      {
+        "name": "pole-once",
+        "value": "rz-pole 900ms, once",
+        "purpose": "One turn when a service is chosen (its tile light and its striped edge)."
+      },
+      {
+        "name": "skeleton",
+        "value": "rz-shimmer 1.4s linear infinite",
+        "purpose": "Loading placeholders in the shape of the coming content."
+      },
+      {
+        "name": "chart-grow",
+        "value": "rz-grow 640ms (columns), rz-grow-x 800ms (share bars)",
+        "purpose": "Charts grow from their baseline."
+      },
+      {
+        "name": "drawer-slide",
+        "value": "grid-template-rows 0fr to 1fr, 650ms ease-out-expo; the front's shadow lengthens over 600ms",
+        "purpose": "The drawer loads shut; taken anywhere on its front it slides out (the front moves down, the page holds its scroll) and shut again (the page brings the front back into view)."
+      },
+      {
+        "name": "drawer-lift",
+        "value": "translateY(-2px) 240ms on hover; the pull gives 1px on press",
+        "purpose": "The drawer front lifts a hair when it is about to be taken. Motion allowed only."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "slides, pops and growth become fades; loops stop; the home mirror rests and plates don't lift; the owner's drawer opens and shuts without sliding and its front doesn't lift; the room is still (no air, no tilt); page transitions keep their opacity fades without blur",
+        "purpose": "prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action in an area: Cash, Save, Unlock, Show.",
+      "html": "<button class=\"ds-btn-primary\">Save payout</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; border-radius: 10px; border: 1px solid rgb(255 255 255 / 0.08); background: var(--color-crimson, #c41f29); color: #fff; font: 600 14px/1.2 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 10px 20px -12px rgb(0 0 0 / 0.95); transition: background-color 160ms ease-out, transform 140ms cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; } .ds-btn-primary:hover { background: var(--color-crimson-bright, #da2c35); } .ds-btn-primary:active { background: var(--color-crimson-deep, #8c1a20); transform: scale(0.98); } .ds-btn-primary:focus-visible { outline: 2px solid var(--color-bone, #f5f0e8); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Every other action: Cancel, Replace, the Shift Log and Cash Reconciliation links.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--color-seam-strong, #45484e); background: var(--color-panel-2, #1e1c1a); color: var(--color-bone, #f5f0e8); font: 600 14px/1.2 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04); transition: background-color 160ms ease-out, border-color 160ms ease-out; cursor: pointer; } .ds-btn-secondary:hover { background: var(--color-panel-3, #282522); border-color: var(--color-seam-hover, #5c5f66); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--color-bone, #f5f0e8); outline-offset: 2px; }"
+    },
+    {
+      "name": "Cash Pay Button",
+      "kind": "button",
+      "refersTo": "pay-cash",
+      "description": "The POS's main checkout button: full width, Oswald caps with the amount.",
+      "html": "<button class=\"ds-pay-cash\">Cash — ₱200.00</button>",
+      "css": ".ds-pay-cash { width: 100%; min-height: 60px; padding: 14px 20px; border-radius: 12px; border: 1px solid rgb(255 255 255 / 0.08); background: var(--color-crimson, #c41f29); color: #fff; font: 600 18px/1.2 Oswald, 'Arial Narrow', 'Roboto Condensed', sans-serif; letter-spacing: 0.05em; text-transform: uppercase; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2), 0 10px 20px -12px rgb(0 0 0 / 0.95); transition: background-color 160ms ease-out, transform 140ms cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; } .ds-pay-cash:hover { background: var(--color-crimson-bright, #da2c35); } .ds-pay-cash:active { transform: scale(0.98); } .ds-pay-cash:focus-visible { outline: 2px solid var(--color-bone, #f5f0e8); outline-offset: 2px; }"
+    },
+    {
+      "name": "GCash Pay Button",
+      "kind": "button",
+      "refersTo": "pay-gcash",
+      "description": "Wallet-tinted checkout button, its tint mixed onto a solid panel so the room light never shifts it; Maya and QR Ph follow the same pattern in their colours.",
+      "html": "<button class=\"ds-pay-gcash\">GCash — ₱200.00</button>",
+      "css": ".ds-pay-gcash { width: 100%; min-height: 60px; padding: 14px 20px; border-radius: 12px; border: 1.5px solid rgb(47 124 246 / 0.6); background: color-mix(in srgb, var(--color-gcash, #2f7cf6) 10%, var(--color-panel, #171514)); color: var(--color-gcash-ink, #8cb8ff); font: 600 18px/1.2 Oswald, 'Arial Narrow', 'Roboto Condensed', sans-serif; letter-spacing: 0.05em; text-transform: uppercase; transition: background-color 160ms ease-out, border-color 160ms ease-out; cursor: pointer; } .ds-pay-gcash:hover { background: color-mix(in srgb, var(--color-gcash, #2f7cf6) 18%, var(--color-panel, #171514)); border-color: rgb(47 124 246 / 0.85); } .ds-pay-gcash:focus-visible { outline: 2px solid var(--color-bone, #f5f0e8); outline-offset: 2px; }"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Text and number inputs on a chrome edge; typing lights the field crimson.",
+      "html": "<input class=\"ds-field\" placeholder=\"Custom amount (default ₱200.00)\" />",
+      "css": ".ds-field { width: 100%; min-height: 40px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--color-chrome, #5f6268); background: var(--color-wall-raised, #121110); color: var(--color-bone, #f5f0e8); font: 400 16px/1.4 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; caret-color: var(--color-crimson-bright, #da2c35); transition: border-color 160ms ease-out, box-shadow 200ms ease-out; } .ds-field::placeholder { color: var(--color-dust-2, #958d83); } .ds-field:hover { border-color: var(--color-chrome-hover, #7c8089); } .ds-field:focus { outline: none; border-color: var(--color-crimson-bright, #da2c35); background: #151312; box-shadow: 0 0 0 3px rgb(218 44 53 / 0.24); }"
+    },
+    {
+      "name": "Tip Choice",
+      "kind": "chip",
+      "refersTo": "segment-selected",
+      "description": "Segmented choice (tips, trend period); the chosen item rises to a neutral raised panel.",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-seg-item\" aria-pressed=\"true\">No tip</button><button class=\"ds-seg-item\" aria-pressed=\"false\">+₱20 tip</button><button class=\"ds-seg-item\" aria-pressed=\"false\">+₱50 tip</button></div>",
+      "css": ".ds-seg { display: flex; gap: 4px; padding: 4px; border-radius: 12px; border: 1px solid var(--color-seam, #2b2c30); background: rgb(0 0 0 / 0.3); } .ds-seg-item { flex: 1; min-height: 36px; padding: 4px 10px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--color-dust, #a69e93); font: 600 12px/1.2 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; transition: background-color 160ms ease-out, color 160ms ease-out; cursor: pointer; } .ds-seg-item:hover { color: var(--color-bone, #f5f0e8); background: rgb(255 255 255 / 0.05); } .ds-seg-item[aria-pressed=\"true\"] { background: var(--color-panel-3, #282522); border-color: var(--color-seam-strong, #45484e); color: var(--color-bone, #f5f0e8); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 6px -2px rgb(0 0 0 / 0.6); }"
+    },
+    {
+      "name": "Figure Strip",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Related figures on one hairline-split sheet; money totals in brass, every other figure in bone or its wallet ink.",
+      "html": "<div class=\"ds-strip\"><div><span class=\"ds-label\">Cash sales</span><span class=\"ds-fig\">₱1400.00</span></div><div><span class=\"ds-label\">Expected drawer</span><span class=\"ds-fig ds-brass\">₱1070.00</span></div></div>",
+      "css": ".ds-strip { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; border-radius: 14px; border: 1px solid var(--color-seam, #2b2c30); background: var(--color-panel, #171514) linear-gradient(180deg, rgb(214 228 250 / 0.04), rgb(214 228 250 / 0) 3.5rem); box-shadow: inset 0 1px 0 rgb(214 228 250 / 0.13), 0 18px 36px -26px rgb(0 0 0 / 0.95); } .ds-strip > div { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; box-shadow: 1px 0 0 var(--color-seam, #2b2c30); } .ds-label { font: 600 12px/1.3 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-dust, #a69e93); } .ds-fig { font: 600 24px/1.1 Oswald, 'Arial Narrow', 'Roboto Condensed', sans-serif; letter-spacing: 0.01em; color: var(--color-bone, #f5f0e8); } .ds-brass { color: var(--color-brass-bright, #e4c584); }"
+    },
+    {
+      "name": "Barber Pole",
+      "kind": "custom",
+      "refersTo": "BarberPoleIcon",
+      "description": "The station light: turns while the station works (POS start, sync, owner pages loading), turns once when a service is chosen, still at rest.",
+      "html": "<span class=\"ds-pole\"><span class=\"ds-cap\"></span><span class=\"ds-glass\"></span><span class=\"ds-cap ds-cap-b\"></span></span>",
+      "css": ".ds-pole { display: inline-flex; flex-direction: column; align-items: center; width: 12px; height: 32px; } .ds-cap { width: 100%; height: 16%; border-radius: 999px 999px 2px 2px; background: linear-gradient(90deg, #7f858d, #f6f7f9 42%, #b3b9c1 70%, #6f757d); } .ds-cap-b { border-radius: 2px 2px 999px 999px; } .ds-glass { position: relative; flex: 1; width: 70%; overflow: hidden; background-color: #f5f0e8; background-image: repeating-linear-gradient(-45deg, #c41f29 0 3.536px, #f5f0e8 3.536px 7.071px, #2b4aa6 7.071px 10.607px, #f5f0e8 10.607px 14.142px); background-size: 20px 20px; animation: ds-pole 1.1s linear infinite; } .ds-glass::after { content: \"\"; position: absolute; inset: 0; background: linear-gradient(90deg, rgb(0 0 0 / 0.45), rgb(255 255 255 / 0.32) 34%, rgb(255 255 255 / 0) 58%, rgb(0 0 0 / 0.5)); } @keyframes ds-pole { to { background-position: 0 -20px; } } @media (prefers-reduced-motion: reduce) { .ds-glass { animation: none; } }"
+    },
+    {
+      "name": "Selected Service",
+      "kind": "card",
+      "refersTo": "service-selected",
+      "description": "The chosen POS service: a neutral card lifted on panel-2 with a chrome border and a barber-pole edge that turns once.",
+      "html": "<button class=\"ds-service\" aria-pressed=\"true\"><span class=\"ds-service-edge\"></span><span class=\"ds-service-name\">Haircut</span><span class=\"ds-service-price\">₱200.00</span></button>",
+      "css": ".ds-service { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 72px; padding: 14px 16px 14px 20px; border-radius: 12px; border: 1px solid var(--color-chrome, #5f6268); background: var(--color-panel-2, #1e1c1a); color: var(--color-bone, #f5f0e8); box-shadow: inset 0 1px 0 rgb(214 228 250 / 0.14), 0 14px 26px -18px rgb(0 0 0 / 0.95); text-align: left; cursor: pointer; } .ds-service-edge { position: absolute; inset: 0 auto 0 0; width: 6px; background-color: #f5f0e8; background-image: repeating-linear-gradient(-45deg, #c41f29 0 3.536px, #f5f0e8 3.536px 7.071px, #2b4aa6 7.071px 10.607px, #f5f0e8 10.607px 14.142px); background-size: 20px 20px; animation: ds-edge 900ms cubic-bezier(0.16, 1, 0.3, 1) 1; } .ds-service-name { font: 600 15px/1.3 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; } .ds-service-price { font: 600 22px/1.1 Oswald, 'Arial Narrow', 'Roboto Condensed', sans-serif; letter-spacing: 0.01em; } @keyframes ds-edge { to { background-position: 0 -20px; } } @media (prefers-reduced-motion: reduce) { .ds-service-edge { animation: none; } }"
+    },
+    {
+      "name": "Room Light",
+      "kind": "custom",
+      "refersTo": ".rz-room-light (ShopRoom)",
+      "description": "The page background: the shop at night, pinned to the screen behind all content. It tilts up the wall as a page scrolls (7% of the scroll, at most 12% of the screen) and never brightens; still under reduced motion.",
+      "html": "<div class=\"ds-room\"><p>Content scrolls over the room light.</p></div>",
+      "css": ".ds-room { position: relative; min-height: 240px; padding: 24px; background-color: var(--color-wall, #0c0b0a); color: var(--color-dust, #a69e93); font: 400 14px/1.6 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; isolation: isolate; overflow: hidden; } .ds-room::before { content: \"\"; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: radial-gradient(60rem 16rem at 50% -7rem, rgb(222 234 255 / 0.06), transparent 70%), radial-gradient(130% 85% at 50% -15%, rgb(196 31 41 / 0.42), transparent 70%), radial-gradient(85% 70% at 105% 105%, rgb(140 26 32 / 0.36), transparent 70%), radial-gradient(70% 60% at -5% 75%, rgb(140 26 32 / 0.18), transparent 70%); }"
+    },
+    {
+      "name": "Shop Air",
+      "kind": "custom",
+      "refersTo": ".rz-room-air (ShopRoom)",
+      "description": "Fine hair clippings and dust drifting down through the room light, in depth, lit by the room's own lights (warm in the crimson light, all but gone in the dark). The shears catch the light off them, stir them as they pass and puff them on a snip; the scroll moves them by depth and stirs the near ones. Up to 220 specks at 60fps with a mouse; 30-60 at 30fps on a phone, no cursor. Not drawn under reduced motion or without JavaScript.",
+      "html": "<div class=\"ds-air\"><i class=\"ds-speck\"></i><i class=\"ds-speck ds-speck-b\"></i><i class=\"ds-hair\"></i><i class=\"ds-hair ds-hair-b\"></i></div>",
+      "css": ".ds-air { position: relative; min-height: 180px; background-color: var(--color-wall, #0c0b0a); background-image: radial-gradient(130% 85% at 50% -15%, rgb(196 31 41 / 0.42), transparent 70%); overflow: hidden; } .ds-speck { position: absolute; left: 30%; top: 26%; width: 6px; height: 6px; border-radius: 50%; background: radial-gradient(circle, rgb(240 200 196) 0 18%, rgb(240 200 196 / 0.35) 30%, transparent 60%); } .ds-speck-b { left: 64%; top: 40%; width: 4px; height: 4px; } .ds-hair { position: absolute; left: 46%; top: 22%; width: 12px; height: 1px; border-radius: 1px; background: rgb(226 196 190 / 0.8); transform: rotate(-24deg); } .ds-hair-b { left: 72%; top: 18%; width: 9px; transform: rotate(38deg); }"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "State and wallet pills; colour always paired with words or an icon.",
+      "html": "<span class=\"ds-pill ds-pill-ok\">Online</span> <span class=\"ds-pill ds-pill-warn\">Pending</span> <span class=\"ds-pill ds-pill-brass\">Owner PIN</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 2px 10px; border-radius: 999px; border: 1px solid; font: 600 12px/1.2 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; } .ds-pill-ok { background: rgb(52 194 125 / 0.1); border-color: rgb(52 194 125 / 0.32); color: var(--color-ok-ink, #88e0b3); } .ds-pill-warn { background: rgb(239 159 47 / 0.1); border-color: rgb(239 159 47 / 0.36); color: var(--color-warn-ink, #f7c67d); } .ds-pill-brass { background: rgb(201 163 90 / 0.1); border-color: rgb(201 163 90 / 0.4); color: var(--color-brass-bright, #e4c584); text-transform: uppercase; letter-spacing: 0.05em; }"
+    },
+    {
+      "name": "Station Mirror",
+      "kind": "custom",
+      "refersTo": "mirror-bezel",
+      "description": "The home page's chrome-bezelled mirror: the reflected room and accent wall behind a frosted LED band, lettering on the glass.",
+      "html": "<div class=\"ds-mirror\"><div class=\"ds-glass\"><span class=\"ds-room\"><span class=\"ds-wall\"></span></span><span class=\"ds-led\"></span><div class=\"ds-letters\"><p class=\"ds-hook\">Every cut,<br>counted<br>once.</p><p class=\"ds-desc\">The shop's point of sale and end-of-day books.</p></div></div></div>",
+      "css": ".ds-mirror { padding: 9px; border-radius: 30px; background: linear-gradient(160deg, #eef1f5 0%, #8a9098 18%, #d6dce4 40%, #6c727a 62%, #c3c9d1 82%, #7f858d 100%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7), inset 0 -1px 0 rgb(0 0 0 / 0.45), 0 2px 4px rgb(0 0 0 / 0.5), 0 44px 70px -36px rgb(0 0 0 / 0.95); } .ds-glass { position: relative; isolation: isolate; overflow: hidden; border-radius: 21px; background: var(--color-wall, #0c0b0a); box-shadow: inset 0 2px 8px rgb(0 0 0 / 0.65); } .ds-room { position: absolute; inset: 0; z-index: -1; background-color: var(--color-wall, #0c0b0a); background-image: radial-gradient(75% 65% at 50% 40%, rgb(140 26 32 / 0.34), transparent 78%), linear-gradient(180deg, rgb(222 234 255 / 0.07), transparent 4.5rem), linear-gradient(180deg, transparent 55%, rgb(0 0 0 / 0.55)); } .ds-wall { position: absolute; top: 2rem; bottom: 0; left: 2.5%; right: 2.5%; background-color: var(--color-accent-wall, #a3161e); background-image: radial-gradient(110% 80% at 34% -8%, rgb(255 255 255 / 0.15), transparent 60%), linear-gradient(180deg, transparent 45%, rgb(0 0 0 / 0.5)); -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent), linear-gradient(180deg, transparent, #000 3.5rem); -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent), linear-gradient(180deg, transparent, #000 3.5rem); mask-composite: intersect; } .ds-led { position: absolute; inset: 15px; z-index: 1; pointer-events: none; border: 3px solid rgb(240 245 255 / 0.62); border-radius: 13px; filter: blur(1px); box-shadow: 0 2px 18px rgb(222 234 255 / 0.32), inset 0 2px 18px rgb(222 234 255 / 0.22); } .ds-letters { position: relative; z-index: 2; padding: 56px 48px 40px; text-shadow: 0 1px 0 rgb(0 0 0 / 0.4); } .ds-hook { margin: 0; font: 600 3.75rem/1.05 Oswald, 'Arial Narrow', 'Roboto Condensed', sans-serif; letter-spacing: 0.03em; text-transform: uppercase; color: var(--color-bone, #f5f0e8); } .ds-desc { max-width: 36ch; margin: 16px 0 0; font: 400 1.125rem/1.625 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #f3dcd8; }"
+    },
+    {
+      "name": "Counter Plates",
+      "kind": "card",
+      "refersTo": "plate",
+      "description": "Tool plates on the counter: Open the POS in crimson enamel, Shift Log and End-of-Day Cash leather-black; plates lift when pointed at. The owner's drawer is the counter's own drawer under them.",
+      "html": "<div class=\"ds-counter\"><a class=\"ds-plate ds-plate-pos\" href=\"#\"><span class=\"ds-plate-title ds-pos-title\">Open the POS</span><span class=\"ds-plate-foot\">Cash · GCash · Maya</span></a><a class=\"ds-plate\" href=\"#\"><span class=\"ds-plate-title\">Shift Log</span><span class=\"ds-plate-body\">Every sale on this phone.</span></a><a class=\"ds-plate\" href=\"#\"><span class=\"ds-plate-title\">End-of-Day Cash</span><span class=\"ds-plate-body\">Close out today.</span></a></div>",
+      "css": ".ds-counter { position: relative; display: grid; grid-template-columns: 1.7fr 1fr 1fr; gap: 16px; padding: 28px 24px 48px; background-color: #0f0e0d; background-image: radial-gradient(60% 6rem at 50% 0, rgb(222 234 255 / 0.06), transparent), linear-gradient(180deg, #1b1918, #121110 1.75rem, #0d0c0b); box-shadow: 0 30px 50px -30px rgb(0 0 0 / 0.95); } .ds-counter::before { content: \"\"; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #5f646b, #dfe4ea 22%, #8f959d 48%, #f2f4f7 72%, #6a7078); box-shadow: 0 1px 0 rgb(0 0 0 / 0.75), 0 8px 14px -6px rgb(0 0 0 / 0.85); } .ds-plate { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px 20px; border: 1px solid var(--color-seam, #2b2c30); border-radius: 14px; background-color: var(--color-panel, #171514); background-image: linear-gradient(180deg, rgb(214 228 250 / 0.045), rgb(214 228 250 / 0) 3.5rem); color: var(--color-bone, #f5f0e8); text-decoration: none; box-shadow: inset 0 1px 0 rgb(214 228 250 / 0.13), 0 1px 0 rgb(0 0 0 / 0.55), 0 18px 26px -18px rgb(0 0 0 / 0.95); transition: background-color 160ms ease-out, border-color 160ms ease-out, box-shadow 240ms ease-out, transform 240ms cubic-bezier(0.16, 1, 0.3, 1); } a.ds-plate:hover { background-color: var(--color-panel-2, #1e1c1a); border-color: var(--color-seam-hover, #5c5f66); transform: translateY(-3px); box-shadow: inset 0 1px 0 rgb(214 228 250 / 0.15), 0 1px 0 rgb(0 0 0 / 0.4), 0 28px 34px -20px rgb(0 0 0 / 0.95); } a.ds-plate:active { transform: translateY(-1px) scale(0.99); } a.ds-plate:focus-visible { outline: 2px solid var(--color-bone, #f5f0e8); outline-offset: 2px; } .ds-plate-pos { background-color: var(--color-crimson, #c41f29); background-image: linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0) 4rem); border-color: rgb(255 255 255 / 0.1); color: #fff; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.24), 0 1px 0 rgb(0 0 0 / 0.55), 0 18px 26px -16px rgb(0 0 0 / 0.95); } a.ds-plate-pos:hover { background-color: var(--color-crimson-bright, #da2c35); border-color: rgb(255 255 255 / 0.16); } a.ds-plate-pos:active { background-color: var(--color-crimson-deep, #8c1a20); } .ds-plate-title { font: 600 1.625rem/1.05 Oswald, 'Arial Narrow', 'Roboto Condensed', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; } .ds-pos-title { font-size: 2.75rem; line-height: 0.95; } .ds-plate-body { font: 400 14px/1.6 ui-sans-serif, system-ui, sans-serif; color: var(--color-dust, #a69e93); } .ds-plate-foot { margin-top: auto; font: 600 12px/1.3 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; } @media (prefers-reduced-motion: reduce) { a.ds-plate:hover, a.ds-plate:active { transform: none; } }"
+    },
+    {
+      "name": "Owner's Drawer",
+      "kind": "custom",
+      "refersTo": "drawer",
+      "description": "The counter's own drawer under the tools, shut on every page load: a lacquered front with a brass nameplate, the lock and a bar pull, the whole front its handle. Taken, it slides out with the owner's four tools in its tray (Barber Ledger, Insights, Payment QR and the 7-day forecast, which asks for the owner PIN).",
+      "html": "<section class=\"ds-drawer-front\"><h2 class=\"ds-nameplate\"><span class=\"ds-nameplate-card\">Owner's drawer</span></h2><span class=\"ds-drawer-state\"><svg class=\"ds-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"16\" r=\"1\"/><rect x=\"3\" y=\"10\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"M7 10V7a5 5 0 0 1 10 0v3\"/></svg>Locked · owner PIN</span><span class=\"ds-esc\"><span class=\"ds-key\"></span></span><button class=\"ds-handle\" type=\"button\" aria-expanded=\"false\"><span class=\"ds-pull\" aria-hidden=\"true\"></span><span class=\"ds-hint\">Pull to open</span></button></section>",
+      "css": ".ds-drawer-front { position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: center; padding: 28px 24px 20px; border: 1px solid var(--color-seam-strong, #45484e); border-radius: 14px; background-color: var(--color-panel-2, #1e1c1a); background-image: linear-gradient(180deg, rgb(214 228 250 / 0.05), rgb(214 228 250 / 0) 3rem), linear-gradient(180deg, transparent 55%, rgb(0 0 0 / 0.22)); color: var(--color-bone, #f5f0e8); text-align: center; box-shadow: inset 0 1px 0 rgb(214 228 250 / 0.13), 0 1px 0 rgb(0 0 0 / 0.55), 0 18px 26px -18px rgb(0 0 0 / 0.95); transition: box-shadow 600ms cubic-bezier(0.16, 1, 0.3, 1), transform 240ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-drawer-front::before { content: \"\"; position: absolute; inset: 7px; z-index: -1; border-radius: 9px; border: 1px solid rgb(0 0 0 / 0.5); box-shadow: 0 1px 0 rgb(255 255 255 / 0.05), inset 0 1px 0 rgb(255 255 255 / 0.04); pointer-events: none; } .ds-drawer-front:has(.ds-handle:hover) { transform: translateY(-2px); } .ds-nameplate { position: relative; display: inline-flex; margin: 0; padding: 3px 14px; border-radius: 12px; background: linear-gradient(170deg, #f3dfae, var(--color-brass, #c9a35a) 40%, #7d6231); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), inset 0 -1px 0 rgb(0 0 0 / 0.3), 0 2px 4px rgb(0 0 0 / 0.65); } .ds-nameplate::before, .ds-nameplate::after { content: \"\"; position: absolute; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 999px; background: radial-gradient(circle at 35% 35%, #f3dfae, #7d6231 70%); } .ds-nameplate::before { left: 4.5px; } .ds-nameplate::after { right: 4.5px; } .ds-nameplate-card { display: block; padding: 8px 24px 7px; border-radius: 9px; background-color: #0f0e0d; box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.85); font: 600 1.875rem/1.05 Oswald, 'Arial Narrow', 'Roboto Condensed', sans-serif; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; } .ds-drawer-state { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; font: 600 12px/1.3 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-dust, #a69e93); } .ds-drawer-state .ds-icon { width: 14px; height: 14px; color: var(--color-brass, #c9a35a); } .ds-esc { display: inline-flex; align-items: center; justify-content: center; margin-top: 16px; width: 2.75rem; height: 2.75rem; border-radius: 999px; background: radial-gradient(circle at 35% 30%, #f3dfae, var(--color-brass, #c9a35a) 48%, #7d6231); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), inset 0 -1px 1px rgb(0 0 0 / 0.35), 0 2px 4px rgb(0 0 0 / 0.7); } .ds-key { position: relative; width: 9px; height: 19px; } .ds-key::before { content: \"\"; position: absolute; top: 0; left: 0; width: 9px; height: 9px; border-radius: 999px; background: #1b1510; box-shadow: 0 1px 0 rgb(255 255 255 / 0.25); } .ds-key::after { content: \"\"; position: absolute; top: 6px; left: 2.5px; width: 4px; height: 13px; border-radius: 2px 2px 3px 3px; background: #1b1510; box-shadow: 0 1px 0 rgb(255 255 255 / 0.25); } .ds-handle { display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(64%, 16rem); margin-top: 12px; padding: 6px 8px 0; border: 0; background: none; cursor: pointer; } .ds-handle::after { content: \"\"; position: absolute; inset: 0; z-index: 1; border-radius: 14px; } .ds-handle:focus-visible { outline: none; } .ds-handle:focus-visible::after { outline: 2px solid var(--color-bone, #f5f0e8); outline-offset: 2px; } .ds-pull { position: relative; display: block; width: 100%; height: 9px; border-radius: 999px; background: linear-gradient(180deg, #ecd39a, var(--color-brass, #c9a35a) 45%, #8a6d36); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), 0 5px 8px -2px rgb(0 0 0 / 0.85); transition: filter 160ms ease-out, transform 240ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-pull::before, .ds-pull::after { content: \"\"; position: absolute; top: 50%; width: 15px; height: 15px; margin-top: -7.5px; border-radius: 999px; background: radial-gradient(circle at 35% 30%, #f3dfae, var(--color-brass, #c9a35a) 50%, #6f5629); box-shadow: 0 2px 3px rgb(0 0 0 / 0.75); } .ds-pull::before { left: -3px; } .ds-pull::after { right: -3px; } .ds-hint { font: 600 11px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-dust, #a69e93); transition: color 160ms ease-out; } .ds-drawer-front:has(.ds-handle:hover) .ds-hint { color: var(--color-brass-bright, #e4c584); } .ds-drawer-front:has(.ds-handle:hover) .ds-pull { filter: brightness(1.08); } .ds-drawer-front:has(.ds-handle:active) .ds-pull { transform: translateY(1px); } @media (prefers-reduced-motion: reduce) { .ds-drawer-front, .ds-drawer-front:has(.ds-handle:hover) { transform: none; } }"
+    },
+    {
+      "name": "Shop Cursor",
+      "kind": "cursor",
+      "description": "Barber's shears as the mouse pointer on every page: closed at rest, open over clickable controls, a snip with falling clippings on press; text fields keep the text cursor; still SVG cursors under reduced motion. Touch screens unaffected.",
+      "html": "<div class=\"rz-cursor\" data-state=\"ready\"><svg class=\"rz-cursor-art\" viewBox=\"0 0 16 32\"></svg></div>",
+      "css": "@media (pointer: fine) { html { cursor: url(/cursors/scissors.svg) 3 3, auto; } a[href], button:not(:disabled) { cursor: url(/cursors/scissors-open.svg) 3 3, pointer; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Shop After Dark",
+    "overview": "The station looks like the shop after closing: matte black walls lit by the crimson accent wall's glow and a cool LED tube, black leather with chrome trim, the crimson accent wall with the black logo banner, and the barber pole by the door. Every screen is a working tool first, so the world lends only type, palette, density and one signature move, and the controls stay standard. Brass is rare on purpose, crimson means act here or cash, the barber pole lights only for state, and warnings are a hotter amber with an icon. The home page shows the world as a scene: a barber's station seen from the chair, the chrome-bezelled mirror reflecting the room over a black counter where the day's tools lie, and the owner's books in the counter's own locked drawer.",
+    "keyCharacteristics": [
+      "A warm near-black room lit at night: crimson light from the top, embers in the corners, a cool LED tube, fine grain, and clippings and dust drifting through the light",
+      "Oswald condensed caps for titles, prices, totals and checkout buttons; system sans elsewhere",
+      "The barber pole as the station's state light, never a heading ornament",
+      "Figures grouped on one hairline-split sheet",
+      "Short, state-driven motion; pages fade through on navigation while the room carries on; the room's air is the one ambient motion"
+    ],
+    "rules": [
+      {
+        "name": "The Accent Wall Rule",
+        "body": "Crimson is enamel for the one primary action and the cash identity (its icon and pill), and the light of the room behind the pages; never a glow on a component, never on a money figure (crimson ink marks only errors and shortfalls). On the home page the Open the POS plate is the one crimson enamel; the Accent Wall colour appears only as the wall reflected in the mirror.",
+        "section": "colors"
+      },
+      {
+        "name": "The Room Light Rule",
+        "body": "Background colour comes only from the fixed room light (crimson from the top, embers low in the corners, the LED tube). Translucent identity tints that can sit on it are mixed onto a solid panel so wallet and state colours stay true. The mirror's reflected room is the room light too; its lettering is glass ink, bone and brass.",
+        "section": "colors"
+      },
+      {
+        "name": "The Brass Ledger Rule",
+        "body": "Brass marks money that matters and the owner; it is never an alert colour and never the focus ring. On the home page: the day's paid-sales count and prices on the glass, the mustache, and the owner's drawer (nameplate, lock plate, bar pull).",
+        "section": "colors"
+      },
+      {
+        "name": "The State Light Rule",
+        "body": "The barber pole lights only for state: turning while the station works, one turn on a chosen service, still otherwise. It never decorates headings.",
+        "section": "components"
+      },
+      {
+        "name": "The Wallet Colours Rule",
+        "body": "GCash blue, Maya green and QR Ph violet belong to their payment methods only. The POS plate names the accepted methods in plain white.",
+        "section": "colors"
+      },
+      {
+        "name": "The Condensed Caps Rule",
+        "body": "Oswald for titles, prices, totals and checkout buttons; labels, fields, tables and prose stay in the system sans. Signage is the exception: the home day line's vinyl labels and the board's names are lettered in Oswald.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Columns Rule",
+        "body": "Money in columns uses the system sans with tabular numerals so decimals line up, including the walkthrough's drawer sum.",
+        "section": "typography"
+      },
+      {
+        "name": "The Offset Shadow Rule",
+        "body": "Shadows always fall with a soft blur; no zero-offset halos, no hard block shadows. A light source in the scene (the mirror's LED band, the LED tube) glows because it is a light; no component does.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use crimson for the one primary action per area and secondary for the rest.",
+      "Do put money totals in brass Oswald and status in its state colour with an icon.",
+      "Do group related figures in one strip and divide list rows inside a single panel.",
+      "Do spin the pole only for real work, and mark a chosen service with its striped edge, not a crimson tint.",
+      "Do keep 44px touch targets and 16px inputs on phones.",
+      "Do show a skeleton in the shape of the coming content while it loads.",
+      "Do mix a translucent identity tint onto a solid panel when the element can sit straight on the room light.",
+      "Do keep lettering on the home mirror's glass still while the reflection moves, and keep the station's materials (bezel and nosing chrome, brass hardware, glass ink, the accent wall) on the station."
+    ],
+    "donts": [
+      "Don't use crimson or brass as decoration on components: no glows, no tinted selected or inactive states. Crimson light belongs to the room behind the pages.",
+      "Don't use Oswald for labels, form fields, tables or prose.",
+      "Don't nest cards; use a well or hairline rows inside a panel.",
+      "Don't put a kicker or eyebrow above a heading.",
+      "Don't load fonts from Google or any CDN; the build and phones work offline.",
+      "Don't reuse wallet colours outside their payment methods, or make the gold-serif vintage sign the display voice.",
+      "Don't add a second ambient animation or draw the air over content; anything that persists across pages stays out of the page transition."
+    ]
+  }
+}

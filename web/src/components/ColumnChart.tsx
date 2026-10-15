@@ -2,10 +2,10 @@
 
 // Column chart for the owner's trend charts on /insights: one value per column.
 // Hover, a tap or the arrow keys show the same tooltip, and "Show as table" lists every value,
-// so nothing depends on hovering. Columns are at most 24px wide with a 4px rounded top;
-// emphasised columns are red and the rest are context grey (red-500 vs zinc-500 on the card:
-// both above 3:1 contrast, and told apart under colour blindness; the emphasised day's axis
-// label is also bold).
+// so nothing depends on hovering. Columns are at most 24px wide with a 3px rounded top and grow
+// in from the baseline; emphasised columns are crimson and the rest are context grey
+// (crimson-bright vs dust-2 on the panel: both above 3:1 contrast, and told apart under colour
+// blindness; the emphasised day's axis label is also bold).
 import { useId, useState, type KeyboardEvent, type PointerEvent } from "react";
 
 export type Column = {
@@ -26,14 +26,23 @@ type Props = {
   valueHeading: string; // table heading for the values ("Revenue")
   labelEvery?: number; // show every nth axis label, counted back from the last column
   height?: number; // plot height in px
+  delay?: number; // ms before the columns start to grow (presentation mode lets the headline land first)
+  // A dashed level across the plot to read the columns against ("the 14 days before: ₱1,000 a day").
+  // Its words are in the summary too; the line itself is hidden from screen readers.
+  reference?: { value: number; label: string };
+  // A tag pinned over one column (by key) once the columns have grown, hidden while the tooltip shows.
+  callout?: { key: string; text: string };
 };
 
-export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading, labelEvery = 1, height = 176 }: Props) {
+export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading, labelEvery = 1, height = 176, delay = 0, reference, callout }: Props) {
   const [active, setActive] = useState<number | null>(null);
   const hintId = useId();
   const count = columns.length;
-  const ticks = niceTicks(Math.max(0, ...columns.map((c) => c.value)), unit);
+  const highest = Math.max(0, ...columns.map((c) => c.value), reference?.value ?? 0);
+  // Headroom over the tallest column, so a callout tag stays inside the plot.
+  const ticks = niceTicks(callout ? highest * 1.2 : highest, unit);
   const top = ticks[ticks.length - 1];
+  const calloutIndex = callout ? columns.findIndex((c) => c.key === callout.key) : -1;
   const emphasisIndex = columns.findIndex((c) => c.emphasis);
   const hasEmphasis = emphasisIndex >= 0;
   // Keyboard reading starts on the emphasised column, else the last one.
@@ -60,9 +69,11 @@ export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading
 
   if (count === 0) return null;
 
-  // Keep the tooltip inside the chart near the left and right edges.
+  // Keep the tooltip (and the callout tag) inside the chart near the left and right edges.
+  const edgeShift = (at: number) => (at < 0.2 ? -15 : at > 0.8 ? -85 : -50);
   const position = active !== null ? (active + 0.5) / count : 0;
-  const shift = position < 0.2 ? -15 : position > 0.8 ? -85 : -50;
+  const shift = edgeShift(position);
+  const calloutAt = (calloutIndex + 0.5) / count;
 
   return (
     <figure className="space-y-2">
@@ -75,8 +86,8 @@ export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading
               className="absolute inset-x-0 flex items-center gap-2"
               style={{ bottom: `${(tick / top) * 100}%`, transform: "translateY(50%)" }}
             >
-              <span className="w-10 shrink-0 text-right text-xs text-zinc-400 tabular-nums">{formatTick(tick, unit)}</span>
-              <span className="h-px flex-1 bg-[#232734]" />
+              <span className="w-10 shrink-0 text-right text-xs text-dust tabular-nums">{formatTick(tick, unit)}</span>
+              <span className="h-px flex-1 bg-seam" />
             </div>
           ))}
         </div>
@@ -99,24 +110,65 @@ export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading
           {columns.map((column, index) => (
             <div
               key={column.key}
-              className={`flex h-full flex-1 items-end justify-center ${active === index ? "bg-white/5" : ""}`}
+              className={`flex h-full flex-1 items-end justify-center transition-colors duration-150 ${active === index ? "bg-white/5" : ""}`}
             >
               <div
-                className={`w-3/5 max-w-6 rounded-t-sm ${!hasEmphasis || column.emphasis ? "bg-red-500" : "bg-zinc-500"} ${active === index ? "brightness-125" : ""}`}
-                style={{ height: `${top > 0 ? (column.value / top) * 100 : 0}%`, minHeight: column.value > 0 ? 2 : 0 }}
+                className={`w-3/5 max-w-6 rounded-t-[3px] origin-bottom transition-[filter] duration-150 ${!hasEmphasis || column.emphasis ? "bg-crimson-bright" : "bg-dust-2"} ${active === index ? "brightness-125" : ""}`}
+                style={{
+                  height: `${top > 0 ? (column.value / top) * 100 : 0}%`,
+                  minHeight: column.value > 0 ? 2 : 0,
+                  animation: `rz-grow 640ms var(--ease-out-expo) ${delay + Math.min(index * 18, 360)}ms both`,
+                }}
               />
             </div>
           ))}
         </div>
 
+        {reference && top > 0 && (
+          // Drawn over the columns (dashed, so they show through) and out of the pointer's way.
+          <div aria-hidden="true" className="pointer-events-none absolute right-0 left-12" style={{ bottom: `${(reference.value / top) * 100}%` }}>
+            <div
+              className="border-t border-dashed border-bone-2/60 origin-left"
+              style={{ animation: `rz-grow-x 700ms var(--ease-out-expo) ${delay + 420}ms both` }}
+            />
+            <span
+              className="absolute right-0 bottom-1 max-w-[70%] truncate rounded-sm bg-panel/85 px-1 text-[0.6875rem] leading-4 text-bone-2 tabular-nums"
+              style={{ animation: `rz-fade 400ms ease-out ${delay + 820}ms both` }}
+            >
+              {reference.label}
+            </span>
+          </div>
+        )}
+
+        {callout && calloutIndex >= 0 && top > 0 && (
+          // Positioned by the outer box, animated by the inner one (an animation would override the shift).
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-10"
+            style={{
+              left: `calc(3rem + (100% - 3rem) * ${calloutAt})`,
+              bottom: `calc(${(columns[calloutIndex].value / top) * 100}% + 6px)`,
+              transform: `translateX(${edgeShift(calloutAt)}%)`,
+              visibility: active !== null ? "hidden" : undefined,
+            }}
+          >
+            <div
+              className="w-max rounded-md border border-seam-strong bg-panel-3 px-2 py-0.5 text-xs font-semibold text-bone tabular-nums shadow-[0_8px_18px_-10px_rgb(0_0_0/0.95)]"
+              style={{ animation: `rz-drop 360ms var(--ease-out-expo) ${delay + 760}ms both` }}
+            >
+              {callout.text}
+            </div>
+          </div>
+        )}
+
         {current && (
           <div
-            className="pointer-events-none absolute top-1 z-10 w-max max-w-48 rounded-lg border border-[#2c3140] bg-[#0b0c10] px-2.5 py-1.5 text-xs shadow-lg"
+            className="animate-fade pointer-events-none absolute top-1 z-10 w-max max-w-48 rounded-lg border border-seam-strong bg-panel-3 px-2.5 py-1.5 text-xs shadow-[0_12px_28px_-12px_rgb(0_0_0/0.95)]"
             style={{ left: `calc(3rem + (100% - 3rem) * ${position})`, transform: `translateX(${shift}%)` }}
           >
-            <div className="font-semibold text-white tabular-nums">{current.valueText}</div>
-            <div className="text-zinc-400">{current.label}</div>
-            {current.detail && <div className="text-zinc-400">{current.detail}</div>}
+            <div className="font-semibold text-bone tabular-nums">{current.valueText}</div>
+            <div className="text-dust">{current.label}</div>
+            {current.detail && <div className="text-dust">{current.detail}</div>}
           </div>
         )}
       </div>
@@ -126,7 +178,7 @@ export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading
         {columns.map((column, index) => (
           <span
             key={column.key}
-            className={`flex-1 text-center text-xs tabular-nums ${column.emphasis ? "font-bold text-white" : "text-zinc-400"}`}
+            className={`flex-1 text-center text-xs tabular-nums ${column.emphasis ? "font-bold text-bone" : "text-dust"}`}
           >
             {(count - 1 - index) % labelEvery === 0 ? column.axisLabel : ""}
           </span>
@@ -139,23 +191,23 @@ export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading
       </p>
 
       <details>
-        <summary className="inline-flex min-h-6 cursor-pointer items-center text-xs text-zinc-400 hover:text-white pointer-coarse:min-h-11">
+        <summary className="inline-flex min-h-6 cursor-pointer items-center text-xs font-medium text-dust hover:text-bone transition-colors pointer-coarse:min-h-11">
           Show as table
         </summary>
-        <table className="mt-2 w-full text-xs tabular-nums">
+        <table className="rz-table mt-2 text-xs">
           <thead>
-            <tr className="text-zinc-400">
-              <th className="py-1 text-left font-semibold">{labelHeading}</th>
-              <th className="py-1 text-right font-semibold">{valueHeading}</th>
-              {hasDetail && <th className="py-1 text-right font-semibold">Details</th>}
+            <tr>
+              <th className="text-left">{labelHeading}</th>
+              <th className="text-right">{valueHeading}</th>
+              {hasDetail && <th className="text-right">Details</th>}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#232734]">
+          <tbody>
             {columns.map((column) => (
               <tr key={column.key}>
-                <td className="py-1 text-zinc-300">{column.label}</td>
-                <td className="py-1 text-right text-white">{column.valueText}</td>
-                {hasDetail && <td className="py-1 text-right text-zinc-400">{column.detail ?? ""}</td>}
+                <td className="py-1.5 text-bone-2">{column.label}</td>
+                <td className="py-1.5 text-right text-bone">{column.valueText}</td>
+                {hasDetail && <td className="py-1.5 text-right text-dust">{column.detail ?? ""}</td>}
               </tr>
             ))}
           </tbody>

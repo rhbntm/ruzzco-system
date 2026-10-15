@@ -25,13 +25,16 @@ import { OWNER_COOKIE, isOwnerCookie } from "@/lib/owner-access";
 import { addDays, latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
 import { METHOD_NAMES, basisLine } from "@/lib/forecast-comparison";
 import { DEFAULT_TREND_RANGE, TREND_RANGES, loadTrends, parseTrendRange, type TrendRange, type Trends } from "@/lib/trends";
+import { buildStory, type StoryInput } from "@/lib/insights-story";
 import { ForecastLocked, MethodComparison } from "@/components/ForecastPanel";
 import { ColumnChart } from "@/components/ColumnChart";
-import { BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { BarList } from "@/components/BarList";
+import { InsightsPresentation } from "@/components/InsightsPresentation";
 
 // Owner-only and read-only. Every money figure comes from the code End-of-Day Cash
 // (computeExpected) and the Barber Ledger (payoutTotalsForDay) already use, so the pages agree.
 // The forecast parts read the saved run only; this page never calls the ml-service.
+// Presentation mode tells the same figures as slides, in words written from them on the server.
 export const dynamic = "force-dynamic";
 
 type Decimal = Prisma.Decimal;
@@ -186,18 +189,19 @@ export default async function InsightsPage({
   const [data, trends, forecast] = await Promise.all([loadDaySafely(day), loadTrendsSafely(day, range), loadForecast()]);
   const showQrph = gatewayConfig() !== null || (data !== null && data.expected.gatewaySales.length > 0);
   const retryHref = insightsHref(day.date, range);
+  const story = buildStory(storyInput({ day, today, range, data, trends, forecast, showQrph }));
 
   return (
-    <Shell>
+    <Shell action={<InsightsPresentation story={story} />}>
       {/* Phones: two equal columns, icons hidden, so the chips sit in two tidy rows. */}
       <nav aria-label="Sections" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         {SECTIONS.map((section) => (
           <a
             key={section.id}
             href={`#${section.id}`}
-            className={`inline-flex items-center justify-center gap-1.5 px-2 sm:px-3.5 py-2 pointer-coarse:min-h-11 rounded-full bg-zinc-900 border border-zinc-800 hover:border-red-500/40 text-sm font-semibold text-zinc-300 hover:text-white transition-colors`}
+            className="rz-btn rz-btn-secondary rounded-full px-2 sm:px-4 pointer-coarse:min-h-11"
           >
-            <section.icon className="hidden sm:block w-3.5 h-3.5 text-red-500" />
+            <section.icon className="hidden sm:block w-4 h-4 text-crimson-ink" />
             {section.title}
           </a>
         ))}
@@ -213,7 +217,7 @@ export default async function InsightsPage({
                 <Warning>
                   {data.heldForReview} {data.heldForReview === 1 ? "sale stamped on this date is" : "sales stamped on this date are"} held
                   for date review and not in these figures. Confirm {data.heldForReview === 1 ? "its" : "their"} date on{" "}
-                  <Link href="/reconciliation" className={`underline rounded-sm`}>End-of-Day Cash</Link>.
+                  <Link href="/reconciliation" className="underline rounded-sm hover:text-white">End-of-Day Cash</Link>.
                 </Warning>
               )}
               {data.pendingQrph > 0 && (
@@ -240,7 +244,7 @@ export default async function InsightsPage({
       <Calculations data={data} showQrph={showQrph} forecast={forecast} today={today} />
       <Evaluations forecast={forecast} retryHref={retryHref} />
 
-      <footer className="pt-6 border-t border-zinc-800/80 text-xs text-zinc-400">
+      <footer className="pt-6 border-t border-seam text-xs text-dust">
         Read-only: this page never changes a sale, a payout or a drawer count.
       </footer>
     </Shell>
@@ -267,20 +271,20 @@ function Dashboards({ data, showQrph, isToday }: { data: DayData; showQrph: bool
     <section id="dashboards" className="space-y-4 scroll-mt-6">
       <SectionHeading title="Dashboards" blurb="The day at a glance. Paid sales only, counted on the Manila business day." />
       {expected.transactionCount === 0 && (
-        <p className="p-3 rounded-xl bg-[#12141a] border border-[#232734] text-sm text-zinc-300">
+        <p className="rz-notice">
           {isToday
             ? "No paid sales yet today. Sales rung up offline show here once the phones sync."
             : "No paid sales were recorded on this day. Use the arrows above to look at another day."}
         </p>
       )}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Revenue" value={peso(expected.totalRevenue)} note="Tips not included" accent="text-red-400" />
+      <div className="rz-strip grid-cols-2 lg:grid-cols-4 rz-stagger">
+        <Stat label="Revenue" value={peso(expected.totalRevenue)} note="Tips not included" accent="text-brass-bright" />
         <Stat label="Paid sales" value={String(expected.transactionCount)} />
         <Stat label="Average per sale" value={average ? peso(average) : "—"} />
         <Stat label="Tips to barbers" value={peso(data.tipsTotal)} note="All payment methods" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-4">
         <Card title="Payment mix">
           {expected.totalRevenue.gt(0) ? (
             <>
@@ -302,11 +306,11 @@ function Dashboards({ data, showQrph, isToday }: { data: DayData; showQrph: bool
 
         <Card title="Barbers" link={{ href: "/ledger", label: "Barber Ledger" }}>
           {rows.length === 0 ? (
-            <p className="text-sm text-zinc-400">No active barbers found.</p>
+            <p className="text-sm text-dust">No active barbers found.</p>
           ) : (
             <>
               {/* Phones: one block per barber, so nothing scrolls sideways. */}
-              <ul className="sm:hidden divide-y divide-[#232734]">
+              <ul className="sm:hidden divide-y divide-seam">
                 {rows.map((row) => (
                   <PhoneBarberRow key={row.id} name={row.name} figures={row} inactive={!row.active} />
                 ))}
@@ -314,40 +318,40 @@ function Dashboards({ data, showQrph, isToday }: { data: DayData; showQrph: bool
               </ul>
               {/* Wider screens: the table. */}
               <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full min-w-lg text-sm">
+                <table className="rz-table min-w-lg">
                   <thead>
-                    <tr className="text-xs text-zinc-400 uppercase tracking-wider">
-                      <th className="text-left font-semibold pb-2 pr-2">Barber</th>
-                      <th className="text-right font-semibold pb-2 px-2">Sales</th>
-                      <th className="text-right font-semibold pb-2 px-2">Revenue</th>
-                      <th className="text-right font-semibold pb-2 px-2">Earned</th>
-                      <th className="text-right font-semibold pb-2 px-2">Paid out</th>
-                      <th className="text-right font-semibold pb-2 pl-2">Remaining</th>
+                    <tr>
+                      <th className="text-left">Barber</th>
+                      <th className="text-right">Sales</th>
+                      <th className="text-right">Revenue</th>
+                      <th className="text-right">Earned</th>
+                      <th className="text-right">Paid out</th>
+                      <th className="text-right">Remaining</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#232734] tabular-nums">
+                  <tbody>
                     {rows.map((row) => (
                       <tr key={row.id}>
-                        <td className="py-2 pr-2 text-zinc-200">
+                        <td className="text-bone">
                           {row.name}
                           {!row.active && <InactiveTag />}
                         </td>
-                        <td className="py-2 px-2 text-right text-zinc-300">{row.sales}</td>
-                        <td className="py-2 px-2 text-right text-zinc-300">{peso(row.revenue)}</td>
-                        <td className="py-2 px-2 text-right text-white">{peso(row.earned)}</td>
-                        <td className="py-2 px-2 text-right text-zinc-300">{peso(row.paidOut)}</td>
-                        <td className="py-2 pl-2 text-right text-white font-semibold">{peso(row.remaining)}</td>
+                        <td className="text-right text-bone-2">{row.sales}</td>
+                        <td className="text-right text-bone-2">{peso(row.revenue)}</td>
+                        <td className="text-right text-bone">{peso(row.earned)}</td>
+                        <td className="text-right text-bone-2">{peso(row.paidOut)}</td>
+                        <td className="text-right text-bone font-semibold">{peso(row.remaining)}</td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="tabular-nums">
-                    <tr className="border-t border-zinc-700">
-                      <td className="pt-2 pr-2 font-bold text-white uppercase text-xs tracking-wider">Total</td>
-                      <td className="pt-2 px-2 text-right font-bold text-white">{totals.sales}</td>
-                      <td className="pt-2 px-2 text-right font-bold text-white">{peso(totals.revenue)}</td>
-                      <td className="pt-2 px-2 text-right font-bold text-white">{peso(totals.earned)}</td>
-                      <td className="pt-2 px-2 text-right font-bold text-white">{peso(totals.paidOut)}</td>
-                      <td className="pt-2 pl-2 text-right font-bold text-red-400">{peso(totals.remaining)}</td>
+                  <tfoot>
+                    <tr>
+                      <td className="text-bone uppercase text-xs tracking-wider">Total</td>
+                      <td className="text-right text-bone">{totals.sales}</td>
+                      <td className="text-right text-bone">{peso(totals.revenue)}</td>
+                      <td className="text-right text-bone">{peso(totals.earned)}</td>
+                      <td className="text-right text-bone">{peso(totals.paidOut)}</td>
+                      <td className="text-right text-brass-bright">{peso(totals.remaining)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -397,13 +401,13 @@ function TrendsSection({
         </Warning>
       )}
       {totals.sales === 0 && (
-        <p className="p-3 rounded-xl bg-[#12141a] border border-[#232734] text-sm text-zinc-300">
+        <p className="rz-notice">
           No paid sales in these {days} days. Pick another day or a longer period above.
         </p>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Revenue" value={peso(totals.revenue)} accent="text-red-400" delta={change(totals.revenue, previous.revenue, days)} />
+      <div className="rz-strip grid-cols-2 lg:grid-cols-4 rz-stagger">
+        <Stat label="Revenue" value={peso(totals.revenue)} accent="text-brass-bright" delta={change(totals.revenue, previous.revenue, days)} />
         <Stat
           label="Paid sales"
           value={String(totals.sales)}
@@ -451,7 +455,7 @@ function TrendsSection({
             <Note>The chosen day is red; tap or hover a column, or use the arrow keys, for its figures.</Note>
           </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card title="Busy hours">
               <Rule>Paid sales by the hour they were rung up (Manila time), over all {days} days. The busiest hour is red.</Rule>
               <ColumnChart
@@ -505,8 +509,7 @@ function TrendsSection({
 
             <Card title="Payment methods">
               <BarList
-                items={trends.byMethod
-                  .filter((m) => m.method !== "QRPH" || showQrph || m.revenue.gt(0))
+                items={trendMethods(trends, showQrph)
                   .map((m) => ({
                     key: m.method,
                     label: METHOD_LABELS[m.method],
@@ -570,7 +573,7 @@ function Calculations({
         title="Calculations"
         blurb="Each figure worked out with this day's numbers, by the same rules End-of-Day Cash, the ledger and the forecast use."
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {data && <RevenueCalc data={data} showQrph={showQrph} />}
         {data && <AverageCalc data={data} />}
         {data && <DrawerCalc data={data} />}
@@ -593,7 +596,7 @@ function Evaluations({ forecast, retryHref }: { forecast: SerializedForecast | n
         <ErrorCard retryHref={retryHref}>The saved forecast can&apos;t be loaded right now because the database is unreachable.</ErrorCard>
       ) : run === null ? (
         <Card title="No forecast saved yet">
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-dust">
             Start the forecast service, open the home page and press Refresh forecast. The evaluation is saved with each forecast.
           </p>
         </Card>
@@ -672,13 +675,13 @@ function SavedCount({ saved, staleness, expectedNow }: { saved: ShiftReconciliat
   // Same thresholds and words as End-of-Day Cash.
   const balanced = saved.variance.abs().lt(0.01);
   const status = balanced
-    ? { label: "Balanced", icon: CheckCircle2, className: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" }
+    ? { label: "Balanced", icon: CheckCircle2, className: "bg-ok/10 border-ok/30 text-ok-ink" }
     : saved.variance.isNegative()
-    ? { label: "Cash short", icon: AlertTriangle, className: "bg-red-500/10 border-red-500/20 text-red-400" }
-    : { label: "Cash over", icon: AlertTriangle, className: "bg-blue-500/10 border-blue-500/20 text-blue-400" };
+    ? { label: "Cash short", icon: AlertTriangle, className: "bg-crimson/12 border-crimson-bright/40 text-crimson-ink" }
+    : { label: "Cash over", icon: AlertTriangle, className: "bg-over/10 border-over/35 text-over-ink" };
   return (
-    <div className="pt-3 border-t border-[#232734] space-y-2">
-      <p className="text-xs font-semibold text-zinc-300">Last saved count · revision {saved.revision}</p>
+    <div className="pt-4 border-t border-seam space-y-2.5">
+      <p className="text-xs font-semibold text-bone-2">Last saved count · revision {saved.revision}</p>
       {staleness?.stale && <StaleNotice staleness={staleness} expectedNow={expectedNow} />}
       <Tape
         lines={[
@@ -698,7 +701,7 @@ function SavedCount({ saved, staleness, expectedNow }: { saved: ShiftReconciliat
 function StaleNotice({ staleness, expectedNow }: { staleness: Staleness; expectedNow: Decimal }) {
   const was = (count: number) => (count === 1 ? "was" : "were");
   return (
-    <div className="flex items-start gap-2 p-2.5 rounded-lg text-xs border bg-amber-500/10 border-amber-500/30 text-amber-300">
+    <div className="rz-notice rz-notice-warn text-xs">
       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
       <div className="space-y-0.5">
         <p className="font-bold">Out of date: this count no longer matches the register.</p>
@@ -735,12 +738,12 @@ function EarningsCalc({ rows }: { rows: BarberRow[] }) {
         rewrites a past day. Tips go 100% to the barber. Paid amounts are what the owner recorded on the ledger.
       </Rule>
       {rows.length === 0 ? (
-        <p className="text-sm text-zinc-400">No active barbers found.</p>
+        <p className="text-sm text-dust">No active barbers found.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {rows.map((row) => (
-            <div key={row.id} className="space-y-2">
-              <p className="text-sm font-semibold text-white">
+            <div key={row.id} className="space-y-2.5">
+              <p className="text-sm font-semibold text-bone">
                 {row.name}
                 {!row.active && <InactiveTag />}
               </p>
@@ -813,13 +816,13 @@ function EvaluationBody({ run }: { run: NonNullable<SerializedForecast["run"]> }
   const typicalError = Number(run.typicalErrorCustomers);
   return (
     <>
-      {run.comparison && <p className="text-xs font-semibold text-amber-200">{basisLine(run.comparison, shortDate)}</p>}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {run.comparison && <p className="text-xs font-semibold text-brass-bright">{basisLine(run.comparison, shortDate)}</p>}
+      <div className="rz-strip grid-cols-1 sm:grid-cols-3 rz-stagger">
         <Stat
           label="Forecast off by"
           value={typicalError.toFixed(2)}
           note={`customers a day, about ${wholePeso(new Prisma.Decimal(run.typicalErrorCustomers).mul(run.avgTicket))} of revenue`}
-          accent="text-red-400"
+          accent="text-crimson-ink"
         />
         <Stat label="Best simple guess off by" value={Number(run.bestBaselineError).toFixed(2)} note={`customers a day (${bestName})`} />
         <Stat
@@ -830,18 +833,18 @@ function EvaluationBody({ run }: { run: NonNullable<SerializedForecast["run"]> }
       </div>
 
       <Card title="How the forecast is tested">
-        <ol className="list-decimal pl-5 space-y-1.5 text-sm text-zinc-300 leading-relaxed">
+        <ol className="list-decimal marker:text-brass marker:font-semibold pl-5 space-y-1.5 text-sm text-bone-2 leading-relaxed max-w-prose">
           <li>The forecast is checked on the last {run.weeksTested} weeks of the paper logbook, one week at a time.</li>
           <li>
             For each week, every method learns only from the logbook days before it, then guesses how many customers came on each open
             day of that week.
           </li>
           <li>
-            <span className="text-white font-semibold">Off by</span> is the average gap between the guess and the logbook, in customers
+            <span className="text-bone font-semibold">Off by</span> is the average gap between the guess and the logbook, in customers
             a day. Lower is better.
           </li>
           <li>
-            <span className="text-white font-semibold">Week-to-week swing</span> is how much that gap changed from one week to the
+            <span className="text-bone font-semibold">Week-to-week swing</span> is how much that gap changed from one week to the
             next. Smaller is steadier.
           </li>
           <li>
@@ -853,7 +856,7 @@ function EvaluationBody({ run }: { run: NonNullable<SerializedForecast["run"]> }
       </Card>
 
       <Card title="The model behind the forecast">
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+        <dl className="rz-well grid grid-cols-1 sm:grid-cols-2 overflow-hidden text-sm">
           {[
             { label: "Model version", value: run.modelVersion },
             { label: "Logbook used", value: `${shortDate(run.dataFrom)} to ${shortDate(run.dataTo)}` },
@@ -861,9 +864,9 @@ function EvaluationBody({ run }: { run: NonNullable<SerializedForecast["run"]> }
             { label: "Average paid per customer", value: peso(run.avgTicket) },
             { label: "Forecast saved", value: shortDate(run.createdOn) },
           ].map((item) => (
-            <div key={item.label} className="flex justify-between gap-3 p-2.5 rounded-lg bg-[#181b24] border border-[#232734]">
-              <dt className="text-zinc-400">{item.label}</dt>
-              <dd className="text-zinc-200 text-right break-all">{item.value}</dd>
+            <div key={item.label} className="flex justify-between gap-3 px-3.5 py-2.5 shadow-[0_1px_0_var(--color-seam),1px_0_0_var(--color-seam)]">
+              <dt className="text-dust">{item.label}</dt>
+              <dd className="text-bone text-right break-all">{item.value}</dd>
             </div>
           ))}
         </dl>
@@ -874,25 +877,28 @@ function EvaluationBody({ run }: { run: NonNullable<SerializedForecast["run"]> }
 
 // ── Building blocks ──────────────────────────────────────────────────────────
 
-function Shell({ children }: { children: React.ReactNode }) {
+// `action` sits beside the title (under it on phones): presentation mode, for the owner only.
+function Shell({ action, children }: { action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="relative min-h-dvh bg-[#0b0c10] text-zinc-100 font-sans antialiased overflow-x-hidden">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-72 bg-linear-to-b from-red-600/10 via-red-950/5 to-transparent blur-3xl pointer-events-none" />
-      <main className="relative max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-10">
-        <header className="space-y-4">
+    <div className="relative flex-1 overflow-x-hidden">
+      <main className="rz-page relative max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-12">
+        <header className="space-y-5">
           <Link
             href="/"
-            className={`inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3 pointer-coarse:py-3 rounded-sm text-sm text-zinc-400 hover:text-white transition-colors`}
+            className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3 pointer-coarse:py-3 rounded-sm text-sm text-dust hover:text-bone transition-colors group"
           >
-            <ArrowLeft className="w-4 h-4" /> Home
+            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" /> Home
           </Link>
-          <div className="space-y-1">
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white uppercase font-(family-name:--font-oswald)">
-              Insights
-            </h1>
-            <p className="text-sm text-zinc-400 max-w-2xl leading-relaxed">
-              Dashboards, calculations and evaluations, from the same numbers as End-of-Day Cash, the Barber Ledger and the forecast.
-            </p>
+          <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+            <div className="space-y-2">
+              <h1 className="rz-title text-4xl sm:text-5xl">
+                Insights
+              </h1>
+              <p className="text-sm sm:text-base text-dust max-w-2xl leading-relaxed">
+                Dashboards, calculations and evaluations, from the same numbers as End-of-Day Cash, the Barber Ledger and the forecast.
+              </p>
+            </div>
+            {action}
           </div>
         </header>
         {children}
@@ -906,14 +912,14 @@ function DateBar({ day, today, range }: { day: BusinessDay; today: string; range
   const previous = addDays(day.date, -1);
   const next = addDays(day.date, 1);
   // 36px controls, 44px on touch screens.
-  const control = "min-h-9 pointer-coarse:min-h-11 rounded-lg transition-colors";
-  const stepClass = `${control} inline-flex items-center justify-center min-w-9 pointer-coarse:min-w-11 border border-[#232734] text-zinc-300 hover:text-white hover:border-red-500/40`;
+  const control = "min-h-9 pointer-coarse:min-h-11";
+  const stepClass = `rz-btn rz-btn-secondary rz-btn-icon ${control} pointer-coarse:min-w-11`;
   return (
-    <div className="p-3 rounded-xl bg-[#12141a] border border-[#232734] space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="rz-panel p-3 sm:p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-2.5">
         <form method="get" action="/insights" className="flex flex-wrap items-center gap-2">
           <input type="hidden" name="days" value={range} />
-          <label htmlFor="insights-date" className="text-sm text-zinc-400">
+          <label htmlFor="insights-date" className="text-sm text-dust">
             Business date
           </label>
           {/* 16px text on phones, so iOS does not zoom in when the field gets focus. */}
@@ -923,25 +929,23 @@ function DateBar({ day, today, range }: { day: BusinessDay; today: string; range
             name="date"
             defaultValue={day.date}
             max={today}
-            className={`${control} px-3 bg-[#181b24] border border-[#232734] text-white text-base sm:text-sm scheme-dark`}
+            className={`rz-field w-auto py-1 ${control} sm:text-sm scheme-dark`}
           />
           <button
             type="submit"
-            className={`${control} px-4 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white text-sm font-bold cursor-pointer`}
+            className={`rz-btn rz-btn-primary ${control} px-4`}
           >
             Show
           </button>
         </form>
-        <div role="group" aria-label="Trend period" className="inline-flex gap-1 rounded-lg border border-[#232734] p-1">
+        <div role="group" aria-label="Trend period" className="rz-seg">
           {TREND_RANGES.map((option) => (
             <Link
               key={option}
               href={insightsHref(day.date, option)}
               scroll={false}
               aria-current={option === range ? "true" : undefined}
-              className={`inline-flex items-center min-h-7 px-2.5 pointer-coarse:min-h-11 rounded-md text-sm font-semibold transition-colors ${
-                option === range ? "bg-red-600 text-white" : "text-zinc-300 hover:text-white hover:bg-white/5"
-              }`}
+              className="rz-seg-item min-h-7 px-3 pointer-coarse:min-h-11"
             >
               {option} days
             </Link>
@@ -967,7 +971,7 @@ function DateBar({ day, today, range }: { day: BusinessDay; today: string; range
           )}
         </div>
       </div>
-      <p className="text-xs text-zinc-400 leading-relaxed">
+      <p className="text-xs text-dust leading-relaxed">
         {formatDate(day.date, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}, Manila time. Dashboards and
         calculations use this day; trends use the {range} days up to it; the forecast parts use the latest saved forecast.
       </p>
@@ -977,30 +981,28 @@ function DateBar({ day, today, range }: { day: BusinessDay; today: string; range
 
 function SectionHeading({ title, blurb }: { title: string; blurb: string }) {
   return (
-    <div className="space-y-1">
-      <h2 className="flex items-center gap-2 text-lg font-bold text-white tracking-wide uppercase font-(family-name:--font-oswald)">
-        <BarberPoleIcon className="w-3 h-5" />
+    <div className="space-y-1.5">
+      <h2 className="rz-heading text-xl text-bone">
         {title}
       </h2>
-      <p className="text-sm text-zinc-400 max-w-prose">{blurb}</p>
+      <p className="text-sm text-dust max-w-prose leading-relaxed">{blurb}</p>
     </div>
   );
 }
 
 function Card({ title, link, children }: { title: string; link?: { href: string; label: string }; children: React.ReactNode }) {
   return (
-    <div className="p-5 rounded-xl bg-[#12141a] border border-[#232734] space-y-3 relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
+    <div className="rz-panel p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-bold text-white uppercase tracking-wide text-sm font-(family-name:--font-oswald)">{title}</h3>
+        <h3 className="font-display font-semibold uppercase tracking-[0.06em] text-base text-bone">{title}</h3>
         {link && (
           // Padding with matching negative margins: a bigger target (28px, 44px on touch) without moving the layout.
           <Link
             href={link.href}
-            className={`inline-flex items-center gap-0.5 -my-1.5 py-1.5 -mx-1.5 px-1.5 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 rounded-md text-xs text-zinc-400 hover:text-red-400 shrink-0 transition-colors`}
+            className="inline-flex items-center gap-0.5 -my-1.5 py-1.5 -mx-1.5 px-1.5 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 rounded-md text-xs font-semibold text-dust hover:text-crimson-ink shrink-0 transition-colors group"
           >
             {link.label}
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
           </Link>
         )}
       </div>
@@ -1011,18 +1013,17 @@ function Card({ title, link, children }: { title: string; link?: { href: string;
 
 type Delta = { text: string; trend: "up" | "down" | "flat" };
 
-function Stat({ label, value, note, delta, accent = "text-white" }: { label: string; value: string; note?: string; delta?: Delta; accent?: string }) {
+function Stat({ label, value, note, delta, accent = "text-bone" }: { label: string; value: string; note?: string; delta?: Delta; accent?: string }) {
   return (
-    <div className="p-4 rounded-xl bg-[#12141a] border border-[#232734] space-y-1 relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-      <div className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">{label}</div>
-      <div className={`text-2xl font-extrabold font-(family-name:--font-oswald) ${accent}`}>{value}</div>
-      {note && <p className="text-xs text-zinc-400">{note}</p>}
+    <div className="space-y-1.5 px-4 py-4">
+      <div className="rz-label">{label}</div>
+      <div className={`rz-figure text-2xl sm:text-3xl ${accent}`}>{value}</div>
+      {note && <p className="text-xs text-dust leading-relaxed">{note}</p>}
       {/* Up is good for every figure that has a delta here: icon and words, not colour alone. */}
       {delta && (
         <p
           className={`flex items-start gap-1 text-xs ${
-            delta.trend === "up" ? "text-emerald-400" : delta.trend === "down" ? "text-rose-400" : "text-zinc-400"
+            delta.trend === "up" ? "text-ok-ink" : delta.trend === "down" ? "text-crimson-ink" : "text-dust"
           }`}
         >
           {delta.trend === "up" ? (
@@ -1039,46 +1040,18 @@ function Stat({ label, value, note, delta, accent = "text-white" }: { label: str
   );
 }
 
-// A list of labelled bars (payment methods, barbers, services). The value and share are printed,
-// so the bar only repeats them and is hidden from screen readers.
-type BarItem = { key: string; label: string; note?: string; valueText: string; share: number | null };
-
-function BarList({ items }: { items: BarItem[] }) {
-  return (
-    <ul className="space-y-3">
-      {items.map((item) => (
-        <li key={item.key} className="space-y-1.5">
-          <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="min-w-0 text-zinc-200">
-              {item.label}
-              {item.note && <span className="text-xs text-zinc-400"> · {item.note}</span>}
-            </span>
-            <span className="shrink-0 text-white font-semibold tabular-nums">
-              {item.valueText}{" "}
-              <span className="text-xs font-normal text-zinc-400">{item.share === null ? "—" : `${Math.round(item.share)}%`}</span>
-            </span>
-          </div>
-          <div aria-hidden="true" className="h-2 rounded-r-sm bg-[#181b24]" title={`${item.label}: ${item.valueText}`}>
-            <div className="h-2 rounded-r-sm bg-red-500/80" style={{ width: `${item.share ?? 0}%` }} />
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 type BarberFigures = Pick<BarberRow, "sales" | "revenue" | "earned" | "paidOut" | "remaining">;
 
 // The Barbers table as stacked rows, for phone widths.
 function PhoneBarberRow({ name, figures, inactive = false, total = false }: { name: string; figures: BarberFigures; inactive?: boolean; total?: boolean }) {
   return (
-    <li className="py-2.5 space-y-1.5">
+    <li className="py-3 space-y-1.5">
       <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className={total ? "font-bold text-white uppercase text-xs tracking-wider" : "text-zinc-200"}>
+        <span className={total ? "font-bold text-bone uppercase text-xs tracking-wider" : "text-bone"}>
           {name}
           {inactive && <InactiveTag />}
         </span>
-        <span className="text-xs text-zinc-400">{plural(figures.sales, "sale")}</span>
+        <span className="text-xs text-dust">{plural(figures.sales, "sale")}</span>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs tabular-nums">
         {[
@@ -1088,8 +1061,8 @@ function PhoneBarberRow({ name, figures, inactive = false, total = false }: { na
           { label: "Remaining", value: peso(figures.remaining) },
         ].map((field) => (
           <div key={field.label} className="flex justify-between gap-2">
-            <dt className="text-zinc-400">{field.label}</dt>
-            <dd className={field.label === "Remaining" ? "font-semibold text-white" : "text-zinc-300"}>{field.value}</dd>
+            <dt className="text-dust">{field.label}</dt>
+            <dd className={field.label === "Remaining" ? `font-semibold ${total ? "text-brass-bright" : "text-bone"}` : "text-bone-2"}>{field.value}</dd>
           </div>
         ))}
       </dl>
@@ -1099,19 +1072,19 @@ function PhoneBarberRow({ name, figures, inactive = false, total = false }: { na
 
 type Line = { op?: "+" | "−" | "×" | "÷" | "="; label: string; value: string };
 
-// A formula as an adding-machine tape: one operand per line, results on the "=" lines.
+// A formula as an adding-machine tape: one operand per line, results on the "=" lines in brass.
 function Tape({ lines }: { lines: Line[] }) {
   return (
-    <dl className="rounded-lg border border-[#232734] divide-y divide-[#232734] text-sm">
+    <dl className="rz-well overflow-hidden divide-y divide-seam text-sm">
       {lines.map((line, i) => {
         const result = line.op === "=";
         return (
-          <div key={i} className={`flex items-baseline justify-between gap-3 px-3 py-2 ${result ? "bg-white/3" : ""}`}>
-            <dt className={result ? "font-semibold text-white" : "text-zinc-300"}>
-              <span className="inline-block w-5 font-mono text-zinc-400">{line.op ?? ""}</span>
+          <div key={i} className={`flex items-baseline justify-between gap-3 px-3.5 py-2.5 ${result ? "bg-brass/6" : ""}`}>
+            <dt className={result ? "font-semibold text-bone" : "text-bone-2"}>
+              <span className={`inline-block w-5 font-mono ${result ? "text-brass" : "text-dust"}`}>{line.op ?? ""}</span>
               {line.label}
             </dt>
-            <dd className={`tabular-nums text-right ${result ? "font-bold text-red-300" : "text-white"}`}>{line.value}</dd>
+            <dd className={`tabular-nums text-right ${result ? "font-bold text-brass-bright" : "text-bone"}`}>{line.value}</dd>
           </div>
         );
       })}
@@ -1121,20 +1094,20 @@ function Tape({ lines }: { lines: Line[] }) {
 
 // The rule behind a figure, in words. max-w-prose keeps lines readable in wide cards.
 function Rule({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-zinc-400 leading-relaxed max-w-prose">{children}</p>;
+  return <p className="text-sm text-dust leading-relaxed max-w-prose">{children}</p>;
 }
 
 function Note({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs text-zinc-400 leading-relaxed max-w-prose">{children}</p>;
+  return <p className="text-xs text-dust leading-relaxed max-w-prose">{children}</p>;
 }
 
 function InactiveTag() {
-  return <span className="ml-1.5 text-xs uppercase tracking-wider text-zinc-400">inactive</span>;
+  return <span className="ml-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-dust-2">inactive</span>;
 }
 
 function Warning({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-200 text-sm">
+    <div className="animate-rise rz-notice rz-notice-warn">
       <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
       <p>{children}</p>
     </div>
@@ -1143,11 +1116,11 @@ function Warning({ children }: { children: React.ReactNode }) {
 
 function ErrorCard({ children, retryHref }: { children: React.ReactNode; retryHref: string }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-rose-950/30 border border-rose-900/50 text-sm text-rose-300">
+    <div className="rz-notice rz-notice-danger flex-wrap items-center justify-between gap-3 p-4">
       <p>{children}</p>
       <Link
         href={retryHref}
-        className={`inline-flex items-center min-h-9 pointer-coarse:min-h-11 px-3 rounded-lg border border-rose-800/60 text-rose-200 hover:text-white font-semibold transition-colors`}
+        className="rz-btn rz-btn-secondary min-h-9 pointer-coarse:min-h-11 px-3"
       >
         Try again
       </Link>
@@ -1159,12 +1132,103 @@ function ErrorCard({ children, retryHref }: { children: React.ReactNode; retryHr
 
 function paymentMethods(expected: ExpectedTotals, showQrph: boolean) {
   const methods = [
-    { label: "Cash", amount: expected.cashSales, note: "in the drawer" },
-    { label: "GCash", amount: expected.gcashTotal, note: "digital" },
-    { label: "Maya", amount: expected.mayaTotal, note: "digital" },
+    { label: "Cash", amount: expected.cashSales, note: "in the drawer", digital: false },
+    { label: "GCash", amount: expected.gcashTotal, note: "digital", digital: true },
+    { label: "Maya", amount: expected.mayaTotal, note: "digital", digital: true },
   ];
-  if (showQrph) methods.push({ label: "QR Ph", amount: expected.qrphTotal, note: "gateway, test mode" });
+  if (showQrph) methods.push({ label: "QR Ph", amount: expected.qrphTotal, note: "gateway, test mode", digital: true });
   return methods;
+}
+
+// The trend period's payment methods: QR Ph only while the gateway is on or it took money.
+function trendMethods(trends: Trends, showQrph: boolean) {
+  return trends.byMethod.filter((m) => m.method !== "QRPH" || showQrph || m.revenue.gt(0));
+}
+
+const manilaHourFormat = new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "numeric", hourCycle: "h23" });
+
+// Presentation mode's input: the figures the sections above show, as plain numbers. Every sum
+// and rounded average is the page's own (Decimal); the story only compares and words them.
+function storyInput({
+  day,
+  today,
+  range,
+  data,
+  trends,
+  forecast,
+  showQrph,
+}: {
+  day: BusinessDay;
+  today: string;
+  range: TrendRange;
+  data: DayData | null;
+  trends: Trends | null;
+  forecast: SerializedForecast | null;
+  showQrph: boolean;
+}): StoryInput {
+  const run = forecast?.run ?? null;
+  return {
+    today,
+    date: day.date,
+    days: range,
+    manilaHour: Number(manilaHourFormat.format(new Date())),
+    day: data && {
+      revenue: data.expected.totalRevenue.toNumber(),
+      sales: data.expected.transactionCount,
+      average: averagePerSale(data.expected.totalRevenue, data.expected.transactionCount)?.toNumber() ?? null,
+      tips: data.tipsTotal.toNumber(),
+      methods: paymentMethods(data.expected, showQrph).map((m) => ({ label: m.label, amount: m.amount.toNumber(), digital: m.digital })),
+      expectedDrawer: data.expected.expectedDrawerCash.toNumber(),
+      // Same thresholds as the saved count on End-of-Day Cash.
+      drawer: data.saved && {
+        status: data.saved.variance.abs().lt(0.01) ? "balanced" : data.saved.variance.isNegative() ? "short" : "over",
+        variance: data.saved.variance.toNumber(),
+        stale: data.staleness?.stale ?? false,
+        revision: data.saved.revision,
+      },
+      barbers: data.rows.map((row) => ({
+        name: row.name,
+        sales: row.sales,
+        earned: row.earned.toNumber(),
+        remaining: row.remaining.toNumber(),
+        additionalOwed: row.additionalOwed,
+      })),
+      heldForReview: data.heldForReview,
+      pendingQrph: data.pendingQrph,
+    },
+    trends: trends && {
+      first: trends.first,
+      daily: trends.daily.map((d) => ({ date: d.date, revenue: d.revenue.toNumber(), sales: d.sales })),
+      hours: trends.hours,
+      hourExcluded: trends.hourExcluded,
+      byBarber: trends.byBarber.map((b) => ({ name: b.name, revenue: b.revenue.toNumber(), sales: b.sales })),
+      byService: trends.byService,
+      byMethod: trendMethods(trends, showQrph).map((m) => ({ label: METHOD_LABELS[m.method], revenue: m.revenue.toNumber(), digital: m.method !== "CASH" })),
+      revenue: trends.totals.revenue.toNumber(),
+      sales: trends.totals.sales,
+      tips: trends.totals.tips.toNumber(),
+      openDays: trends.totals.openDays,
+      // The same divisions (and rounding) as the Trends figures.
+      perOpenDay: averagePerSale(trends.totals.revenue, trends.totals.openDays)?.toNumber() ?? null,
+      average: averagePerSale(trends.totals.revenue, trends.totals.sales)?.toNumber() ?? null,
+      previous: { revenue: trends.previous.revenue.toNumber(), sales: trends.previous.sales },
+      heldForReview: trends.heldForReview,
+    },
+    forecast: forecast && {
+      run: run && {
+        createdOn: run.createdOn,
+        avgTicket: Number(run.avgTicket),
+        typicalError: Number(run.typicalErrorCustomers),
+        bestBaseline: METHOD_NAMES[run.bestBaseline] ?? run.bestBaseline,
+        weeksWon: run.weeksRfWon,
+        weeksTested: run.weeksTested,
+      },
+      // As the forecast chart: the saved days from today on.
+      days: forecast.days
+        .filter((d) => d.date >= today && d.customers !== null)
+        .map((d) => ({ date: d.date, customers: d.customers ?? 0, revenue: Number(d.revenue) })),
+    },
+  };
 }
 
 const METHOD_LABELS: Record<PaymentMethod, string> = { CASH: "Cash", GCASH: "GCash", MAYA: "Maya", QRPH: "QR Ph" };

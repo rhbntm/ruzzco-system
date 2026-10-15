@@ -1,0 +1,132 @@
+{
+  "title": "Choose the home page structure",
+  "question": "Same black, crimson and brass shop; three ways to build the front page. The roll dealt The Letterboard. Keep it, take another, steer, or re-roll.",
+  "options": [
+    {
+      "id": "letterboard",
+      "label": "The Letterboard",
+      "kicker": "THE ROLL",
+      "lineage": "the black felt letterboard on a barbershop wall",
+      "thesis": "The shop's felt letterboard, spelled live from the database, is the first thing anyone reads.",
+      "palette": ["#a3161e", "#0e0d0c", "#f5f0e8", "#c41f29", "#c9a35a"],
+      "materials": ["grooved black felt", "snap-in white letters", "chrome frame", "crimson accent wall"],
+      "viewport": "The crimson wall runs edge to edge; the logo sign hangs top-left over a wall-sized letterboard that spells today's hours, paid sales, barbers in and prices, with Open the POS on its rail.",
+      "risk": "Gimmicky if every heading turns into letters; the letters stay on two boards only (today and the directory).",
+      "raised": [
+        { "from": "zoo-gardens-guide-map", "raise": "The crimson wall owns the first viewport and leaves the frame on both sides instead of sitting in a rounded card." },
+        { "from": "vu-meter-bridge", "raise": "Today's figures read as identical units shoulder to shoulder, one sweep of the eye." },
+        { "from": "multiplane-cel-dawn", "raise": "Sign, board and wall sit on separate depth planes that drift apart slightly as you scroll (frozen under reduced motion)." }
+      ],
+      "html": ".impeccable/mocks/decision/letterboard.html"
+    },
+    {
+      "id": "pole-street",
+      "label": "The Pole and Its Signs",
+      "lineage": "projecting blade signs on a shop street",
+      "thesis": "One barber pole runs the height of the page and turns as you scroll; every section hangs off it as a blade sign.",
+      "palette": ["#0c0b0a", "#a3161e", "#f5f0e8", "#2b4aa6", "#b3b9c1"],
+      "materials": ["glass pole with chrome caps", "chrome bracket arms", "black enamel blade signs"],
+      "viewport": "A full-height pole stands at the left; the logo sign hangs off its first bracket, the hook and Open the POS beside it, and Today hangs from the next bracket at the fold.",
+      "risk": "Bends the rule that the pole is a state light into 'the pole shows how far you've scrolled'; on phones it shrinks to a thin rail at the edge.",
+      "html": ".impeccable/mocks/decision/pole-street.html"
+    },
+    {
+      "id": "station",
+      "label": "The Station",
+      "lineage": "a barber's station seen from the chair",
+      "thesis": "The page is the station: the LED mirror holds the shop's sign, the counter holds the tools, and the owner's tools sit in a locked drawer.",
+      "palette": ["#0c0b0a", "#a3161e", "#deeaff", "#c41f29", "#c9a35a"],
+      "materials": ["LED-lit mirror", "chrome bezel", "black counter", "brass drawer lock"],
+      "viewport": "A chrome-bezel LED mirror fills the top and reflects the crimson wall and the sign; on the counter below, Open the POS, Shift Log and End-of-Day Cash lie as tool plates beside a brass-locked owner drawer.",
+      "risk": "Tools-as-objects can tip into costume; the counter has to stay a row of plainly labelled links.",
+      "html": ".impeccable/mocks/decision/station.html"
+    },
+    {
+      "id": "challenger-zoo-map",
+      "label": "Zoo Guide Map",
+      "verdict": "declined",
+      "lineage": "a zoo and gardens guide map",
+      "thesis": "The shop as a map of swelling colour lobes.",
+      "palette": ["#8ED462", "#F5F1E4", "#2C2E2A"],
+      "materials": ["flat colour lobes", "capsule controls"],
+      "viewport": "One lobe per screen, coastline dividing sections.",
+      "case": "Fuses poorly: barbers and the panel don't read the shop as a map.",
+      "risk": "Foreign palette.",
+      "kept": "One region owns the first screen and leaves the frame on two sides.",
+      "hero": "https://impeccable.style/worlds/cards/aww2-zoo-gardens-guide-map-hero.webp"
+    },
+    {
+      "id": "challenger-vu-meters",
+      "label": "VU Meter Bridge",
+      "verdict": "declined",
+      "lineage": "recording desk meter bridge",
+      "thesis": "Today's numbers as a row of meters.",
+      "palette": ["#efe6d2", "#151515", "#c0392b"],
+      "materials": ["meter glass", "walnut and steel"],
+      "viewport": "A row of needles for the day's figures.",
+      "case": "Fuses poorly: a shop isn't a studio, and needles blur exact counts.",
+      "risk": "Instrument costume.",
+      "kept": "Identical units shoulder to shoulder, read in one sweep.",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-vu-meter-bridge-hero.webp"
+    },
+    {
+      "id": "challenger-multiplane",
+      "label": "Multiplane Cel Dawn",
+      "verdict": "declined",
+      "lineage": "multiplane cel animation",
+      "thesis": "The page as painted planes at different depths.",
+      "palette": ["#3e5a3a", "#9fb0b8", "#3a2a1e", "#e3a54a"],
+      "materials": ["gouache planes", "parallax"],
+      "viewport": "Layered painted forest planes.",
+      "case": "Fuses partly: depth fits the shop interior, but painted scenery is a picture, not the shop.",
+      "risk": "Heavy assets on shop phones.",
+      "kept": "Separate depth planes drifting at different rates on scroll.",
+      "hero": "https://impeccable.style/worlds/cards/cinema-cinematography-editing-multiplane-cel-dawn-hero.webp"
+    },
+    {
+      "id": "challenger-moire",
+      "label": "Moiré Gallery",
+      "verdict": "declined",
+      "lineage": "op-art wave canvases",
+      "thesis": "State carried by line frequency.",
+      "palette": ["#000000", "#ffffff"],
+      "materials": ["flat black and white waves"],
+      "viewport": "A ruled monochrome field.",
+      "case": "Fuses poorly: loses the crimson and brass the owner chose.",
+      "risk": "Strobing on phones.",
+      "kept": "One caption per canvas; nothing competes with the object.",
+      "hero": "https://impeccable.style/worlds/cards/design-canon-riley-moire-gallery-hero.webp"
+    },
+    {
+      "id": "challenger-ink-basin",
+      "label": "Suminagashi Basin",
+      "verdict": "declined",
+      "lineage": "marbled ink on water",
+      "thesis": "The page as a fluid surface.",
+      "palette": ["#1d2a4a", "#f2f0ea", "#6b6b6b"],
+      "materials": ["ink on water", "WebGL fluid"],
+      "viewport": "One continuous marbled basin.",
+      "case": "Fuses poorly: no tie to the shop, and WebGL on LAN phones.",
+      "risk": "Performance.",
+      "kept": "The newest item carries the most contrast.",
+      "hero": "https://impeccable.style/worlds/cards/medium-native-fluid-ink-basin-hero.webp"
+    },
+    {
+      "id": "challenger-glaze-shelf",
+      "label": "Glaze River Shelf",
+      "verdict": "declined",
+      "lineage": "kiln shelf of glazed cups",
+      "thesis": "Samples ranked along one shelf.",
+      "palette": ["#f1efe9", "#1f4fa3", "#0e2a5c"],
+      "materials": ["chalk shelf", "cobalt glaze"],
+      "viewport": "A row of cups with recipe cards.",
+      "case": "Fuses poorly: nothing in the shop's day maps to glaze runs.",
+      "risk": "Foreign material.",
+      "kept": "Gravity sets the reading order.",
+      "hero": "https://impeccable.style/worlds/cards/clay-ceramics-fracture-glaze-river-shelf-hero.webp"
+    }
+  ],
+  "reroll": true,
+  "steer": true,
+  "buildPath": { "value": "code" }
+}

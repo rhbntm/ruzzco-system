@@ -6,17 +6,15 @@ import {
   ArrowRight,
   History,
   ClipboardCheck,
-  Wallet,
-  Lock,
   Smartphone,
+  Server,
+  Wifi,
   WifiOff,
   RefreshCw,
   Banknote,
   Clock,
-  MapPin,
   CheckCircle2,
-  QrCode,
-  LayoutDashboard,
+  TriangleAlert,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
@@ -24,27 +22,18 @@ import { countsOnDay } from "@/lib/time-review";
 import { gatewayConfig } from "@/lib/gateway";
 import { OWNER_COOKIE, isOwnerCookie } from "@/lib/owner-access";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
-import { ForecastLocked, ForecastPanel } from "@/components/ForecastPanel";
-import { RuzzcoLogoBadge, MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { OwnerDrawer } from "@/components/OwnerDrawer";
+import { RuzzcoLogoBanner, BarberPoleIcon, MustacheIcon } from "@/components/RuzzcoBrand";
+import { MirrorGlass } from "@/components/StationMirror";
 
 export const dynamic = "force-dynamic";
 
-type Destination = { href: string; title: string; body: string; icon: LucideIcon; ownerOnly?: boolean };
+type Tool = { href: string; title: string; icon: LucideIcon; body: string };
 
-const destinations: Destination[] = [
-  { href: "/pos", title: "Point of Sale", body: "Ring up a cut in two taps. Works even when the shop Wi-Fi drops.", icon: Scissors },
+// The tools on the counter beside the POS. The owner's pages live in the drawer under them.
+const counterTools: Tool[] = [
   { href: "/shift-log", title: "Shift Log", body: "Every sale on this phone, its sync status, and anything that needs attention.", icon: History },
-  { href: "/reconciliation", title: "End-of-Day Cash", body: "Count the drawer against expected cash after tips, payouts and petty cash.", icon: ClipboardCheck },
-  { href: "/ledger", title: "Barber Ledger", body: "Daily 50/50 commission and payouts, from the rates saved at each sale.", icon: Wallet, ownerOnly: true },
-  { href: "/insights", title: "Insights", body: "Dashboards for any day, the math behind each total, and how well the forecast did.", icon: LayoutDashboard, ownerOnly: true },
-  { href: "/payment-qr", title: "Payment QR", body: "Add each barber's GCash and Maya QR, shown when a customer pays by phone.", icon: QrCode, ownerOnly: true },
-];
-
-const flow: { title: string; body: string; icon: LucideIcon }[] = [
-  { title: "Tap", body: "The barber picks the service and payment method on their phone.", icon: Smartphone },
-  { title: "Saved on the phone", body: "The sale is stored on the device first, so no connection is needed.", icon: WifiOff },
-  { title: "Synced once", body: "When online, sales upload. Each one is recorded exactly once, even if sent twice.", icon: RefreshCw },
-  { title: "Closed out", body: "At closing the owner reconciles the drawer and settles barber payouts.", icon: Banknote },
+  { href: "/reconciliation", title: "End-of-Day Cash", body: "Close out today: count the drawer against expected cash after tips, payouts and petty cash.", icon: ClipboardCheck },
 ];
 
 async function loadSnapshot() {
@@ -64,7 +53,9 @@ async function loadSnapshot() {
   }
 }
 
-// Forecast numbers are loaded only for the owner; everyone else gets the locked card.
+type Snapshot = Awaited<ReturnType<typeof loadSnapshot>>;
+
+// Forecast numbers are loaded only for the owner; everyone else sees the locked drawer.
 async function loadForecast(): Promise<SerializedForecast | null> {
   try {
     const { run, days } = await latestForecast();
@@ -75,10 +66,21 @@ async function loadForecast(): Promise<SerializedForecast | null> {
   }
 }
 
+const peso = (value: number) => `₱${value.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// Prices lettered on the mirror drop the centavos when there are none: ₱200, but ₱150.50.
+const pesoShort = (value: number) => (Number.isInteger(value) ? `₱${value.toLocaleString("en-PH")}` : peso(value));
+
+// Business dates are YYYY-MM-DD calendar dates, so they are formatted as dates, not instants.
+const formatDay = (date: string) =>
+  new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(
+    new Date(`${date}T00:00:00Z`)
+  );
+
 export default async function HomePage() {
   const isOwner = isOwnerCookie((await cookies()).get(OWNER_COOKIE)?.value);
   const [snapshot, forecast] = await Promise.all([loadSnapshot(), isOwner ? loadForecast() : Promise.resolve(null)]);
   const gatewayOn = gatewayConfig() !== null;
+  const today = manilaToday();
 
   const built = [
     "Offline-first POS with a queued, idempotent sync",
@@ -91,157 +93,207 @@ export default async function HomePage() {
     "7-day customer and revenue forecast for the owner, from the paper logbook",
   ];
 
-  return (
-    <div className="relative min-h-dvh bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white overflow-x-hidden">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-linear-to-b from-red-600/15 via-red-950/5 to-transparent blur-3xl pointer-events-none" />
+  // The walkthrough follows the top service on the menu at its real price. Without the database
+  // it still tells the story, just without an amount.
+  const example = snapshot.ok ? snapshot.services[0] : undefined;
+  const exampleName = example?.name ?? "Cut";
+  const exampleAmount = example ? peso(Number(example.standardPrice)) : null;
 
-      <main className="relative max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-16 space-y-14">
-        {/* Hero */}
-        <header className="flex flex-col items-center text-center gap-5">
-          <RuzzcoLogoBadge size={96} alt="" />
-          <div className="space-y-2">
-            <div className="flex items-center justify-center gap-2 text-xs font-semibold tracking-[0.25em] text-red-500 uppercase">
-              <span>Cut &amp; Shave</span>
-              <span aria-hidden="true" className="text-zinc-600">•</span>
-              <span className="text-zinc-400 tracking-[0.2em]">Caloocan City</span>
-            </div>
-            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white uppercase font-(family-name:--font-oswald) flex items-center justify-center gap-3">
-              Ruzzco Barbers
-              <MustacheIcon className="w-8 h-4 text-red-600 shrink-0" />
-            </h1>
-            <p className="text-zinc-400 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
-              The shop&apos;s point of sale and end-of-day books, built to keep working offline, with a 7-day
-              customer forecast for the owner.
+  return (
+    <div className="relative flex-1 overflow-x-clip">
+      <main className="rz-page pb-10">
+        {/* The station, seen from the chair: the mirror over the counter */}
+        <div className="mx-auto max-w-312 px-3 sm:px-6 pt-4 sm:pt-7">
+          <div className="rz-mirror">
+            <MirrorGlass>
+              {/* The room behind the chair, reflected: black walls, the crimson accent wall, the ceiling */}
+              <span aria-hidden="true" className="rz-mirror-room rz-reflect-far rz-lights-up">
+                <span className="rz-mirror-accent" />
+              </span>
+              <span aria-hidden="true" className="rz-mirror-sheen" />
+              <span aria-hidden="true" className="rz-mirror-glow" />
+              <span aria-hidden="true" className="rz-mirror-led" />
+
+              <div className="relative z-2 grid items-center gap-7 sm:gap-9 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)] lg:gap-14 px-5 pt-11 pb-8 sm:px-12 sm:pt-14 sm:pb-10 lg:px-16 lg:pt-12 lg:pb-9">
+                {/* The sign on the accent wall, in the mirror. It hangs in front of the wall, so it moves less. */}
+                <div className="rz-reflect-near rz-lights-up relative w-full max-w-xl lg:max-w-none">
+                  {/* The LED tube above the sign, as in the shop */}
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-5 sm:-top-7 left-1/2 -translate-x-1/2 h-0.75 w-3/5 rounded-full bg-[linear-gradient(90deg,transparent,rgb(255_255_255/0.9)_15%,rgb(255_255_255/0.9)_85%,transparent)] shadow-[0_6px_22px_4px_rgb(255_240_225/0.28)]"
+                  />
+                  <RuzzcoLogoBanner className="w-full" alt="" sizes="(min-width: 1024px) 35rem, (min-width: 640px) 36rem, 92vw" />
+                </div>
+
+                {/* Lettered on the glass, so it stays put while the reflection moves */}
+                <div className="rz-vinyl space-y-4 sm:space-y-5">
+                  {/* Three set lines, so the comma of the first never sits over a letter of the second */}
+                  <h1 className="rz-title text-[2.5rem] sm:text-6xl lg:text-[clamp(3rem,4.4vw,4rem)] leading-[1.05]">
+                    <span className="sr-only">Ruzzco Barbers: </span>
+                    {/* The spaces keep the words apart for copy, search and screen readers. */}
+                    <span className="block">Every cut,</span>{" "}
+                    <span className="block">counted</span>{" "}
+                    <span className="block">once.</span>
+                  </h1>
+                  <p className="max-w-[36ch] lg:max-w-[50ch] text-[0.9375rem] sm:text-lg lg:text-[1.0625rem] leading-relaxed text-[#f3dcd8]">
+                    The shop&apos;s point of sale and end-of-day books. Every sale is saved on the phone first and synced when
+                    the Wi-Fi is back, and the owner gets a 7-day customer forecast.
+                  </p>
+                </div>
+              </div>
+
+              {/* The day, lettered along the foot of the glass. Narrower screens read it under the counter. */}
+              <div className="relative z-2 hidden lg:block px-16 pb-8">
+                <DayLine variant="glass" snapshot={snapshot} today={today} />
+              </div>
+            </MirrorGlass>
+          </div>
+        </div>
+
+        {/* The counter: the day's tools on top, the owner's drawer under them */}
+        <div className="rz-counter mt-6 sm:mt-7">
+          <div className="mx-auto max-w-312 px-3 sm:px-6 pt-6 sm:pt-7 pb-10 sm:pb-12 space-y-6 sm:space-y-8">
+            <section aria-labelledby="tools-title" className="space-y-4 sm:space-y-6">
+              <h2 id="tools-title" className="sr-only">Where to go</h2>
+              <ul className="grid grid-cols-2 lg:grid-cols-[1.7fr_1fr_1fr] gap-3 sm:gap-4 rz-stagger">
+                <li className="col-span-2 lg:col-span-1">
+                  <Link href="/pos" className="rz-plate rz-plate-primary group gap-3 min-h-40 lg:min-h-0">
+                    <Scissors className="w-6 h-6 transition-transform duration-300 motion-safe:group-hover:-rotate-12" />
+                    <span className="mt-2 font-display font-semibold uppercase tracking-[0.04em] text-[2.125rem] sm:text-[2.5rem] xl:text-[2.75rem] leading-[0.95]">
+                      Open the POS
+                    </span>
+                    <span className="block text-sm font-medium leading-relaxed max-w-[34ch]">
+                      Ring up a cut in two taps. Works even when the shop Wi-Fi drops.
+                    </span>
+                    <span className="mt-auto pt-2 flex items-end justify-between gap-4">
+                      <span className="text-xs font-semibold uppercase tracking-[0.08em]">
+                        {gatewayOn ? "Cash · GCash · Maya · QR Ph" : "Cash · GCash · Maya"}
+                      </span>
+                      <ArrowRight className="w-6 h-6 shrink-0 stroke-[2.5] transition-transform duration-200 motion-safe:group-hover:translate-x-1" />
+                    </span>
+                  </Link>
+                </li>
+
+                {counterTools.map((tool) => (
+                  <li key={tool.href}>
+                    <Link href={tool.href} className="rz-plate group gap-3">
+                      <tool.icon className="w-6 h-6 text-crimson-ink" />
+                      <span className="mt-2 font-display font-semibold uppercase tracking-[0.04em] text-xl sm:text-2xl lg:text-[1.625rem] leading-[1.05]">
+                        {tool.title}
+                      </span>
+                      <span className="block text-[0.8125rem] sm:text-sm text-dust leading-relaxed">{tool.body}</span>
+                      <ArrowRight className="mt-auto self-end w-5 h-5 text-dust transition-[color,transform] duration-200 group-hover:text-crimson-ink motion-safe:group-hover:translate-x-1" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Narrower screens: the day sits under the tools, so Open the POS stays in the first screen */}
+              <div className="lg:hidden">
+                <DayLine variant="board" snapshot={snapshot} today={today} />
+              </div>
+            </section>
+
+            {/* The counter's own drawer, under the tools: the owner's pages and the forecast */}
+            <OwnerDrawer isOwner={isOwner} forecast={forecast} today={today} />
+          </div>
+        </div>
+
+        {/* One sale, from the chair to the drawer */}
+        <section aria-labelledby="flow-title" className="mx-auto max-w-312 px-4 sm:px-6 pt-20 sm:pt-28">
+          <div className="max-w-2xl space-y-3">
+            <h2 id="flow-title" className="rz-title text-[2rem] sm:text-[2.75rem]">How a sale is recorded</h2>
+            <p className="text-base sm:text-lg text-dust leading-relaxed">
+              One {exampleName.toLowerCase()} paid in cash, followed from the chair to the drawer. An example, not a real sale.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <Link
-              href="/pos"
-              className="inline-flex items-center justify-center gap-2.5 px-7 py-3.5 rounded-xl bg-linear-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold text-sm shadow-xl shadow-red-950/60 ring-1 ring-red-400/40 transition-all group"
-            >
-              <Scissors className="w-4 h-4 group-hover:rotate-45 transition-transform" />
-              Open the POS
-              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-            </Link>
-            <Link
-              href="/reconciliation"
-              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white font-medium text-sm transition-colors"
-            >
-              <ClipboardCheck className="w-4 h-4 text-zinc-400" />
-              Close out today
-            </Link>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-zinc-400">
-            <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Usually open daily, 10 AM – 10 PM</span>
-            <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Caloocan City</span>
-          </div>
-        </header>
-
-        {/* Forecast (owner only) */}
-        {isOwner ? (
-          forecast ? (
-            <ForecastPanel initial={forecast} today={manilaToday()} />
-          ) : (
-            <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-900/50 text-sm text-rose-300">
-              The saved forecast can&apos;t be loaded right now because the database is unreachable.
-            </div>
-          )
-        ) : (
-          <ForecastLocked />
-        )}
-
-        {/* Today */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {snapshot.ok ? (
-            <>
-              <Stat label={`Paid sales today (${manilaToday()})`} value={String(snapshot.salesToday)} accent="text-red-400" />
-              <Stat
-                label="Barbers on the roster"
-                value={String(snapshot.barbers.length)}
-                note={snapshot.barbers.map((b) => b.fullName).join(", ") || "None set up yet"}
-              />
-              <Stat label="Services on the menu" value={String(snapshot.services.length)} note="Prices below" />
-            </>
-          ) : (
-            <div className="sm:col-span-3 p-4 rounded-xl bg-rose-950/30 border border-rose-900/50 text-sm text-rose-300">
-              The server can&apos;t reach the database right now. The POS still records sales on the phone and syncs
-              them once it&apos;s back.
-            </div>
-          )}
-        </section>
-
-        {/* Where to go */}
-        <section className="space-y-4">
-          <SectionTitle>Where to go</SectionTitle>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {destinations.map((d) => (
-              <Link
-                key={d.href}
-                href={d.href}
-                className="group p-5 rounded-xl bg-[#12141a] border border-[#232734] hover:border-red-500/40 transition-colors relative overflow-hidden"
-              >
-                <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <d.icon className="w-5 h-5 text-red-500" />
-                    <span className="font-bold text-white uppercase tracking-wide font-(family-name:--font-oswald)">{d.title}</span>
-                  </div>
-                  {d.ownerOnly ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full shrink-0">
-                      <Lock className="w-3 h-3" /> Owner PIN
+          <div className="mt-10 sm:mt-12 grid gap-6 lg:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)] lg:gap-0">
+            <Zone icon={Smartphone} title="On the barber's phone" note="Works with no connection">
+              <Step n={1} title="Tap" body="The barber picks the service and payment method on their phone.">
+                <div className="space-y-2.5">
+                  <div className="relative overflow-hidden flex items-center justify-between gap-3 rounded-[10px] border border-chrome bg-panel-2 py-2.5 pl-4 pr-3 shadow-[inset_0_1px_0_rgb(214_228_250/0.14)]">
+                    <span className="absolute inset-y-0 left-0 w-1 rz-stripes" />
+                    <span className="flex items-center gap-2.5 min-w-0">
+                      <BarberPoleIcon className="w-2.5 h-6" />
+                      <span className="text-sm font-semibold text-bone truncate">{exampleName}</span>
                     </span>
-                  ) : (
-                    <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-red-400 transition-colors" />
-                  )}
+                    {exampleAmount && <span className="rz-figure text-base text-bone shrink-0">{exampleAmount}</span>}
+                  </div>
+                  <div className="h-10 flex items-center justify-center gap-2 rounded-[10px] bg-crimson text-white font-display font-semibold uppercase tracking-wider text-[0.9375rem] shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_20px_-12px_rgb(0_0_0/0.95)]">
+                    <Banknote className="w-4 h-4 stroke-[2.5]" />
+                    Cash{exampleAmount && ` — ${exampleAmount}`}
+                  </div>
                 </div>
-                <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{d.body}</p>
-              </Link>
-            ))}
+              </Step>
+              <Step n={2} title="Saved on the phone" body="The sale is stored on the device first, so no connection is needed.">
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rz-pill rz-pill-danger"><WifiOff className="w-3.5 h-3.5" /> Offline</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-crimson-ink"><Clock className="w-3.5 h-3.5" /> Waiting to sync</span>
+                  </div>
+                  <ExampleCut name={exampleName} amount={exampleAmount} synced={false} />
+                </div>
+              </Step>
+            </Zone>
+
+            {/* Where the sale crosses from the phone to the server */}
+            <div className="flex lg:flex-col items-center justify-center gap-3 lg:pt-12 text-dust">
+              <span aria-hidden="true" className="hidden lg:block w-px flex-1 bg-[linear-gradient(180deg,transparent,var(--color-seam-strong))]" />
+              <span aria-hidden="true" className="w-10 h-10 rounded-full bg-panel ring-1 ring-seam-strong flex items-center justify-center shrink-0">
+                <RefreshCw className="w-4 h-4 text-bone-2" />
+              </span>
+              <span className="text-[0.6875rem] font-semibold uppercase tracking-[0.08em] lg:text-center">
+                Syncs when<br className="hidden lg:block" /> online
+              </span>
+              <span aria-hidden="true" className="hidden lg:block w-px flex-1 bg-[linear-gradient(180deg,var(--color-seam-strong),transparent)]" />
+            </div>
+
+            <Zone icon={Server} title="On the shop's server" note="Once the phone is back online" start={3}>
+              <Step n={3} title="Synced once" body="When online, sales upload. Each one is recorded exactly once, even if sent twice.">
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rz-pill rz-pill-ok"><Wifi className="w-3.5 h-3.5" /> Online</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ok-ink"><CheckCircle2 className="w-3.5 h-3.5" /> Synced</span>
+                  </div>
+                  <ExampleCut name={exampleName} amount={exampleAmount} synced />
+                  <p className="text-xs text-dust">Sent twice, recorded once.</p>
+                </div>
+              </Step>
+              <Step n={4} title="Closed out" body="At closing the owner reconciles the drawer and settles barber payouts.">
+                <div className="space-y-2.5">
+                  <dl className="text-sm tabular-nums space-y-1.5">
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-dust">Cash sales</dt>
+                      <dd className="text-bone">{exampleAmount ?? "—"}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-dust">Counted in the drawer</dt>
+                      <dd className="text-bone">{exampleAmount ?? "—"}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3 pt-1.5 border-t border-brass/50 font-semibold text-brass-bright">
+                      <dt>= Difference</dt>
+                      <dd>₱0.00</dd>
+                    </div>
+                  </dl>
+                  <span className="rz-pill rz-pill-ok"><CheckCircle2 className="w-3.5 h-3.5" /> Drawer is balanced</span>
+                </div>
+              </Step>
+            </Zone>
           </div>
         </section>
 
-        {/* How a sale flows */}
-        <section className="space-y-4">
-          <SectionTitle>How a sale is recorded</SectionTitle>
-          <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {flow.map((step, i) => (
-              <li key={step.title} className="p-4 rounded-xl bg-[#12141a]/80 border border-[#232734] space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-red-600/20 text-red-400 text-xs font-bold flex items-center justify-center">{i + 1}</span>
-                  <step.icon className="w-4 h-4 text-zinc-400" />
-                </div>
-                <div className="font-semibold text-white text-sm">{step.title}</div>
-                <p className="text-xs text-zinc-400 leading-relaxed">{step.body}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        {/* Services */}
-        {snapshot.ok && snapshot.services.length > 0 && (
-          <section className="space-y-4">
-            <SectionTitle>Services</SectionTitle>
-            <ul className="divide-y divide-[#232734] rounded-xl bg-[#12141a] border border-[#232734]">
-              {snapshot.services.map((s) => (
-                <li key={s.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                  <span className="text-zinc-200">{s.name}</span>
-                  <span className="font-bold text-white font-(family-name:--font-oswald)">₱{Number(s.standardPrice).toFixed(2)}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* Built */}
-        <section>
-          <div className="p-5 rounded-xl bg-[#12141a] border border-emerald-500/25 space-y-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-emerald-300 font-(family-name:--font-oswald)">Built so far</div>
-            <ul className="space-y-2">
+        {/* What the system does today */}
+        <section aria-labelledby="built-title" className="mx-auto max-w-312 px-4 sm:px-6 pt-16 sm:pt-24">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] lg:gap-12 items-start">
+            <div className="space-y-3">
+              <h2 id="built-title" className="rz-title text-[2rem] sm:text-[2.75rem]">Built so far</h2>
+              <p className="text-dust leading-relaxed">What the system does today, for the SPCC BSIT capstone.</p>
+            </div>
+            <ul className="grid sm:grid-cols-2 gap-px overflow-hidden rounded-[14px] border border-seam bg-seam shadow-[0_18px_36px_-26px_rgb(0_0_0/0.95)] rz-stagger">
               {built.map((item) => (
-                <li key={item} className="flex items-start gap-2 text-sm text-zinc-300">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                <li key={item} className="flex items-start gap-3 bg-panel px-5 py-4 text-sm text-bone-2 leading-relaxed">
+                  <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-ok" />
                   {item}
                 </li>
               ))}
@@ -249,14 +301,13 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <footer className="pt-6 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-4 text-xs text-zinc-400">
-          <div className="flex items-center gap-2">
-            <BarberPoleIcon className="w-2 h-3.5" />
+        <footer className="mx-auto max-w-312 px-4 sm:px-6 pt-16 sm:pt-20">
+          <div className="pt-6 border-t border-seam flex flex-wrap items-center justify-between gap-4 text-xs text-dust">
             <span>Ruzzco Barbers • Caloocan City</span>
-          </div>
-          <div className="flex items-center gap-4 font-mono">
-            <Link href="/api/v1/health" className="inline-flex items-center min-h-6 px-1 -mx-1 pointer-coarse:min-h-11 hover:text-red-400 transition-colors">health</Link>
-            <span>SPCC BSIT Capstone</span>
+            <div className="flex items-center gap-4">
+              <Link href="/api/v1/health" className="inline-flex items-center min-h-6 px-1 -mx-1 pointer-coarse:min-h-11 hover:text-crimson-ink transition-colors">health</Link>
+              <span>SPCC BSIT Capstone</span>
+            </div>
           </div>
         </footer>
       </main>
@@ -264,22 +315,173 @@ export default async function HomePage() {
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+type DayUnit = { label: string; value: string; brass?: boolean };
+
+// The day at a glance: hours, today's paid sales, the roster, and the price list. Lettered in one
+// line along the mirror's glass on wide screens; a board of leader lines under the counter on
+// narrower ones. The supporting details (city, date, names) share one quiet line.
+function DayLine({ variant, snapshot, today }: { variant: "glass" | "board"; snapshot: Snapshot; today: string }) {
+  const hours: DayUnit = { label: "Open daily", value: "10 AM – 10 PM" };
+  const day: DayUnit[] = snapshot.ok
+    ? [
+        hours,
+        { label: "Paid sales today", value: String(snapshot.salesToday), brass: true },
+        { label: "Barbers", value: String(snapshot.barbers.length) },
+      ]
+    : [hours];
+  const prices: DayUnit[] = snapshot.ok
+    ? snapshot.services.map((s) => ({ label: s.name, value: pesoShort(Number(s.standardPrice)), brass: true }))
+    : [];
+  const roster = snapshot.ok ? snapshot.barbers.map((b) => b.fullName).join(", ") : "";
+  const notes = snapshot.ok
+    ? [
+        "Caloocan City",
+        formatDay(today),
+        roster ? `On the roster: ${roster}` : "No barbers set up yet",
+        ...(prices.length === 0 ? ["No services on the menu yet"] : []),
+      ]
+    : ["Caloocan City"];
+  const offline = !snapshot.ok && (
+    <p className="rz-notice rz-notice-danger">
+      <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0" />
+      The server can&apos;t reach the database right now. The POS still records sales on the phone and syncs them once
+      it&apos;s back.
+    </p>
+  );
+
+  if (variant === "glass") {
+    return (
+      <div className="rz-vinyl border-t border-white/15 pt-5">
+        <div className="flex flex-wrap items-center gap-x-7 gap-y-3">
+          <dl className="flex flex-wrap items-baseline gap-x-7 gap-y-3">
+            {day.map((unit) => (
+              <VinylUnit key={unit.label} unit={unit} />
+            ))}
+          </dl>
+          {prices.length > 0 && (
+            <>
+              <MustacheIcon className="w-7 h-2.5 shrink-0 text-brass" />
+              <dl className="flex flex-wrap items-baseline gap-x-7 gap-y-3">
+                {prices.map((unit) => (
+                  <VinylUnit key={unit.label} unit={unit} />
+                ))}
+              </dl>
+            </>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-[#ecc9c4]">{notes.join(" · ")}</p>
+        {offline && <div className="mt-4">{offline}</div>}
+      </div>
+    );
+  }
+
   return (
-    <h2 className="flex items-center gap-2 text-lg font-bold text-white tracking-wide uppercase font-(family-name:--font-oswald)">
-      <BarberPoleIcon className="w-3 h-5" />
-      {children}
-    </h2>
+    <div className="space-y-3">
+      <div className="rz-panel px-4 py-4 sm:px-6 sm:py-5 space-y-3.5">
+        <dl className="space-y-2.5">
+          {day.map((unit) => (
+            <LeaderUnit key={unit.label} unit={unit} />
+          ))}
+        </dl>
+        {prices.length > 0 && (
+          <dl className="space-y-2.5 pt-3.5 border-t border-seam">
+            {prices.map((unit) => (
+              <LeaderUnit key={unit.label} unit={unit} />
+            ))}
+          </dl>
+        )}
+        <p className="text-xs text-dust leading-relaxed">{notes.join(" · ")}</p>
+      </div>
+      {offline}
+    </div>
   );
 }
 
-function Stat({ label, value, note, accent = "text-white" }: { label: string; value: string; note?: string; accent?: string }) {
+// Vinyl lettering: the label and its figure on one Oswald baseline.
+function VinylUnit({ unit }: { unit: DayUnit }) {
   return (
-    <div className="p-4 rounded-xl bg-[#12141a] border border-[#232734] space-y-1 relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-      <div className="text-xs text-zinc-400 uppercase tracking-wider font-semibold">{label}</div>
-      <div className={`text-2xl font-extrabold font-(family-name:--font-oswald) ${accent}`}>{value}</div>
-      {note && <p className="text-xs text-zinc-400 truncate">{note}</p>}
+    <div className="flex items-baseline gap-2.5">
+      <dt className="font-display uppercase tracking-[0.08em] text-lg text-[#f3dcd8]">{unit.label}</dt>
+      <dd className={`font-display font-semibold uppercase tracking-[0.03em] text-2xl leading-none ${unit.brass ? "text-brass-bright" : "text-bone"}`}>
+        {unit.value}
+      </dd>
+    </div>
+  );
+}
+
+// The board's grammar: the label led out by a dotted leader to its figure.
+function LeaderUnit({ unit }: { unit: DayUnit }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <dt className="flex flex-1 min-w-0 items-baseline gap-3 font-display font-medium uppercase tracking-[0.06em] text-[0.9375rem] text-bone-2">
+        <span className="truncate">{unit.label}</span>
+        <span aria-hidden="true" className="rz-leader" />
+      </dt>
+      <dd className={`rz-figure text-lg shrink-0 ${unit.brass ? "text-brass-bright" : "text-bone"}`}>{unit.value}</dd>
+    </div>
+  );
+}
+
+// One region of the walkthrough: where the sale lives at that point (the phone, or the server).
+function Zone({
+  icon: Icon,
+  title,
+  note,
+  start,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  note: string;
+  start?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-3.5 border-b border-seam-strong">
+        <h3 className="rz-heading text-bone">
+          <Icon className="w-4 h-4 text-crimson-ink" />
+          {title}
+        </h3>
+        <span className="text-xs text-dust">{note}</span>
+      </div>
+      <ol start={start} className="grid flex-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-seam">
+        {children}
+      </ol>
+    </div>
+  );
+}
+
+function Step({ n, title, body, children }: { n: number; title: string; body: string; children: React.ReactNode }) {
+  return (
+    <li className="flex flex-col gap-4 py-5 sm:px-5 sm:first:pl-0 sm:last:pr-0">
+      <div className="flex items-center gap-3">
+        <span aria-hidden="true" className="w-7 h-7 rounded-full ring-1 ring-seam-strong font-display font-semibold text-sm text-bone flex items-center justify-center shrink-0">
+          {n}
+        </span>
+        <span className="font-display font-medium uppercase tracking-[0.06em] text-lg text-bone">{title}</span>
+      </div>
+      <p className="text-sm text-dust leading-relaxed">{body}</p>
+      {/* An illustration of the app's own screens; the sentence above says what it shows. */}
+      <div aria-hidden="true" className="rz-well mt-auto p-3 min-h-34 flex flex-col justify-center pointer-events-none select-none">
+        {children}
+      </div>
+    </li>
+  );
+}
+
+// A row from the POS's Recent cuts, as it looks before and after it syncs.
+function ExampleCut({ name, amount, synced }: { name: string; amount: string | null; synced: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-t border-seam pt-2.5 text-sm">
+      <span className="font-medium text-bone truncate">{name}</span>
+      <span className="flex items-center gap-2 shrink-0">
+        <span className="w-5 h-5 rounded-full bg-crimson/20 text-crimson-ink flex items-center justify-center">
+          <Banknote className="w-3 h-3" />
+        </span>
+        {amount && <span className="rz-figure text-base text-bone">{amount}</span>}
+        {synced ? <CheckCircle2 className="w-4 h-4 text-ok" /> : <Clock className="w-4 h-4 text-crimson-ink" />}
+      </span>
     </div>
   );
 }
