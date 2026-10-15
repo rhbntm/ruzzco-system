@@ -137,7 +137,7 @@ function glow(x: number, y: number, cx: number, cy: number, rx: number, ry: numb
  *
  * Without JavaScript, or with reduced motion, the room is still: the light alone, as globals.css
  * draws it. Phones get less air at half the frame rate, and no cursor. The air holds still under a
- * dialog or the Insights presentation, which cover it.
+ * dialog, which covers it.
  */
 export function ShopRoom() {
   const lightRef = useRef<HTMLDivElement>(null);
@@ -430,11 +430,11 @@ export function ShopRoom() {
       frame = requestAnimationFrame(tick);
       if (resized) fit();
 
-      // A dialog's frosted backdrop or the Insights presentation covers the room; the air holds
-      // still under them rather than make the frost redraw for every frame.
+      // A dialog's frosted backdrop covers the room; the air holds still under it rather than make
+      // the frost redraw for every frame.
       if (now - pauseCheck > 400) {
         pauseCheck = now;
-        paused = document.fullscreenElement !== null || document.querySelector(".rz-overlay, .rz-stage") !== null;
+        paused = document.querySelector(".rz-overlay") !== null;
       }
       const scrollY = window.scrollY;
       if (paused) {

@@ -3,17 +3,10 @@
 // Owner-only 7-day forecast (slice 7). Rendered only when the home page found the owner cookie;
 // starts from the forecast saved in MySQL and tries one refresh when that run is not from today.
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LineChart, LockKeyhole, RefreshCw, WifiOff } from "lucide-react";
+import { ArrowRight, LineChart, LockKeyhole, RefreshCw, WifiOff } from "lucide-react";
 import type { SerializedForecast } from "@/lib/forecast";
-import { buildComparisonView } from "@/lib/forecast-comparison";
-
-const BASELINE_NAMES: Record<string, string> = {
-  average: "the plain average",
-  weekday: "the average for that weekday",
-  last7: "the average of the last 7 open days",
-  naive: "the last open day's count",
-};
 
 const peso = (value: number) => `₱${Math.round(value).toLocaleString("en-PH")}`;
 
@@ -127,7 +120,7 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
             <p>
               On the last {run.weeksTested} weeks of logbook records, this forecast was off by about{" "}
               {Number(run.typicalErrorCustomers)} customers (about {peso(Number(run.typicalErrorCustomers) * Number(run.avgTicket))})
-              a day. Guessing {BASELINE_NAMES[run.bestBaseline] ?? run.bestBaseline} was off by {Number(run.bestBaselineError)}.
+              a day.
             </p>
             <p>
               Based on the logbook from {formatDate(run.dataFrom, { month: "short", day: "numeric", year: "numeric" })} to{" "}
@@ -136,7 +129,13 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
             </p>
           </div>
 
-          <MethodComparison run={run} />
+          <Link
+            href="/forecast"
+            className="group inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 rounded-sm text-sm font-semibold text-brass-bright hover:text-bone transition-colors"
+          >
+            See the detailed forecast
+            <ArrowRight className="w-4 h-4 transition-transform duration-200 motion-safe:group-hover:translate-x-1" />
+          </Link>
         </>
       ) : busy ? (
         // The first refresh is running: the table's shape, not an empty card.
@@ -155,75 +154,10 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
   );
 }
 
-// Slice 9: how Random Forest did against the other methods, from the comparison saved with the run,
-// so it still shows when the forecast service is down. Also shown on the owner's /insights page.
-export function MethodComparison({ run }: { run: NonNullable<SerializedForecast["run"]> }) {
-  const shortDate = (iso: string) => formatDate(iso, { month: "short", day: "numeric", year: "numeric" });
-  const view = buildComparisonView(run.comparison, shortDate);
-  return (
-    <div className="pt-5 border-t border-seam space-y-3.5">
-      <h3 className="rz-heading text-bone">How the methods compare</h3>
-      {view ? (
-        <>
-          <p className="text-xs text-dust leading-relaxed max-w-prose">
-            Each method guessed how many customers came on each day of weeks it had not seen. The number is how far off it was, on
-            average, in customers per day. <span className="text-bone font-semibold">Lower is better.</span> “Week-to-week swing” is
-            how much that changed from one week to the next; smaller means steadier.
-          </p>
-          <p className="text-xs font-semibold text-brass-bright">{view.basisLine}</p>
-          {view.groups.map((group) => (
-            <div key={group.title} className="space-y-1.5">
-              <p className="rz-label">{group.title}</p>
-              <div className="rz-well overflow-hidden divide-y divide-seam tabular-nums">
-                <div className="hidden sm:grid grid-cols-[1fr_9rem_9rem] gap-2 px-3 py-2 text-[0.6875rem] font-semibold text-dust uppercase tracking-[0.08em]">
-                  <span>Method</span>
-                  <span className="text-right">Off by (customers a day)</span>
-                  <span className="text-right">Week-to-week swing</span>
-                </div>
-                {group.rows.map((row) => (
-                  <div
-                    key={row.method}
-                    className={`px-3 py-2.5 sm:grid sm:grid-cols-[1fr_9rem_9rem] sm:gap-2 sm:items-center text-sm transition-colors duration-150 ${
-                      row.served ? "bg-crimson/12 shadow-[inset_0_0_0_1px_rgb(218_44_53/0.45)]" : "hover:bg-white/2.5"
-                    }`}
-                  >
-                    <div className="text-bone">
-                      {row.name}
-                      {row.served && <span className="ml-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-crimson-ink">Used for this forecast</span>}
-                    </div>
-                    <div className="flex justify-between sm:block sm:text-right text-bone font-semibold">
-                      <span className="sm:hidden text-xs font-normal text-dust">Off by</span>
-                      {row.mean.toFixed(2)}
-                    </div>
-                    <div className="flex justify-between sm:block sm:text-right text-bone-2">
-                      <span className="sm:hidden text-xs text-dust">Week-to-week swing</span>
-                      {row.spread === null ? "—" : row.spread.toFixed(2)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          <p className="text-xs text-bone-2">
-            Random Forest beat the best simple method ({BASELINE_NAMES[run.bestBaseline] ?? run.bestBaseline}) in {run.weeksRfWon} of{" "}
-            {run.weeksTested} weeks.
-          </p>
-          <p className="text-xs text-dust">Saved with the forecast on {shortDate(run.createdOn)}.</p>
-        </>
-      ) : (
-        <p className="text-sm text-dust">
-          No comparison was saved with this forecast. Press Refresh forecast once the forecast service has been retrained.
-        </p>
-      )}
-    </div>
-  );
-}
-
-// Sends the owner PIN; on success the server sets the owner cookie and the page re-renders with
-// the owner's numbers. Used by the locked forecast card (on /insights and in the home page's
-// owner drawer).
-function useOwnerUnlock() {
+// Shown instead of the panel when the owner cookie is missing. No forecast numbers reach this page.
+export function ForecastLocked() {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -250,19 +184,6 @@ function useOwnerUnlock() {
     }
   }
 
-  return { pin, setPin, busy, error, unlock };
-}
-
-// Shown instead of the panel when the owner cookie is missing. No forecast numbers reach this page.
-// /insights reuses it with its own wording.
-export function ForecastLocked({
-  title = "Forecast",
-  description = "Expected customers and revenue for the next 7 days. Owner only.",
-  submitLabel = "Show forecast",
-}: { title?: string; description?: string; submitLabel?: string } = {}) {
-  const [open, setOpen] = useState(false);
-  const { pin, setPin, busy, error, unlock } = useOwnerUnlock();
-
   return (
     <section className="rz-panel p-5 sm:p-6 space-y-3.5">
       <div className="flex items-center justify-between gap-3">
@@ -270,13 +191,13 @@ export function ForecastLocked({
           <span aria-hidden="true" className="w-9 h-9 rounded-lg bg-brass/10 ring-1 ring-brass/40 text-brass-bright flex items-center justify-center shrink-0">
             <LineChart className="w-4.5 h-4.5" />
           </span>
-          <span className="rz-title text-xl">{title}</span>
+          <span className="rz-title text-xl">Forecast</span>
         </div>
         <span className="rz-pill rz-pill-brass uppercase tracking-wider">
           <LockKeyhole className="w-3 h-3" /> Owner PIN
         </span>
       </div>
-      <p className="text-sm text-dust leading-relaxed">{description}</p>
+      <p className="text-sm text-dust leading-relaxed">Expected customers and revenue for the next 7 days. Owner only.</p>
       {open ? (
         <form
           onSubmit={(event) => {
@@ -295,11 +216,8 @@ export function ForecastLocked({
             placeholder="Owner PIN"
             aria-label="Owner PIN"
           />
-          <button
-            disabled={busy || !pin}
-            className="rz-btn rz-btn-primary px-5 pointer-coarse:min-h-11"
-          >
-            {busy ? "Checking…" : submitLabel}
+          <button disabled={busy || !pin} className="rz-btn rz-btn-primary px-5 pointer-coarse:min-h-11">
+            {busy ? "Checking…" : "Show forecast"}
           </button>
         </form>
       ) : (

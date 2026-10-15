@@ -7,6 +7,18 @@ import { manilaToday } from "@/lib/business-date";
 import { BarberPoleIcon, MustacheIcon } from "@/components/RuzzcoBrand";
 
 type Base = "LIST_PRICE" | "AMOUNT_PAID";
+type Period = "day" | "week" | "month";
+type Summary = {
+  from: string; to: string; period: Period;
+  sales: { cash: string; gcash: string; maya: string; qrph: string; total: string; count: number };
+  shared: { commissions: string; tips: string; pettyCash: string; pettyCashRecorded: boolean };
+  leftForShop: string;
+  payouts: { owed: string; paid: string; remaining: string };
+  services: { name: string; count: number; listSales: string }[];
+  serviceGap: string;
+  days: { date: string; revenue: string; commissions: string }[];
+  pettyCashMissingDays: number;
+};
 type LedgerRow = { barberId: string; barberName: string; commissionTotal: string; tipTotal: string; totalOwed: string; cashPaid: string; gcashPaid: string; paid: boolean; paidAt: string | null; additionalOwed: boolean };
 
 export default function LedgerPage() {
@@ -14,6 +26,9 @@ export default function LedgerPage() {
   const [pin, setPin] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [base, setBase] = useState<Base>("LIST_PRICE");
+  const [period, setPeriod] = useState<Period>("day");
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [rows, setRows] = useState<LedgerRow[]>([]);
   // Sales stated on this date but held for the owner's date review (L5); not in these totals.
   const [heldForReview, setHeldForReview] = useState(0);
@@ -23,7 +38,11 @@ export default function LedgerPage() {
   const [savedBarberId, setSavedBarberId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setSummaryError(null);
+    // The summary loads beside the cards; if it fails the cards still work.
+    const summaryRequest = fetch(`/api/v1/reports/ledger-summary?date=${date}&period=${period}&commissionBase=${base}`)
+      .then(async (res) => { const body = await res.json(); if (!res.ok || !body.success) throw new Error(body.error ?? "Could not load the summary"); setSummary(body); })
+      .catch((err) => { setSummary(null); setSummaryError(err instanceof Error ? err.message : "Could not load the summary"); });
     try {
       const response = await fetch(`/api/v1/reports/payouts?date=${date}&commissionBase=${base}`);
       const data = await response.json();
@@ -32,8 +51,8 @@ export default function LedgerPage() {
       setRows(data.rows);
       setHeldForReview(data.heldForReview ?? 0);
     } catch (err) { setError(err instanceof Error ? err.message : "Could not load ledger"); }
-    finally { setBusy(false); }
-  }, [date, base]);
+    finally { await summaryRequest; setBusy(false); }
+  }, [date, base, period]);
 
   useEffect(() => {
     if (!unlocked) return;
@@ -133,6 +152,14 @@ export default function LedgerPage() {
               <option value="AMOUNT_PAID">Amount paid</option>
             </select>
           </label>
+          <label className="flex items-center gap-2 text-sm text-dust">
+            Summary for{" "}
+            <select value={period} onChange={(event) => setPeriod(event.target.value as Period)} className={`w-auto ${field}`}>
+              <option value="day">The day</option>
+              <option value="week">The week (Mon to Sun)</option>
+              <option value="month">The month</option>
+            </select>
+          </label>
           <span className="rz-pill text-dust">Expense sharing: SHOP_ONLY</span>
         </div>
 
@@ -146,6 +173,8 @@ export default function LedgerPage() {
             </p>
           </div>
         )}
+        {summaryError && <div role="alert" className="animate-rise rz-notice rz-notice-danger">Summary: {summaryError}</div>}
+        {summary && <SummarySection summary={summary} />}
 
         <div className="space-y-4 rz-stagger">
           {rows.map((row) => {
@@ -221,5 +250,97 @@ export default function LedgerPage() {
         <p className="text-xs text-dust flex items-start gap-1.5"><Scissors className="w-3.5 h-3.5 mt-px shrink-0" />Total earned stays as the daily record; Remaining to pay subtracts recorded cash and GCash payouts.</p>
       </div>
     </main>
+  );
+}
+
+const peso = (value: string) => `₱${Number(value).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const shortDate = (iso: string) => new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
+
+// One figure on the summary: the label (and a note under it on phones), the amount on the right.
+// A total sits under a brass rule, like the table totals.
+function Line({ label, value, note, strong }: { label: string; value: string; note?: string; strong?: boolean }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-3 py-1.5 ${strong ? "mt-1 pt-2.5 border-t border-brass/50 font-semibold text-brass-bright" : "text-bone-2"}`}>
+      <span className="min-w-0">
+        {label}
+        {note && <span className="block sm:inline sm:ml-2 text-[0.6875rem] font-normal text-dust">{note}</span>}
+      </span>
+      <span className="tabular-nums shrink-0">{value}</span>
+    </div>
+  );
+}
+
+// Slice 10: money in, money out and what is left, for the picked day, week or month.
+function SummarySection({ summary }: { summary: Summary }) {
+  const range = summary.from === summary.to ? shortDate(summary.from) : `${shortDate(summary.from)} to ${shortDate(summary.to)}`;
+  const { sales, shared, payouts } = summary;
+  return (
+    <section className="animate-rise rz-panel p-4 sm:p-5 space-y-5 text-sm">
+      <div className="space-y-1">
+        <h2 className="rz-title text-xl">Summary</h2>
+        <p className="text-xs text-dust tabular-nums">{range} · {sales.count} paid {sales.count === 1 ? "sale" : "sales"}</p>
+      </div>
+      <div className="grid gap-5 md:grid-cols-2 md:gap-x-8">
+        <div>
+          <h3 className="rz-label mb-1">Money in</h3>
+          <Line label="Cash" value={peso(sales.cash)} />
+          <Line label="GCash" value={peso(sales.gcash)} note="not in the drawer" />
+          <Line label="Maya" value={peso(sales.maya)} note="not in the drawer" />
+          {Number(sales.qrph) > 0 && <Line label="QR Ph" value={peso(sales.qrph)} note="not in the drawer" />}
+          <Line label="Total revenue" value={peso(sales.total)} strong />
+        </div>
+        <div>
+          <h3 className="rz-label mb-1">Shared out</h3>
+          <Line label="Barber commissions" value={peso(shared.commissions)} />
+          <Line label="Tips (100% to the barber, not in revenue)" value={peso(shared.tips)} />
+          <Line
+            label="Petty cash"
+            value={peso(shared.pettyCash)}
+            note={shared.pettyCashRecorded ? undefined : summary.period === "day" ? "Not recorded yet (End-of-Day Cash)" : `${summary.pettyCashMissingDays} ${summary.pettyCashMissingDays === 1 ? "day has" : "days have"} no End-of-Day Cash saved`}
+          />
+          <Line label="Left for the shop" value={peso(summary.leftForShop)} note="before the owner's own costs" strong />
+        </div>
+        <div>
+          <h3 className="rz-label mb-1">Barber payouts</h3>
+          <Line label="Owed (commission + tips)" value={peso(payouts.owed)} />
+          <Line label="Recorded as paid" value={peso(payouts.paid)} />
+          <Line label="Still to pay" value={peso(payouts.remaining)} strong />
+        </div>
+        <div>
+          <h3 className="rz-label mb-1">By service</h3>
+          {summary.services.length === 0 ? (
+            <p className="py-1.5 text-dust">No sales in this period.</p>
+          ) : (
+            <>
+              {summary.services.map((row) => <Line key={row.name} label={row.name} note={`${row.count} sold`} value={peso(row.listSales)} />)}
+              {Number(summary.serviceGap) !== 0 && <Line label="Discounts and custom amounts" value={peso(summary.serviceGap)} note="services are at list price, so they differ from total revenue" />}
+            </>
+          )}
+        </div>
+        {summary.days.length > 0 && (
+          <div className="md:col-span-2">
+            <h3 className="rz-label mb-1">Day by day</h3>
+            <table className="rz-table text-[0.8125rem] [&_td]:py-1.5">
+              <thead>
+                <tr>
+                  <th className="text-left"><span className="sr-only">Day</span></th>
+                  <th className="text-right">Revenue</th>
+                  <th className="text-right">Commissions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.days.map((day) => (
+                  <tr key={day.date}>
+                    <td className="text-bone-2">{shortDate(day.date)}</td>
+                    <td className="text-right text-bone">{peso(day.revenue)}</td>
+                    <td className="text-right text-bone-2">{peso(day.commissions)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

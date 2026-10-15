@@ -15,12 +15,10 @@ const oswald = localFont({
   display: "swap",
 });
 
+// The tab icon is app/icon.png (Next.js file convention); an `icons` entry here would hide it.
 export const metadata: Metadata = {
   title: "Ruzzco Barbers — POS & Revenue Forecasting DSS",
   description: "Offline-First Mobile POS and Decision Support System for Ruzzco Barbers (Caloocan)",
-  icons: {
-    icon: "/ruzzco-logo.jpg",
-  },
 };
 
 // Phone browsers tint their toolbar to the shop's black.

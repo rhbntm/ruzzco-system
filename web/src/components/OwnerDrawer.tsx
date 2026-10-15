@@ -2,13 +2,13 @@
 
 // The owner's drawer: the counter's own drawer, under the day's tools. It starts shut: the front
 // carries a brass nameplate, the lock and the pull, and the whole front is its handle. Out slides a
-// tray with the owner's four tools: Barber Ledger, Insights and Payment QR (each page still asks
-// for the PIN itself) and the 7-day forecast, which shows its numbers only once the owner PIN has
-// been entered on this device. Until then no figure reaches the page.
+// tray with the owner's four tools: Barber Ledger, Detailed Forecast and Payment QR (each page
+// still asks for the PIN itself) and the 7-day forecast, which shows its numbers only once the
+// owner PIN has been entered on this device. Until then no figure reaches the page.
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, LayoutDashboard, LockKeyhole, LockKeyholeOpen, QrCode, TriangleAlert, Wallet } from "lucide-react";
+import { ArrowRight, LineChart, LockKeyhole, LockKeyholeOpen, QrCode, TriangleAlert, Wallet } from "lucide-react";
 import type { SerializedForecast } from "@/lib/forecast";
 import { ForecastLocked, ForecastPanel } from "@/components/ForecastPanel";
 
@@ -17,7 +17,7 @@ type OwnerPage = { href: string; title: string; body: string; icon: LucideIcon }
 // In the order Mart reaches for them at closing.
 const ownerPages: OwnerPage[] = [
   { href: "/ledger", title: "Barber Ledger", body: "View and record each barber's daily payout.", icon: Wallet },
-  { href: "/insights", title: "Insights", body: "Dashboards, calculations and evaluations from the shop's own numbers.", icon: LayoutDashboard },
+  { href: "/forecast", title: "Detailed Forecast", body: "How the 7-day forecast compares with simpler guesses and other models.", icon: LineChart },
   { href: "/payment-qr", title: "Payment QR", body: "Add or change the GCash and Maya QR shown for each barber.", icon: QrCode },
 ];
 
@@ -110,7 +110,7 @@ export function OwnerDrawer({
               <span aria-hidden="true" className="rz-tray-divider h-0.75 lg:h-auto" />
               <div id="forecast" ref={forecastRef} tabIndex={-1} className="scroll-mt-6 min-w-0 rounded-[14px]">
                 {!isOwner ? (
-                  <ForecastLocked title="Next 7 days" />
+                  <ForecastLocked />
                 ) : forecast ? (
                   <ForecastPanel initial={forecast} today={today} />
                 ) : (

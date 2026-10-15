@@ -19,27 +19,6 @@ export function countsOnDay(day: BusinessDay): Prisma.TransactionWhereInput {
   };
 }
 
-// The same rule over the business days first..last (inclusive), for the owner's trend charts.
-export function countsInRange(first: BusinessDay, last: BusinessDay): Prisma.TransactionWhereInput {
-  return {
-    OR: [
-      { timeFlag: null, transactionTime: { gte: first.start, lt: last.end } },
-      { timeFlag: { not: null }, timeReviewedBusinessDate: { gte: first.dateValue, lte: last.dateValue } },
-    ],
-  };
-}
-
-// The business day (YYYY-MM-DD) a sale returned by countsOnDay/countsInRange counts on.
-export function countedBusinessDate(sale: {
-  timeFlag: string | null;
-  transactionTime: Date;
-  timeReviewedBusinessDate: Date | null;
-}) {
-  return sale.timeFlag && sale.timeReviewedBusinessDate
-    ? sale.timeReviewedBusinessDate.toISOString().slice(0, 10)
-    : manilaToday(sale.transactionTime);
-}
-
 export type NeedsReviewSale = {
   id: string;
   barberName: string;
@@ -97,10 +76,10 @@ export async function listNeedsReview(day: BusinessDay): Promise<NeedsReviewSale
   }));
 }
 
-/** Flagged, unreviewed sales stated on day D, or on days D..lastDay (held out of those days' figures). */
-export function countHeldForReview(day: BusinessDay, lastDay: BusinessDay = day) {
+/** Flagged, unreviewed sales stated on day D (held out of that day's figures). */
+export function countHeldForReview(day: BusinessDay) {
   return prisma.transaction.count({
-    where: { timeFlag: { not: null }, timeReviewedAt: null, transactionTime: { gte: day.start, lt: lastDay.end } },
+    where: { timeFlag: { not: null }, timeReviewedAt: null, transactionTime: { gte: day.start, lt: day.end } },
   });
 }
 

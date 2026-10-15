@@ -9,7 +9,7 @@ web
 ## Users
 
 - **Barbers** (the roster is data, never hardcoded; today two are active) ring up each cut on their own phone or a shared device, between customers, standing at the chair.
-- **Mart, the owner**, closes out the drawer at night, records each barber's daily payout, manages the barbers' GCash/Maya QR codes, and reads the forecast and insights behind an owner PIN. Mart doesn't cut hair.
+- **Mart, the owner**, closes out the drawer at night, records each barber's daily payout, manages the barbers' GCash/Maya QR codes, and reads the forecast and its detailed report behind an owner PIN. Mart doesn't cut hair.
 
 ## Product Purpose
 
@@ -28,7 +28,7 @@ Built for one real shop in Caloocan City: sales are saved on the phone first and
 
 ## Capabilities and Constraints
 
-- Routes: `/` home, `/pos`, `/shift-log`, `/reconciliation` (End-of-Day Cash), and owner-only `/ledger`, `/payment-qr`, `/insights`.
+- Routes: `/` home, `/pos`, `/shift-log`, `/reconciliation` (End-of-Day Cash), `/about` (how a sale is recorded, what is built so far), and owner-only `/ledger` (with its day/week/month summary), `/payment-qr`, `/forecast` (the detailed forecast).
 - Visual work preserves every function, flow, and accessibility affordance (aria names, live regions, touch targets).
 - The build must not depend on Google Fonts at build or run time (commit 14be0e1); fonts are self-hosted.
 - Stack: Next.js 16 App Router, React 19, Tailwind 4, lucide-react icons; no UI component library.

@@ -37,7 +37,7 @@ function still(el: HTMLElement) {
  * browser can put the scroll position back; that leaves no moment to capture the page being left.
  * So just before the swap, a still copy of that page is laid over it, scrolled as it was, and fades
  * out (globals.css, .rz-ghost), while the new page comes up underneath a beat later. The browser's
- * own swipe-back animation, a same-page change and the Insights presentation are left alone.
+ * own swipe-back animation and a same-page change are left alone.
  */
 export function HistoryFade() {
   const pathname = usePathname();
@@ -70,7 +70,6 @@ export function HistoryFade() {
     const traverse = (event: PopStateEvent) => {
       if (location.pathname === showing.current) return;
       if ((event as PopStateEvent & { hasUAVisualTransition?: boolean }).hasUAVisualTransition) return;
-      if (document.fullscreenElement || document.querySelector(".rz-stage")) return;
       settle();
 
       const copy = document.createElement("div");

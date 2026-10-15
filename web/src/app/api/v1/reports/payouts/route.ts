@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { readJson, serverError } from "@/lib/api";
 import { countHeldForReview } from "@/lib/time-review";
-import { payoutTotalsForDay, type BarberTotals, type CommissionBaseView } from "@/lib/payouts";
+import { totalsForDate, type Base, type BarberTotals } from "@/lib/payout-totals";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
 import { isBusinessDate, parseBusinessDate } from "@/lib/business-date";
 
@@ -30,7 +30,6 @@ const paymentSchema = z.object({
 const businessDay = (date: string) => parseBusinessDate(date)!;
 const dateValue = (date: string) => businessDay(date).dateValue;
 
-type Base = CommissionBaseView;
 const ZERO = new Prisma.Decimal(0);
 
 // Refreshes the stored rows with the canonical LIST_PRICE totals, whatever base is viewed.
@@ -100,7 +99,7 @@ export async function GET(request: NextRequest) {
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return NextResponse.json({ success: false, error: "date and valid commissionBase are required" }, { status: 400 });
   try {
-    const totals = await payoutTotalsForDay(businessDay(parsed.data.date), parsed.data.commissionBase);
+    const totals = await totalsForDate(parsed.data.date, parsed.data.commissionBase);
     const rows = await syncLedgerRows(parsed.data.date, totals);
     const heldForReview = await countHeldForReview(businessDay(parsed.data.date));
     return NextResponse.json({ success: true, date: parsed.data.date, commissionBase: parsed.data.commissionBase, expenseSharing: "SHOP_ONLY", heldForReview, rows: serialize(rows, parsed.data.commissionBase, totals) });
@@ -117,7 +116,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ success: false, error: "Invalid payout payload", details: parsed.error.flatten() }, { status: 400 });
   const { date, barberId, commissionBase, cashPaid, gcashPaid, paid } = parsed.data;
   try {
-    const totals = await payoutTotalsForDay(businessDay(date), commissionBase);
+    const totals = await totalsForDate(date, commissionBase);
     const rows = await syncLedgerRows(date, totals);
     const current = rows.find((row) => row.barberId === barberId);
     if (!current) return NextResponse.json({ success: false, error: "Unknown barber" }, { status: 404 });
