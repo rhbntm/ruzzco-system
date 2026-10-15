@@ -94,6 +94,9 @@ expectRejected("comparison whose served method has no mean", { ...valid(), compa
 expectRejected("comparison with a negative error", { ...valid(), comparison: comparison({ mean: { random_forest: -1 } }) });
 expectRejected("comparison with a non-numeric mean", { ...valid(), comparison: comparison({ mean: { random_forest: "3.1" } }) });
 expectRejected("comparison with a bad test_from date", { ...valid(), comparison: comparison({ test_from: "2026-02-30" }) });
+check("a comparison with weekly errors passes (slice 10)", parseForecastResponse({ ...valid(), comparison: comparison({ weeks: [{ start: "2026-09-26", end: "2026-10-02", mae: { random_forest: 2 } }] }) }, START, 7).ok);
+expectRejected("a week with a negative error", { ...valid(), comparison: comparison({ weeks: [{ start: "2026-09-26", end: "2026-10-02", mae: { random_forest: -2 } }] }) });
+expectRejected("a week with a bad date", { ...valid(), comparison: comparison({ weeks: [{ start: "2026-09-31", end: "2026-10-02", mae: { random_forest: 2 } }] }) });
 check("a saved comparison that is malformed reads back as null", parseSavedComparison({ basis: "test" }) === null && parseSavedComparison(null) === null);
 check("a saved valid comparison reads back", parseSavedComparison(comparison()) !== null);
 

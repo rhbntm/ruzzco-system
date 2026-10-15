@@ -150,6 +150,11 @@ def test_comparison_summary_uses_the_chosen_weeks_and_rounds_to_two_decimals():
     assert set(summary["mean"]) == set(pipeline.METHODS) == set(summary["spread"])
     assert summary["mean"]["average"] == round(chosen["mean"]["average"], 2)
     assert all(round(v, 2) == v for v in summary["mean"].values())
+    weeks = summary["weeks"]
+    assert len(weeks) == chosen["weeks_tested"]
+    assert [w["start"] for w in weeks] == sorted(w["start"] for w in weeks)
+    assert all(set(w) == {"start", "end", "mae"} and set(w["mae"]) == set(pipeline.METHODS) for w in weeks)
+    assert all(round(v, 2) == v for w in weeks for v in w["mae"].values())
 
 
 def test_comparison_summary_falls_back_to_the_reference_weeks():

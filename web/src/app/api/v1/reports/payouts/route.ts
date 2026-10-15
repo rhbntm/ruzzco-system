@@ -3,8 +3,8 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { readJson, serverError } from "@/lib/api";
-import { countHeldForReview, countsOnDay } from "@/lib/time-review";
-import { commissionFor } from "@/lib/commission";
+import { countHeldForReview } from "@/lib/time-review";
+import { totalsForDate, type Base, type BarberTotals } from "@/lib/payout-totals";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
 import { isBusinessDate, parseBusinessDate } from "@/lib/business-date";
 
@@ -30,42 +30,7 @@ const paymentSchema = z.object({
 const businessDay = (date: string) => parseBusinessDate(date)!;
 const dateValue = (date: string) => businessDay(date).dateValue;
 
-type Base = "LIST_PRICE" | "AMOUNT_PAID";
-type BarberTotals = { commission: Prisma.Decimal; viewCommission: Prisma.Decimal; tips: Prisma.Decimal };
 const ZERO = new Prisma.Decimal(0);
-
-// Totals come only from the snapshots stored on each sale, never from Barber.commissionRate,
-// so a rate change cannot rewrite a past day. `commission` is the canonical LIST_PRICE total
-// (sum of barberCommissionAmount); `viewCommission` is the requested base, for display only.
-async function totalsForDate(date: string, commissionBase: Base) {
-  const day = businessDay(date);
-  const transactions = await prisma.transaction.findMany({
-    // Only PAID sales are owed; a QRPH sale joins its day's totals once the gateway confirms it.
-    // countsOnDay: a flagged sale's commission waits for the owner's date review (L5).
-    where: { ...countsOnDay(day), paymentStatus: "PAID" },
-    select: {
-      barberId: true,
-      totalAmount: true,
-      amountPaid: true,
-      tipAmount: true,
-      barberCommissionAmount: true,
-      commissionRate: true,
-    },
-  });
-  const byBarber = new Map<string, BarberTotals>();
-  for (const tx of transactions) {
-    const view = commissionBase === "LIST_PRICE"
-      ? tx.barberCommissionAmount
-      : commissionFor(tx.amountPaid ?? tx.totalAmount, tx.commissionRate);
-    const current = byBarber.get(tx.barberId) ?? { commission: ZERO, viewCommission: ZERO, tips: ZERO };
-    byBarber.set(tx.barberId, {
-      commission: current.commission.add(tx.barberCommissionAmount),
-      viewCommission: current.viewCommission.add(view),
-      tips: current.tips.add(tx.tipAmount),
-    });
-  }
-  return byBarber;
-}
 
 // Refreshes the stored rows with the canonical LIST_PRICE totals, whatever base is viewed.
 // A row covers every active barber, plus any barber (active or not) with sales or an

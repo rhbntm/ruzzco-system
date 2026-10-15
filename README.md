@@ -71,4 +71,6 @@ docker compose up -d ml-service                       # serve on http://localhos
 
 Commands, tests and the rules around the forecast are in `CLAUDE.md`.
 
+Want to contribute? Fork the repo and follow [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---

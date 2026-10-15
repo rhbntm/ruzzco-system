@@ -79,7 +79,7 @@ def test_forecast_fourteen_days(client):
 def test_forecast_includes_the_saved_comparison(client):
     body = client.get("/forecast", params={"start": "2026-10-12", "days": 7}).json()
     comparison = body["comparison"]
-    assert set(comparison) == {"basis", "test_from", "served", "mean", "spread"}
+    assert set(comparison) == {"basis", "test_from", "served", "mean", "spread", "weeks"}
     assert comparison["served"] == "random_forest"
     assert set(comparison["mean"]) == set(pipeline.METHODS) == set(comparison["spread"])
     assert all(isinstance(v, float) and v >= 0 for v in comparison["mean"].values())
