@@ -18,7 +18,7 @@ import {
 import { db, type LocalTransaction } from "@/lib/db";
 import { countPending, isRejected, listRejected, retryRejected, summarizeSync, syncNow } from "@/lib/sync";
 import { useLiveQuery } from "dexie-react-hooks";
-import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { RejectedSales } from "@/components/RejectedSales";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
@@ -144,15 +144,15 @@ export default function ShiftLogPage() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-[#0b0c10] flex items-center justify-center text-zinc-400">
-        <RefreshCw className="w-5 h-5 animate-spin text-red-500 mr-2" />
+      <div role="status" className="rz-page flex-1 flex items-center justify-center gap-3 text-dust">
+        <BarberPoleIcon className="w-3.5 h-8" spinning />
         <span>Loading shift log…</span>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white">
+    <div className="flex-1">
       {qrSale && (
         <QrPhCheckout
           transactionId={qrSale.id}
@@ -162,66 +162,66 @@ export default function ShiftLogPage() {
         />
       )}
 
-      {/* Ambient Crimson Glow */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-3xl h-48 bg-red-600/10 blur-3xl pointer-events-none" />
-
-      <div className="relative max-w-3xl mx-auto px-4 py-4 space-y-5">
-        {/* Header */}
-        <header className="flex items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+      {/* Header: the black banner */}
+      <header className="rz-banner sticky top-0 z-40">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-2 px-4 py-2.5">
           <Link
             href="/pos"
-            className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors py-1.5 pr-2"
+            className="inline-flex items-center gap-1.5 text-sm text-dust hover:text-bone transition-colors py-1.5 pr-2 pointer-coarse:min-h-11 group shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
             <span>POS Station</span>
           </Link>
 
-          <div className="flex items-center gap-2">
-            <RuzzcoLogoBadge size={28} showBorder={false} />
-            <span className="font-extrabold tracking-wider text-base text-white uppercase font-[family-name:var(--font-oswald)]">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* The station light: it turns while a sync is running. */}
+            <BarberPoleIcon className="w-2.5 h-6" spinning={isSyncing} />
+            <h1 className="font-display font-semibold tracking-wide sm:tracking-widest text-[0.9375rem] sm:text-lg leading-none text-bone uppercase truncate">
               RUZZCO SHIFT LOG
-            </span>
+            </h1>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
-                isOnline
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                  : "bg-red-500/10 text-red-400 border-red-500/20"
-              }`}
-            >
+          <div className="flex items-center gap-2 shrink-0">
+            <div className={`rz-pill transition-colors duration-300 ${isOnline ? "rz-pill-ok" : "rz-pill-danger"}`}>
+              {/* The word is visible from sm up; on phones it stays readable for screen readers. */}
               {isOnline ? (
-                <><Wifi className="w-3 h-3" /><span>Online</span></>
+                <><Wifi className="w-3.5 h-3.5" /><span className="sr-only sm:not-sr-only">Online</span></>
               ) : (
-                <><WifiOff className="w-3 h-3" /><span>Offline</span></>
+                <><WifiOff className="w-3.5 h-3.5" /><span className="sr-only sm:not-sr-only">Offline</span></>
               )}
             </div>
+            {/* The counts are in the button's name; the badges only show them. */}
             <button
               onClick={handleSync}
               disabled={isSyncing || !isOnline}
               title="Sync pending transactions"
-              className="relative p-2 rounded-lg bg-[#12141a] border border-[#232734] text-zinc-300 hover:text-white hover:bg-zinc-800 disabled:opacity-40 transition-all cursor-pointer"
+              aria-label={`Sync now${(pendingCount ?? 0) > 0 ? `, ${pendingCount} waiting` : ""}${(rejectedSales?.length ?? 0) > 0 ? `, ${rejectedSales?.length} need attention` : ""}`}
+              className="rz-btn rz-btn-secondary rz-btn-icon relative pointer-coarse:min-h-11 pointer-coarse:min-w-11"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-red-400" : ""}`} />
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-crimson-ink" : ""}`} />
               {(pendingCount ?? 0) > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] font-extrabold flex items-center justify-center animate-pulse">
+                <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-crimson text-white text-xs font-bold ring-2 ring-wall flex items-center justify-center animate-pulse">
                   {pendingCount}
                 </span>
               )}
               {(rejectedSales?.length ?? 0) > 0 && (
-                <span title="Sales needing attention" className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-black text-[9px] font-extrabold flex items-center justify-center">
+                <span aria-hidden="true" title="Sales needing attention" className="absolute -bottom-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-warn text-black text-xs font-bold ring-2 ring-wall flex items-center justify-center">
                   {rejectedSales?.length}
                 </span>
               )}
             </button>
           </div>
-        </header>
+        </div>
+      </header>
+
+      <div className="rz-page relative max-w-3xl mx-auto px-4 py-5 space-y-5">
+        {/* Announces sync results to screen readers; out of the layout flow. */}
+        <p aria-live="polite" className="sr-only">{syncFeedback ?? ""}</p>
 
         {/* Sync feedback */}
         {syncFeedback && (
-          <div className="p-2.5 rounded-lg bg-[#12141a] border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
-            <Scissors className="w-3.5 h-3.5 text-red-400 shrink-0" />
+          <div className="animate-drop rz-notice py-2.5">
+            <Scissors className="w-4 h-4 text-brass shrink-0 mt-0.5" />
             {syncFeedback}
           </div>
         )}
@@ -229,85 +229,87 @@ export default function ShiftLogPage() {
         <RejectedSales sales={rejectedSales ?? []} busy={isSyncing} onRetry={handleRetryRejected} />
 
         {/* Today's Summary Cards: this phone's own records, provisional */}
-        <p className="text-[11px] text-zinc-500">
+        <p className="text-sm text-dust leading-relaxed">
           Totals below are from this phone only and are provisional: they include sales not yet synced, and sales the
           server holds for a date review. End-of-Day Cash has the shop&apos;s official figures.
         </p>
-        <section className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <section className="rz-strip grid-cols-2 sm:grid-cols-5 rz-stagger">
           {[
             {
               label: "Cuts Today",
               value: todayTransactions.length,
-              accent: "text-zinc-100",
+              accent: "text-bone",
               sub: "this phone (provisional)",
             },
             {
               label: "Total Revenue",
               value: `₱${(cashTotal + gcashTotal + mayaTotal).toFixed(2)}`,
-              accent: "text-red-400 font-bold",
+              accent: "text-brass-bright",
               sub: "this phone (provisional)",
             },
             {
+              // Bone, not red: in figures, red means "cash short".
               label: "Cash",
               value: `₱${cashTotal.toFixed(2)}`,
-              accent: "text-emerald-400",
+              accent: "text-bone",
               sub: "this phone, cash",
             },
             {
               label: "GCash",
               value: `₱${gcashTotal.toFixed(2)}`,
-              accent: "text-blue-400",
+              accent: "text-gcash-ink",
               sub: "digital",
             },
             {
               label: "Maya",
               value: `₱${mayaTotal.toFixed(2)}`,
-              accent: "text-emerald-400",
+              accent: "text-maya-ink",
               sub: "digital",
             },
           ].map((card) => (
             <div
               key={card.label}
-              className="p-3.5 rounded-xl bg-[#12141a] border border-[#232734] space-y-1 relative overflow-hidden"
+              className="space-y-1 first:col-span-2 sm:first:col-span-1"
             >
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
+              <div className="rz-label">
                 {card.label}
               </div>
-              <div className={`text-xl font-extrabold font-[family-name:var(--font-oswald)] ${card.accent}`}>{card.value}</div>
-              <div className="text-[10px] text-zinc-500">{card.sub}</div>
+              <div className={`rz-figure text-2xl ${card.accent}`}>{card.value}</div>
+              <div className="text-xs text-dust">{card.sub}</div>
             </div>
           ))}
         </section>
 
         {/* Transaction Feed */}
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] flex items-center gap-1.5">
-              <BarberPoleIcon className="w-2.5 h-4" />
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="rz-heading">
               All Transactions (This Device)
-            </span>
-            <span className="text-[11px] text-zinc-500">{localTransactions?.length ?? 0} total cuts</span>
+            </h2>
+            <span className="text-xs text-dust shrink-0">{localTransactions?.length ?? 0} total cuts</span>
           </div>
 
-          <div className="space-y-2">
-            {(!localTransactions || localTransactions.length === 0) ? (
-              <div className="p-8 rounded-xl bg-[#12141a]/60 border border-dashed border-[#232734] text-center text-xs text-zinc-500 space-y-1">
-                <p>No transactions logged on this device yet.</p>
-                <p className="text-[11px] text-zinc-600">Head back to the POS station to record a cut.</p>
-              </div>
-            ) : (
-              localTransactions.map((tx) => (
-                <div
+          {(!localTransactions || localTransactions.length === 0) ? (
+            <div className="rz-panel p-8 text-center text-sm text-dust space-y-1.5">
+              <p>No transactions logged on this device yet.</p>
+              <p>
+                Head back to the{" "}
+                <Link href="/pos" className="rz-link">POS station</Link> to record a cut.
+              </p>
+            </div>
+          ) : (
+            <ul className="rz-panel overflow-hidden rz-rows rz-stagger">
+              {localTransactions.map((tx) => (
+                <li
                   key={tx.id}
-                  className="p-3 rounded-xl bg-[#12141a] border border-[#232734] flex items-center justify-between gap-3 text-xs"
+                  className="px-3.5 py-3 flex items-center justify-between gap-3 text-sm transition-colors duration-150 hover:bg-white/2.5"
                 >
                   <div className="space-y-0.5 truncate min-w-0">
-                    <div className="font-semibold text-zinc-200 truncate flex items-center gap-1.5">
-                      <span>{tx.serviceName}</span>
-                      <span className="text-[10px] text-zinc-500 shrink-0">• {tx.barberName}</span>
+                    <div className="font-semibold text-bone truncate flex items-center gap-1.5">
+                      <span className="truncate">{tx.serviceName}</span>
+                      <span className="text-xs font-normal text-dust shrink-0">• {tx.barberName}</span>
                     </div>
-                    <div className="text-[10px] text-zinc-500 flex items-center gap-1.5">
+                    <div className="text-xs text-dust flex items-center gap-2">
                       <span>
                         {new Date(tx.transactionTime).toLocaleString([], {
                           month: "short",
@@ -316,15 +318,15 @@ export default function ShiftLogPage() {
                           minute: "2-digit",
                         })}
                       </span>
-                      <span className="font-mono text-zinc-600">{tx.id.slice(0, 8)}…</span>
+                      <span className="font-mono text-dust-2">{tx.id.slice(0, 8)}…</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2.5 shrink-0">
                     {/* Payment method badge */}
                     {tx.paymentMethod === "GCASH" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-semibold">
-                        <Smartphone className="w-2.5 h-2.5" />
+                      <span className="rz-pill rz-pill-gcash">
+                        <Smartphone className="w-3 h-3" />
                         GCash
                       </span>
                     ) : tx.paymentMethod === "QRPH" ? (
@@ -335,62 +337,69 @@ export default function ShiftLogPage() {
                           type="button"
                           onClick={() => setQrSale({ id: tx.id, amount: Number(tx.totalAmount) })}
                           disabled={!isOnline}
-                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-300 text-[10px] font-semibold hover:bg-violet-500/20 disabled:opacity-40 cursor-pointer"
+                          className="rz-pill rz-pill-qrph min-h-6 pointer-coarse:min-h-11 transition-colors hover:bg-qrph/25 disabled:opacity-40"
                           title="Show this sale's QR payment and its status"
                         >
-                          <QrCode className="w-2.5 h-2.5" />
+                          <QrCode className="w-3 h-3" />
                           QR payment
                         </button>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-300 text-[10px] font-semibold" title="Paid status is on the server">
-                          <QrCode className="w-2.5 h-2.5" />
+                        <span className="rz-pill rz-pill-qrph" title="Paid status is on the server">
+                          <QrCode className="w-3 h-3" />
                           QR Ph (test)
                         </span>
                       )
                     ) : tx.paymentMethod === "MAYA" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
-                        <Smartphone className="w-2.5 h-2.5" />
+                      <span className="rz-pill rz-pill-maya">
+                        <Smartphone className="w-3 h-3" />
                         Maya
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-600/10 border border-red-500/20 text-red-400 text-[10px] font-semibold">
-                        <Banknote className="w-2.5 h-2.5" />
+                      <span className="rz-pill rz-pill-cash">
+                        <Banknote className="w-3 h-3" />
                         Cash
                       </span>
                     )}
 
-                    <span className="font-bold text-base text-zinc-100 font-[family-name:var(--font-oswald)]">
+                    <span className="rz-figure text-base text-bone">
                       ₱{Number(tx.totalAmount).toFixed(2)}
                     </span>
 
                     {/* Sync status dot */}
+                    {/* Sync status: icon and colour for sighted users, a name for screen readers. */}
                     {tx.synced === 1 ? (
                       <span
+                        role="img"
+                        aria-label="Synced to server"
                         title="Synced to server"
-                        className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-[10px]"
+                        className="w-6 h-6 rounded-full bg-ok/10 text-ok border border-ok/30 flex items-center justify-center"
                       >
-                        <CheckCircle2 className="w-3 h-3" />
+                        <CheckCircle2 className="w-3.5 h-3.5" />
                       </span>
                     ) : isRejected(tx) ? (
                       <span
+                        role="img"
+                        aria-label="Needs attention"
                         title="Needs attention"
-                        className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center text-[10px]"
+                        className="w-6 h-6 rounded-full bg-warn/10 text-warn border border-warn/35 flex items-center justify-center"
                       >
-                        <TriangleAlert className="w-3 h-3" />
+                        <TriangleAlert className="w-3.5 h-3.5" />
                       </span>
                     ) : (
                       <span
+                        role="img"
+                        aria-label="Pending sync"
                         title="Pending sync"
-                        className="w-5 h-5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 flex items-center justify-center text-[10px]"
+                        className="w-6 h-6 rounded-full bg-crimson/12 text-crimson-ink border border-crimson-bright/35 flex items-center justify-center"
                       >
-                        <Clock className="w-3 h-3" />
+                        <Clock className="w-3.5 h-3.5" />
                       </span>
                     )}
                   </div>
-                </div>
-              ))
-            )}
-          </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
     </div>

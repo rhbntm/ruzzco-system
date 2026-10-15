@@ -27,54 +27,54 @@ export function RejectedSales({
   if (sales.length === 0) return null;
 
   return (
-    <section className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/40 space-y-2.5">
-      <div className="flex items-center gap-2 text-xs font-bold text-amber-300 uppercase tracking-wider">
+    <section className="animate-rise p-3.5 rounded-xl bg-warn/7 border border-warn/35 space-y-3">
+      <div className="flex items-center gap-2 text-xs font-bold text-warn-ink uppercase tracking-wider">
         <TriangleAlert className="w-4 h-4 shrink-0" />
         {sales.length} {sales.length === 1 ? "sale needs" : "sales need"} attention
       </div>
-      <p className="text-[11px] text-amber-200/80 leading-relaxed">
+      <p className="text-sm text-warn-ink/90 leading-relaxed">
         The server did not accept {sales.length === 1 ? "this sale" : "these sales"}. {sales.length === 1 ? "It is" : "They are"} kept
         on this device and not counted on the server until resolved.
       </p>
 
-      <div className="space-y-2">
+      <ul className="rounded-lg bg-black/30 border border-warn/20 overflow-hidden divide-y divide-warn/15 rz-stagger">
         {sales.map((tx) => (
-          <div key={tx.id} className="p-2.5 rounded-lg bg-[#12141a] border border-amber-500/20 text-xs space-y-1.5">
+          <li key={tx.id} className="p-3 text-xs space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-zinc-200 truncate">
+              <span className="font-semibold text-bone truncate">
                 {new Date(tx.transactionTime).toLocaleString([], {
                   month: "short",
                   day: "numeric",
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
-                <span className="text-zinc-500 font-normal"> • {tx.barberName}</span>
+                <span className="text-dust font-normal"> • {tx.barberName}</span>
               </span>
-              <span className="font-bold text-zinc-100 shrink-0 font-[family-name:var(--font-oswald)]">
+              <span className="rz-figure text-sm text-bone shrink-0">
                 ₱{Number(tx.totalAmount).toFixed(2)} · {METHOD_LABELS[tx.paymentMethod] ?? tx.paymentMethod}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-amber-300 font-medium">{rejectLabel(tx.syncError)}</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-0.5">
+                <div className="text-warn-ink font-semibold">{rejectLabel(tx.syncError)}</div>
                 {rejectHint(tx.syncError) && (
-                  <div className="text-[10px] text-amber-200/70">{rejectHint(tx.syncError)}</div>
+                  <div className="text-xs text-bone-2">{rejectHint(tx.syncError)}</div>
                 )}
-                <div className="text-[10px] text-zinc-600 font-mono">{tx.id.slice(0, 8)}…</div>
+                <div className="text-xs text-dust font-mono">{tx.id.slice(0, 8)}…</div>
               </div>
               <button
                 type="button"
                 onClick={() => onRetry(tx.id)}
                 disabled={busy}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200 text-[11px] font-semibold hover:bg-amber-500/20 disabled:opacity-40 cursor-pointer transition-colors"
+                className="rz-btn rz-btn-warn shrink-0 min-h-9 px-3 text-xs pointer-coarse:min-h-11"
               >
-                <RotateCw className="w-3 h-3" />
+                <RotateCw className="w-3.5 h-3.5" />
                 Retry
               </button>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

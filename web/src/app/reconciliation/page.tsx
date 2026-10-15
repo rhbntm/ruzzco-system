@@ -12,8 +12,9 @@ import {
   RefreshCw,
   ClipboardCheck,
   QrCode,
+  LockKeyhole,
 } from "lucide-react";
-import { RuzzcoLogoBadge, BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { manilaToday } from "@/lib/business-date";
 
 interface ExpectedTotals {
@@ -83,6 +84,9 @@ interface NeedsReviewSale {
 
 const manilaTime = (iso: string) =>
   new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+// The save message ends in a "✓" glyph; the notice already draws a real check icon.
+const withoutTick = (text: string) => text.replace(/\s*✓$/, "");
 
 export default function ReconciliationPage() {
   const todayStr = manilaToday(); // business date, whatever the device's timezone
@@ -214,6 +218,14 @@ export default function ReconciliationPage() {
     }
   };
 
+  // Escape closes the owner PIN dialog, like its Cancel button.
+  useEffect(() => {
+    if (!showOwnerUnlock) return;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setShowOwnerUnlock(false); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showOwnerUnlock]);
+
   const variance = saved ? parseFloat(saved.variance) : null;
   const previewExpectedDrawer = expected
     ? parseFloat(expected.expectedDrawerCash) - (parseFloat(pettyCashAmount) || 0) + parseFloat(expected.pettyCash)
@@ -224,118 +236,140 @@ export default function ReconciliationPage() {
       : null;
 
   return (
-    <div className="min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased selection:bg-red-600 selection:text-white">
+    <div className="flex-1">
       {showOwnerUnlock && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <form onSubmit={async (event) => { event.preventDefault(); const res = await fetch("/api/v1/owner/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: ownerPin }) }); if (res.ok) { setShowOwnerUnlock(false); setOwnerPin(""); setFeedback({ msg: "Owner access granted. Save again.", ok: true }); } else { const data = await res.json().catch(() => null); setFeedback({ msg: data?.error ?? "Invalid owner PIN.", ok: false }); } }} className="w-full max-w-sm p-5 rounded-2xl bg-[#12141a] border border-[#232734] space-y-3">
-            <h2 className="font-bold text-lg">Owner PIN required</h2>
-            <input autoFocus type="password" inputMode="numeric" value={ownerPin} onChange={(event) => setOwnerPin(event.target.value)} className="w-full px-3 py-2.5 rounded-lg bg-[#181b24] border border-[#232734] text-white" placeholder="Owner PIN" />
-            <div className="flex gap-2"><button type="button" onClick={() => setShowOwnerUnlock(false)} className="flex-1 py-2 rounded-lg border border-[#232734] text-zinc-300">Cancel</button><button type="submit" className="flex-1 py-2 rounded-lg bg-red-600 text-white font-bold">Unlock</button></div>
+        <div className="rz-overlay items-center">
+          <form role="dialog" aria-modal="true" aria-labelledby="owner-pin-title" onSubmit={async (event) => { event.preventDefault(); const res = await fetch("/api/v1/owner/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: ownerPin }) }); if (res.ok) { setShowOwnerUnlock(false); setOwnerPin(""); setFeedback({ msg: "Owner access granted. Save again.", ok: true }); } else { const data = await res.json().catch(() => null); setFeedback({ msg: data?.error ?? "Invalid owner PIN.", ok: false }); } }} className="rz-dialog p-5 space-y-4">
+            <div className="flex items-center gap-2.5">
+              <span aria-hidden="true" className="w-9 h-9 rounded-full bg-brass/10 ring-1 ring-brass/40 text-brass-bright flex items-center justify-center shrink-0">
+                <LockKeyhole className="w-4 h-4" />
+              </span>
+              <h2 id="owner-pin-title" className="rz-title text-xl">Owner PIN required</h2>
+            </div>
+            <input autoFocus type="password" inputMode="numeric" aria-label="Owner PIN" value={ownerPin} onChange={(event) => setOwnerPin(event.target.value)} className="rz-field min-h-12 text-center text-lg tracking-[0.4em] placeholder:text-base placeholder:tracking-normal" placeholder="Owner PIN" />
+            <div className="flex gap-2"><button type="button" onClick={() => setShowOwnerUnlock(false)} className="rz-btn rz-btn-secondary flex-1 pointer-coarse:min-h-11">Cancel</button><button type="submit" className="rz-btn rz-btn-primary flex-1 pointer-coarse:min-h-11">Unlock</button></div>
           </form>
         </div>
       )}
-      {/* Ambient Crimson Glow */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-2xl h-48 bg-red-600/10 blur-3xl pointer-events-none" />
 
-      <div className="relative max-w-2xl mx-auto px-4 py-4 space-y-5">
-        {/* Header */}
-        <header className="flex items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+      {/* Header: the black banner */}
+      <header className="rz-banner">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-2 px-4 py-3">
+          {/* Padding with matching negative margins: bigger targets without moving the layout. */}
           <Link
             href="/shift-log"
-            className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-sm text-dust hover:text-bone transition-colors group shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
             <span>Shift Log</span>
           </Link>
-          <div className="flex items-center gap-2">
-            <RuzzcoLogoBadge size={28} showBorder={false} />
-            <span className="font-extrabold tracking-wider text-base text-white uppercase font-[family-name:var(--font-oswald)]">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* The station light: it turns while the totals load. */}
+            <BarberPoleIcon className="w-2.5 h-6" spinning={isLoading} />
+            <h1 className="font-display font-semibold tracking-wide sm:tracking-widest text-[0.9375rem] sm:text-lg leading-none text-bone uppercase truncate">
               EOD CASH RECONCILIATION
-            </span>
+            </h1>
           </div>
           <Link
             href="/pos"
-            className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-white transition-colors"
+            className="inline-flex items-center justify-center gap-1 min-w-6 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 pointer-coarse:min-w-11 text-sm font-semibold text-dust hover:text-bone transition-colors shrink-0"
           >
             <span>POS</span>
           </Link>
-        </header>
+        </div>
+      </header>
 
+      <div className="rz-page relative max-w-2xl mx-auto px-4 py-5 space-y-5">
         {/* Date picker */}
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-[#12141a] border border-[#232734]">
-          <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] shrink-0 flex items-center gap-1.5">
-            <BarberPoleIcon className="w-2 h-3.5" />
+        <div className="rz-panel flex items-center gap-3 p-3">
+          <label htmlFor="reconciliation-date" className="rz-label shrink-0">
             Select Date:
           </label>
+          {/* 16px text on phones so iOS does not zoom in on focus. */}
           <input
+            id="reconciliation-date"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             max={todayStr}
-            className="flex-1 px-3 py-1.5 rounded-lg bg-[#181b24] border border-[#232734] text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+            className="rz-field flex-1 min-w-0 py-1.5 pointer-coarse:min-h-11 sm:text-sm scheme-dark"
           />
           <button
             onClick={() => setRefreshKey((k) => k + 1)}
             disabled={isLoading}
             title="Refresh expected totals"
-            className="p-2 rounded-lg bg-[#181b24] border border-[#232734] text-zinc-400 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+            aria-label="Refresh expected totals"
+            className="rz-btn rz-btn-secondary rz-btn-icon pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-red-400" : ""}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-crimson-ink" : ""}`} />
           </button>
         </div>
 
+        {/* While the register totals load: the strip's shape, not a spinner. */}
+        {isLoading && !expected && (
+          <div aria-hidden="true" className="rz-strip grid-cols-2 sm:grid-cols-6">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className={`space-y-2.5 ${i < 3 ? "sm:col-span-2" : "sm:col-span-3"} last:col-span-2 sm:last:col-span-3`}>
+                <div className="rz-skeleton h-3 w-20" />
+                <div className="rz-skeleton h-6 w-24" />
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Expected totals from server */}
         {expected && (
-          <section className="space-y-2">
-            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)] flex items-center gap-1.5">
+          <section className="animate-rise space-y-2.5">
+            <h2 className="rz-heading">
               Synced Totals From Register
-            </span>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            </h2>
+            {/* Sales by method on top; the two totals the drawer is checked against below them. */}
+            <div className="rz-strip grid-cols-2 sm:grid-cols-6 rz-stagger">
+              {/* Cash keeps its crimson on the icon only: in figures, red means "cash short". */}
               {[
-                { label: "Cash Sales", value: `₱${expected.cashTotal}`, icon: Banknote, color: "text-emerald-400" },
-                { label: "GCash Sales", value: `₱${expected.gcashTotal}`, icon: Smartphone, color: "text-blue-400" },
-                { label: "Maya Sales", value: `₱${expected.mayaTotal}`, icon: Smartphone, color: "text-emerald-400" },
-                { label: "Expected Drawer", value: `₱${expected.expectedDrawerCash}`, icon: Banknote, color: "text-amber-300 font-bold" },
-                { label: "Total Revenue", value: `₱${expected.totalRevenue}`, icon: Scissors, color: "text-red-400 font-bold" },
-              ].map((c) => (
-                <div key={c.label} className="p-3.5 rounded-xl bg-[#12141a] border border-[#232734] space-y-1 relative overflow-hidden">
-                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-                  <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold flex items-center gap-1">
-                    <c.icon className={`w-3 h-3 ${c.color}`} />
+                { label: "Cash Sales", value: `₱${expected.cashTotal}`, icon: Banknote, color: "text-bone", iconColor: "text-crimson-ink" },
+                { label: "GCash Sales", value: `₱${expected.gcashTotal}`, icon: Smartphone, color: "text-gcash-ink", iconColor: "text-gcash-ink" },
+                { label: "Maya Sales", value: `₱${expected.mayaTotal}`, icon: Smartphone, color: "text-maya-ink", iconColor: "text-maya-ink" },
+                { label: "Expected Drawer", value: `₱${expected.expectedDrawerCash}`, icon: Banknote, color: "text-brass-bright", iconColor: "text-brass-bright" },
+                { label: "Total Revenue", value: `₱${expected.totalRevenue}`, icon: Scissors, color: "text-bone", iconColor: "text-dust" },
+              ].map((c, i) => (
+                <div key={c.label} className={`space-y-1 ${i < 3 ? "sm:col-span-2" : "sm:col-span-3"} last:col-span-2 sm:last:col-span-3`}>
+                  <div className="rz-label flex items-center gap-1.5">
+                    <c.icon className={`w-3.5 h-3.5 shrink-0 ${c.iconColor}`} />
                     {c.label}
                   </div>
-                  <div className={`text-xl font-extrabold font-[family-name:var(--font-oswald)] ${c.color}`}>{c.value}</div>
+                  <div className={`rz-figure text-2xl ${c.color}`}>{c.value}</div>
                 </div>
               ))}
             </div>
             {(parseFloat(expected.qrphTotal) > 0 || expected.gatewaySales.length > 0) && (
-              <div className="p-3.5 rounded-xl bg-[#12141a] border border-violet-500/30 space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1.5 text-violet-300 font-semibold">
-                    <QrCode className="w-3.5 h-3.5" /> QR Ph (PayMongo test) collected
+              <div className="rz-panel p-3.5 space-y-2.5 border-qrph/30">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-1.5 text-qrph-ink font-semibold">
+                    <QrCode className="w-4 h-4" /> QR Ph (PayMongo test) collected
                   </span>
-                  <span className="font-extrabold text-violet-200 font-[family-name:var(--font-oswald)]">₱{expected.qrphTotal}</span>
+                  <span className="rz-figure text-lg text-qrph-ink">₱{expected.qrphTotal}</span>
                 </div>
-                <p className="text-[11px] text-zinc-500">Gateway money is not in the drawer. Only paid QR sales count.</p>
-                <ul className="space-y-1">
+                <p className="text-xs text-dust">Gateway money is not in the drawer. Only paid QR sales count.</p>
+                <ul className="rz-well overflow-hidden divide-y divide-seam empty:hidden">
                   {expected.gatewaySales.map((g) => (
-                    <li key={g.id} className="flex items-center justify-between gap-2 text-xs p-2 rounded-lg bg-[#181b24] border border-[#232734]">
-                      <span className="text-zinc-400">
+                    <li key={g.id} className="flex items-center justify-between gap-2 text-xs px-3 py-2">
+                      <span className="text-dust">
                         {new Date(g.transactionTime).toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" })}
-                        <span className="font-mono text-zinc-600 ml-1.5">{g.id.slice(0, 8)}…</span>
+                        <span className="font-mono text-dust-2 ml-1.5">{g.id.slice(0, 8)}…</span>
                       </span>
                       <span className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${g.status === "PAID" ? "bg-emerald-500/15 text-emerald-300" : g.status === "PENDING" ? "bg-amber-500/15 text-amber-300" : "bg-red-500/15 text-red-300"}`}>
+                        <span className={`rz-pill ${g.status === "PAID" ? "rz-pill-ok" : g.status === "PENDING" ? "rz-pill-warn" : "rz-pill-danger"}`}>
                           {g.status}{g.late ? " · late confirmation" : ""}
                         </span>
-                        <span className={`font-bold font-[family-name:var(--font-oswald)] ${g.status === "PAID" ? "text-zinc-100" : "text-zinc-500 line-through"}`}>₱{g.amount}</span>
+                        <span className={`rz-figure text-sm ${g.status === "PAID" ? "text-bone" : "text-dust line-through"}`}>₱{g.amount}</span>
                       </span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            <p className="text-[11px] text-zinc-500">
+            <p className="text-xs text-dust">
               {expected.transactionCount} paid synced transactions on {date}
             </p>
           </section>
@@ -343,27 +377,27 @@ export default function ReconciliationPage() {
 
         {/* Sales held for date review (L5) */}
         {needsReview.length > 0 && (
-          <section className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/40 space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-300 uppercase tracking-wider">
+          <section className="animate-rise p-4 rounded-xl bg-warn/7 border border-warn/35 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-warn-ink uppercase tracking-wider">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               {needsReview.length} {needsReview.length === 1 ? "sale needs" : "sales need"} a date
             </div>
-            <p className="text-[11px] text-amber-200/80 leading-relaxed">
+            <p className="text-sm text-warn-ink/90 leading-relaxed">
               The phone&apos;s clock looked wrong when {needsReview.length === 1 ? "this sale" : "these sales"} synced, so{" "}
               {needsReview.length === 1 ? "it is" : "they are"} not counted in any day&apos;s cash, revenue or payouts yet. Pick the day each
               one belongs to.
             </p>
             {needsReview.map((sale) => (
-              <div key={sale.id} className="p-3 rounded-lg bg-[#12141a] border border-amber-500/20 text-xs space-y-2">
+              <div key={sale.id} className="p-3 rounded-lg bg-black/30 border border-warn/20 text-xs space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-zinc-200">{sale.barberName} · {sale.paymentMethod}</span>
-                  <span className="font-bold text-zinc-100 font-[family-name:var(--font-oswald)]">₱{sale.amount}</span>
+                  <span className="font-semibold text-bone">{sale.barberName} · {sale.paymentMethod}</span>
+                  <span className="rz-figure text-sm text-bone">₱{sale.amount}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-400">
-                  <div>Phone said: <span className="text-zinc-200">{manilaTime(sale.transactionTime)}</span></div>
-                  <div>Server got it: <span className="text-zinc-200">{manilaTime(sale.receivedAt)}</span></div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-dust">
+                  <div>Phone said: <span className="text-bone-2">{manilaTime(sale.transactionTime)}</span></div>
+                  <div>Server got it: <span className="text-bone-2">{manilaTime(sale.receivedAt)}</span></div>
                 </div>
-                <div className="text-[10px] text-amber-300/80">
+                <div className="text-xs text-warn-ink">
                   {sale.flag === "FUTURE_TIMESTAMP"
                     ? "Stamped later than it reached the server."
                     : `The phone's clock was off by about ${Math.round(Math.abs(sale.skewSeconds ?? 0) / 60)} minutes.`}
@@ -373,7 +407,7 @@ export default function ReconciliationPage() {
                     type="button"
                     onClick={() => handleReview(sale.id, "STATED_DATE")}
                     disabled={reviewingId !== null || sale.statedDate > todayStr}
-                    className="flex-1 px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-200 font-semibold hover:bg-zinc-800 disabled:opacity-40 cursor-pointer"
+                    className="rz-btn rz-btn-secondary flex-1 min-h-9 px-3 text-xs pointer-coarse:min-h-11"
                     title={sale.statedDate > todayStr ? "That date has not happened yet" : undefined}
                   >
                     Keep {sale.statedDate}
@@ -382,7 +416,7 @@ export default function ReconciliationPage() {
                     type="button"
                     onClick={() => handleReview(sale.id, "RECEIVED_DATE")}
                     disabled={reviewingId !== null}
-                    className="flex-1 px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200 font-semibold hover:bg-amber-500/20 disabled:opacity-40 cursor-pointer"
+                    className="rz-btn rz-btn-warn flex-1 min-h-9 px-3 text-xs pointer-coarse:min-h-11"
                   >
                     Use {sale.receivedDate}
                   </button>
@@ -393,15 +427,15 @@ export default function ReconciliationPage() {
         )}
 
         {/* Drawer count form */}
-        <section className="space-y-3.5 p-4 rounded-xl bg-[#12141a] border border-[#232734] relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-barber-pole opacity-60" />
-          <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider font-[family-name:var(--font-oswald)]">
+        <section className="rz-panel p-4 sm:p-5 space-y-4">
+          <h2 className="rz-heading text-bone">
             Physical Drawer Cash Count
-          </span>
+          </h2>
 
           <div>
-            <label className="block text-xs text-zinc-400 mb-1 font-medium">Actual cash counted in drawer (₱)</label>
+            <label htmlFor="counted-cash" className="rz-field-label">Actual cash counted in drawer (₱)</label>
             <input
+              id="counted-cash"
               type="number"
               inputMode="decimal"
               min="0"
@@ -409,19 +443,19 @@ export default function ReconciliationPage() {
               placeholder="e.g. 2100.00"
               value={countedCash}
               onChange={(e) => setCountedCash(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[#181b24] border border-[#232734] text-white text-base font-[family-name:var(--font-oswald)] placeholder:text-zinc-600 focus:outline-none focus:border-red-500 transition-colors"
+              className="rz-field min-h-14 px-4 font-display text-2xl tracking-wide placeholder:font-sans placeholder:text-base placeholder:tracking-normal"
             />
           </div>
 
           {/* Live variance preview */}
           {previewVariance !== null && (
             <div
-              className={`flex items-center gap-2 p-3 rounded-xl text-sm font-semibold border ${
+              className={`animate-fade rz-notice items-center font-semibold ${
                 Math.abs(previewVariance) < 0.01
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                  ? "rz-notice-ok"
                   : previewVariance > 0
-                  ? "bg-blue-500/10 border-blue-500/20 text-blue-400"
-                  : "bg-red-500/10 border-red-500/20 text-red-400"
+                  ? "rz-notice-over"
+                  : "rz-notice-danger"
               }`}
             >
               {Math.abs(previewVariance) < 0.01 ? (
@@ -444,31 +478,32 @@ export default function ReconciliationPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-zinc-400 mb-1 font-medium">Petty cash taken from drawer (₱)</label>
-              <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="e.g. 150.00" value={pettyCashAmount} onChange={(e) => setPettyCashAmount(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-[#181b24] border border-[#232734] text-white text-sm" />
+              <label htmlFor="petty-cash-amount" className="rz-field-label">Petty cash taken from drawer (₱)</label>
+              <input id="petty-cash-amount" type="number" inputMode="decimal" min="0" step="0.01" placeholder="e.g. 150.00" value={pettyCashAmount} onChange={(e) => setPettyCashAmount(e.target.value)} className="rz-field pointer-coarse:min-h-11 sm:text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1 font-medium">Petty cash note</label>
-              <input type="text" maxLength={255} placeholder="Ice, snacks, supplies" value={pettyCashNote} onChange={(e) => setPettyCashNote(e.target.value)} className="w-full px-3.5 py-2.5 rounded-xl bg-[#181b24] border border-[#232734] text-white text-sm" />
+              <label htmlFor="petty-cash-note" className="rz-field-label">Petty cash note</label>
+              <input id="petty-cash-note" type="text" maxLength={255} placeholder="Ice, snacks, supplies" value={pettyCashNote} onChange={(e) => setPettyCashNote(e.target.value)} className="rz-field pointer-coarse:min-h-11 sm:text-sm" />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-zinc-400 mb-1 font-medium">Audit note (optional)</label>
+            <label htmlFor="audit-note" className="rz-field-label">Audit note (optional)</label>
             <input
+              id="audit-note"
               type="text"
               placeholder="e.g. Short ₱50 — discrepancy in coin change"
               value={note}
               onChange={(e) => setNote(e.target.value)}
               maxLength={500}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-[#181b24] border border-[#232734] text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:border-red-500 transition-colors"
+              className="rz-field pointer-coarse:min-h-11 sm:text-sm"
             />
           </div>
 
           <button
             onClick={handleSubmit}
             disabled={isSaving || !countedCash || !expected}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 active:scale-[0.98] text-white font-extrabold text-sm uppercase tracking-wider font-[family-name:var(--font-oswald)] shadow-xl shadow-red-950/60 ring-1 ring-red-400/40 flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+            className="rz-btn rz-btn-primary w-full min-h-13 font-display text-base uppercase tracking-wider"
           >
             {isSaving ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -478,13 +513,16 @@ export default function ReconciliationPage() {
           </button>
         </section>
 
+        {/* Announces save and review results to screen readers; out of the layout flow. */}
+        <p aria-live="polite" className="sr-only">{feedback ? withoutTick(feedback.msg) : ""}</p>
+
         {/* Feedback */}
         {feedback && (
           <div
-            className={`p-3 rounded-xl border text-sm flex items-center gap-2 ${
+            className={`animate-rise rz-notice items-center ${
               feedback.ok
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                : "bg-red-500/10 border-red-500/20 text-red-400"
+                ? "rz-notice-ok"
+                : "rz-notice-danger"
             }`}
           >
             {feedback.ok ? (
@@ -492,18 +530,18 @@ export default function ReconciliationPage() {
             ) : (
               <AlertTriangle className="w-4 h-4 shrink-0" />
             )}
-            {feedback.msg}
+            {withoutTick(feedback.msg)}
           </div>
         )}
 
         {/* Saved record */}
         {saved && (
-          <section className="p-4 rounded-xl bg-[#12141a] border border-[#232734] space-y-3">
-            <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider font-[family-name:var(--font-oswald)]">
+          <section className="animate-rise rz-panel p-4 sm:p-5 space-y-3.5">
+            <h2 className="rz-heading">
               Saved Audit Record · Revision {saved.revision}
-            </span>
+            </h2>
             {staleness?.stale && (
-              <div className="flex items-start gap-2 p-2.5 rounded-lg text-xs border bg-amber-500/10 border-amber-500/30 text-amber-300">
+              <div className="rz-notice rz-notice-warn text-xs">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <p className="font-bold">Out of date: this record no longer matches the register.</p>
@@ -523,7 +561,7 @@ export default function ReconciliationPage() {
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="rz-well grid grid-cols-1 sm:grid-cols-2 overflow-hidden">
               {[
                 { label: "Expected Cash", value: `₱${saved.expectedCash}` },
                 { label: "Petty Cash", value: `₱${saved.pettyCashAmount}` },
@@ -532,41 +570,43 @@ export default function ReconciliationPage() {
                 { label: "Maya Total", value: `₱${saved.mayaTotal}` },
                 { label: "Total Revenue", value: `₱${saved.totalRevenue}` },
               ].map((r) => (
-                <div key={r.label} className="flex justify-between gap-2 text-xs p-2 rounded-lg bg-[#181b24] border border-[#232734]">
-                  <span className="text-zinc-500">{r.label}</span>
-                  <span className="font-bold text-zinc-200 font-[family-name:var(--font-oswald)]">{r.value}</span>
+                <div key={r.label} className="flex items-baseline justify-between gap-3 px-3.5 py-2.5 text-sm shadow-[0_1px_0_var(--color-seam),1px_0_0_var(--color-seam)]">
+                  <span className="text-dust">{r.label}</span>
+                  <span className="rz-figure text-base text-bone">{r.value}</span>
                 </div>
               ))}
             </div>
             <div
-              className={`flex items-center gap-2 p-2.5 rounded-lg text-sm font-bold border ${
+              className={`rz-notice items-center font-bold ${
                 variance !== null && Math.abs(variance) < 0.01
-                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                  ? "rz-notice-ok"
                   : variance !== null && variance < 0
-                  ? "bg-red-500/10 border-red-500/20 text-red-400"
-                  : "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                  ? "rz-notice-danger"
+                  : "rz-notice-over"
               }`}
             >
               {variance !== null && Math.abs(variance) < 0.01 ? (
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
               ) : (
-                <AlertTriangle className="w-4 h-4" />
+                <AlertTriangle className="w-4 h-4 shrink-0" />
               )}
-              {staleness?.stale ? "Variance when saved" : "Variance"}: {variance !== null && variance > 0 ? "+" : ""}₱{saved.variance}{" "}
-              {variance !== null && Math.abs(variance) < 0.01
-                ? "— Balanced"
-                : variance !== null && variance < 0
-                ? "— Cash short"
-                : "— Cash over"}
+              <span>
+                {staleness?.stale ? "Variance when saved" : "Variance"}: {variance !== null && variance > 0 ? "+" : ""}₱{saved.variance}{" "}
+                {variance !== null && Math.abs(variance) < 0.01
+                  ? "— Balanced"
+                  : variance !== null && variance < 0
+                  ? "— Cash short"
+                  : "— Cash over"}
+              </span>
             </div>
             {saved.note && (
-              <p className="text-xs text-zinc-400 italic">Note: {saved.note}</p>
+              <p className="text-sm text-dust italic">Note: {saved.note}</p>
             )}
             {saved.pettyCashNote && (
-              <p className="text-xs text-zinc-400 italic">Petty cash: {saved.pettyCashNote}</p>
+              <p className="text-sm text-dust italic">Petty cash: {saved.pettyCashNote}</p>
             )}
-            <p className="text-[10px] text-zinc-600">
-              Reconciled at {new Date(saved.reconciledAt).toLocaleString()}
+            <p className="text-xs text-dust">
+              Reconciled at {manilaTime(saved.reconciledAt)} (Manila time)
             </p>
           </section>
         )}

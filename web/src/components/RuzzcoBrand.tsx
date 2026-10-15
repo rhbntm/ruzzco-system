@@ -4,7 +4,7 @@ import Image from "next/image";
 /**
  * Gentleman's classic handlebar mustache matching Ruzzco Barbers logo
  */
-export function MustacheIcon({ className = "w-6 h-3 text-red-600" }: { className?: string }) {
+export function MustacheIcon({ className = "w-6 h-3 text-crimson" }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 100 35"
@@ -19,45 +19,57 @@ export function MustacheIcon({ className = "w-6 h-3 text-red-600" }: { className
 }
 
 /**
- * Mini barber pole badge with chrome caps and red/white/blue diagonal stripes
+ * Barber pole with chrome caps and red/white/blue stripes on a glass tube. It is the station's
+ * state light: `spinning` turns it while the station is working (starting up, syncing) and it
+ * stands still at rest. `turnOnce` gives one turn as it appears (a service is chosen).
+ * A span, so it may sit inside headings and buttons.
  */
-export function BarberPoleIcon({ className = "w-3.5 h-6" }: { className?: string }) {
+export function BarberPoleIcon({
+  className = "w-3.5 h-6",
+  spinning = false,
+  turnOnce = false,
+}: {
+  className?: string;
+  spinning?: boolean;
+  turnOnce?: boolean;
+}) {
+  const motion = spinning ? "rz-pole-spin" : turnOnce ? "rz-pole-once" : "";
   return (
-    <div
-      className={`relative rounded-full overflow-hidden border border-zinc-600 shadow-sm flex flex-col justify-between shrink-0 ${className}`}
-      title="Barber Pole"
-    >
-      <div className="h-1 bg-gradient-to-r from-zinc-300 via-zinc-100 to-zinc-400 shrink-0" />
-      <div className="w-full h-full bg-barber-pole animate-pulse" style={{ animationDuration: "3s" }} />
-      <div className="h-1 bg-gradient-to-r from-zinc-300 via-zinc-100 to-zinc-400 shrink-0" />
-    </div>
+    <span className={`rz-pole ${className}`} aria-hidden="true">
+      <span className="rz-pole-cap" />
+      <span className={`rz-pole-glass rz-stripes ${motion}`} />
+      <span className="rz-pole-cap" />
+    </span>
   );
 }
 
 /**
- * Circular official crest logo badge
+ * The shop's black logo banner, as it hangs on the crimson wall. The logo file is square: the
+ * artwork sits on a near-black field (rows 168-552 of 720) between pure-black bands, so a 1.9:1
+ * frame shows exactly that field. Pass alt="" when a heading already names the shop.
+ * It is only ever shown above the fold, where it is the page's largest image, so it loads eagerly.
  */
-export function RuzzcoLogoBadge({
-  size = 40,
-  showBorder = true,
+export function RuzzcoLogoBanner({
+  className = "w-72",
+  alt = "Ruzzco Barbers",
+  sizes = "(min-width: 640px) 28rem, 85vw",
 }: {
-  size?: number;
-  showBorder?: boolean;
+  className?: string;
+  alt?: string;
+  sizes?: string;
 }) {
   return (
     <div
-      className={`relative rounded-full overflow-hidden bg-black shrink-0 flex items-center justify-center ${
-        showBorder ? "ring-2 ring-red-600/60 shadow-lg shadow-red-950/50" : ""
-      }`}
-      style={{ width: size, height: size }}
+      className={`relative aspect-[1.9/1] overflow-hidden rounded-md bg-[#080705] ring-1 ring-white/10 shadow-[0_26px_40px_-18px_rgb(0_0_0/0.9),0_2px_6px_rgb(0_0_0/0.5)] ${className}`}
     >
       <Image
         src="/ruzzco-logo.jpg"
-        alt="Ruzzco Barbers"
-        width={size}
-        height={size}
-        className="object-cover scale-110"
-        priority
+        alt={alt}
+        fill
+        sizes={sizes}
+        className="object-cover"
+        loading="eager"
+        fetchPriority="high"
       />
     </div>
   );

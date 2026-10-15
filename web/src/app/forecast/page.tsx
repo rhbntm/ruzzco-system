@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { ArrowLeft, LineChart } from "lucide-react";
+import { ArrowLeft, TriangleAlert } from "lucide-react";
 import { ForecastLocked } from "@/components/ForecastPanel";
+import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
 import { COMPARISON_ONLY, buildReportView, type ReportView } from "@/lib/forecast-comparison";
 import { OWNER_COOKIE, isOwnerCookie } from "@/lib/owner-access";
@@ -34,26 +35,31 @@ export default async function ForecastPage() {
   const view = run ? buildReportView(run.comparison, (iso) => formatDate(iso)) : null;
 
   return (
-    <div className="min-h-screen bg-[#0b0c10] text-zinc-100 font-sans antialiased">
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        <header className="flex items-center justify-between border-b border-zinc-800 pb-4">
-          <Link href="/" className="text-zinc-400 hover:text-white text-sm">
-            <ArrowLeft className="w-4 h-4 inline mr-1" />Home
+    <main className="flex-1">
+      <header className="rz-banner">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
+          <Link href="/" className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-sm text-dust hover:text-bone transition-colors group">
+            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />Home
           </Link>
-          <h1 className="text-xl font-bold uppercase tracking-wide font-[family-name:var(--font-oswald)] inline-flex items-center gap-2">
-            <LineChart className="w-5 h-5 text-red-500" /> Detailed forecast
+          <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
+            <BarberPoleIcon className="w-2.5 h-6" />
+            Detailed forecast
           </h1>
-          <span className="w-12" />
-        </header>
+          {/* Balances the Home link, so the title stays centred. */}
+          <span aria-hidden="true" className="w-16 shrink-0" />
+        </div>
+      </header>
 
+      <div className="rz-page max-w-4xl mx-auto p-4 sm:p-6 space-y-5">
         {!isOwner ? (
           <ForecastLocked />
         ) : !forecast ? (
-          <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-900/50 text-sm text-rose-300">
+          <p className="rz-notice rz-notice-danger">
+            <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0" />
             The saved forecast can&apos;t be loaded right now because the database is unreachable.
-          </div>
+          </p>
         ) : !run ? (
-          <p className="text-sm text-zinc-400">No forecast has been saved yet. Open the home page and press Refresh forecast.</p>
+          <p className="text-sm text-dust">No forecast has been saved yet. Open the home page and press Refresh forecast.</p>
         ) : (
           <>
             <Verdict run={run} view={view} />
@@ -64,32 +70,32 @@ export default async function ForecastPage() {
                 <MethodNotes view={view} />
               </>
             ) : (
-              <p className="text-sm text-zinc-400">
+              <p className="text-sm text-dust">
                 No comparison was saved with this forecast. Press Refresh forecast on the home page once the forecast service has been retrained.
               </p>
             )}
             <ModelBehind run={run} />
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
 
-const card = "p-5 rounded-xl bg-[#12141a] border border-[#232734] space-y-3";
-const heading = "font-bold text-white uppercase tracking-wide text-sm font-[family-name:var(--font-oswald)]";
+const card = "rz-panel p-5 sm:p-6 space-y-3.5";
+const heading = "rz-title text-xl";
 
 function Verdict({ run, view }: { run: Run; view: ReportView | null }) {
   return (
     <section className={card}>
       <h2 className={heading}>Can I trust this forecast?</h2>
-      <p className="text-sm text-zinc-300 leading-relaxed">
+      <p className="text-sm text-bone-2 leading-relaxed max-w-prose">
         On the last {run.weeksTested} weeks it was tested on, the Random Forest forecast was off by about{" "}
-        <span className="font-semibold text-white">{Number(run.typicalErrorCustomers)} customers a day</span>. The best simple guess was off by{" "}
+        <span className="font-semibold text-bone">{Number(run.typicalErrorCustomers)} customers a day</span>. The best simple guess was off by{" "}
         {Number(run.bestBaselineError)}. Random Forest did better than that guess in {run.weeksRfWon} of {run.weeksTested} weeks.
       </p>
-      {view && <p className="text-xs font-semibold text-amber-200">{view.basisLine}</p>}
-      <p className="text-[11px] text-zinc-500">Saved with the forecast on {formatDate(run.createdOn)}.</p>
+      {view && <p className="text-xs font-semibold text-brass-bright">{view.basisLine}</p>}
+      <p className="text-[0.6875rem] text-dust">Saved with the forecast on {formatDate(run.createdOn)}.</p>
     </section>
   );
 }
@@ -98,23 +104,26 @@ function RankedBars({ view }: { view: ReportView }) {
   return (
     <section className={card}>
       <h2 className={heading}>How the methods compare</h2>
-      <p className="text-xs text-zinc-400 leading-relaxed">
+      <p className="text-xs text-dust leading-relaxed max-w-prose">
         Each method guessed customers per day for weeks it had not seen. The number is how far off it was, on average. A shorter bar is better.
       </p>
-      <ol className="space-y-2">
+      <ol className="space-y-1.5">
         {view.ranked.map((row) => (
-          <li key={row.method} className={`rounded-lg px-3 py-2 ${row.served ? "bg-red-500/10 ring-1 ring-inset ring-red-500/40" : ""}`}>
+          <li
+            key={row.method}
+            className={`rounded-[10px] px-3 py-2.5 ${row.served ? "bg-crimson/12 shadow-[inset_0_0_0_1px_rgb(218_44_53/0.45)]" : ""}`}
+          >
             <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="text-zinc-200">
+              <span className="text-bone">
                 {row.name}
-                {row.served && <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-red-300">Used for this forecast</span>}
-                {COMPARISON_ONLY.has(row.method) && <span className="ml-2 text-[10px] uppercase tracking-wider text-zinc-500">for comparison only</span>}
+                {row.served && <span className="ml-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-crimson-ink">Used for this forecast</span>}
+                {COMPARISON_ONLY.has(row.method) && <span className="ml-2 text-[0.6875rem] uppercase tracking-wider text-dust">for comparison only</span>}
               </span>
-              <span className="font-semibold text-white tabular-nums">{row.mean.toFixed(2)}</span>
+              <span className="font-semibold text-bone tabular-nums">{row.mean.toFixed(2)}</span>
             </div>
-            <div className="mt-1 h-2 rounded bg-[#181b24]">
+            <div className="mt-1.5 h-2 rounded-full bg-black/30 ring-1 ring-inset ring-seam overflow-hidden">
               <div
-                className={`h-2 rounded ${row.served ? "bg-red-500" : "bg-zinc-500"}`}
+                className={`h-2 rounded-full ${row.served ? "bg-crimson" : "bg-dust/60"}`}
                 style={{ width: `${view.maxMean > 0 ? Math.max((row.mean / view.maxMean) * 100, 2) : 2}%` }}
               />
             </div>
@@ -132,44 +141,45 @@ function WeekTable({ view }: { view: ReportView }) {
       <h2 className={heading}>Week by week</h2>
       {view.weeks ? (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="rz-table text-xs">
             <thead>
-              <tr className="text-zinc-500 text-left">
-                <th className="py-1.5 pr-3 font-normal">Week</th>
+              <tr>
+                <th className="text-left">Week</th>
                 {view.methodsInTable.map((m) => (
-                  <th key={m} className="py-1.5 px-2 font-normal text-right min-w-24">{find(m)?.name ?? m}</th>
+                  <th key={m} className="text-right min-w-24">{find(m)?.name ?? m}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#232734]">
+            <tbody>
               {view.weeks.map((week) => (
                 <tr key={week.label}>
-                  <td className="py-1.5 pr-3 text-zinc-300 whitespace-nowrap">{week.label}</td>
+                  <td className="text-bone-2 whitespace-nowrap">{week.label}</td>
                   {view.methodsInTable.map((m) => (
-                    <td key={m} className="py-1.5 px-2 text-right text-zinc-200 tabular-nums">{week.mae[m]?.toFixed(2) ?? "—"}</td>
+                    <td key={m} className="text-right text-bone">{week.mae[m]?.toFixed(2) ?? "—"}</td>
                   ))}
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t border-zinc-700 font-semibold text-white">
-                <td className="pt-2 pr-3">Mean</td>
+              <tr className="text-bone">
+                <td>Mean</td>
                 {view.methodsInTable.map((m) => (
-                  <td key={m} className="pt-2 px-2 text-right tabular-nums">{find(m)?.mean.toFixed(2) ?? "—"}</td>
+                  <td key={m} className="text-right">{find(m)?.mean.toFixed(2) ?? "—"}</td>
                 ))}
               </tr>
-              <tr className="text-zinc-300">
-                <td className="pt-1 pr-3">Week-to-week swing</td>
+              {/* The swing sits with the mean, under the same brass rule. */}
+              <tr className="text-bone-2 *:border-t-0 *:pt-1 *:font-normal">
+                <td>Week-to-week swing</td>
                 {view.methodsInTable.map((m) => (
-                  <td key={m} className="pt-1 px-2 text-right tabular-nums">{view.spread[m]?.toFixed(2) ?? "—"}</td>
+                  <td key={m} className="text-right">{view.spread[m]?.toFixed(2) ?? "—"}</td>
                 ))}
               </tr>
             </tfoot>
           </table>
-          <p className="mt-2 text-[11px] text-zinc-500">Customers a day, lower is better. Linear and gradient boosting are for comparison only.</p>
+          <p className="mt-2 text-[0.6875rem] text-dust">Customers a day, lower is better. Linear and gradient boosting are for comparison only.</p>
         </div>
       ) : (
-        <p className="text-sm text-zinc-400">Weekly detail was not saved with this forecast.</p>
+        <p className="text-sm text-dust">Weekly detail was not saved with this forecast.</p>
       )}
     </section>
   );
@@ -179,11 +189,11 @@ function MethodNotes({ view }: { view: ReportView }) {
   return (
     <section className={card}>
       <h2 className={heading}>About the methods</h2>
-      <dl className="space-y-2 text-sm">
+      <dl className="space-y-2.5 text-sm">
         {view.groups.flatMap((g) => g.rows).map((row) => (
           <div key={row.method}>
-            <dt className="text-zinc-200 font-semibold">{row.name}</dt>
-            <dd className="text-zinc-400 text-xs leading-relaxed">{view.ranked.find((r) => r.method === row.method)?.note}</dd>
+            <dt className="text-bone font-semibold">{row.name}</dt>
+            <dd className="text-dust text-xs leading-relaxed">{view.ranked.find((r) => r.method === row.method)?.note}</dd>
           </div>
         ))}
       </dl>
@@ -195,7 +205,7 @@ function ModelBehind({ run }: { run: Run }) {
   return (
     <section className={card}>
       <h2 className={heading}>The model behind the forecast</h2>
-      <p className="text-xs text-zinc-400 leading-relaxed">
+      <p className="text-xs text-dust leading-relaxed max-w-prose">
         Version {run.modelVersion}. Trained on the paper logbook from {formatDate(run.dataFrom)} to {formatDate(run.dataTo)} ({run.trainingDays} open
         days). Revenue = expected customers × ₱{run.avgTicket}, the average paid per customer in that period.
       </p>

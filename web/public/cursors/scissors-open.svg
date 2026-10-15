@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+<!-- Ruzzco shop cursor (open, over something clickable): barber's shears, chrome blades, crimson rings, brass pivot. Hotspot 3 3 (the blade tips). -->
+<defs><linearGradient id="c" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6f757d"/><stop offset=".45" stop-color="#f6f7f9"/><stop offset=".7" stop-color="#b3b9c1"/><stop offset="1" stop-color="#7f858d"/></linearGradient></defs>
+<g transform="translate(-5 2) rotate(-45 8 1)">
+<g transform="rotate(-14 8 16.2)"><g transform="translate(16 0) scale(-1 1)"><path d="M7.2 16.8 L5.4 23.6" stroke="#0c0b0a" stroke-width="3" stroke-linecap="round"/><path d="M7.2 16.8 L5.4 23.6" stroke="#b3b9c1" stroke-width="1.6" stroke-linecap="round"/><circle cx="4.6" cy="27" r="2.9" fill="none" stroke="#0c0b0a" stroke-width="2.7"/><circle cx="4.6" cy="27" r="2.9" fill="none" stroke="#c41f29" stroke-width="1.6"/><path d="M8 1 C10.4 5.6 11.4 10.6 11.1 16.2 L7.2 16.2 C7.4 11 7.6 5.6 8 1 Z" fill="url(#c)" stroke="#0c0b0a" stroke-width=".7" stroke-linejoin="round"/></g></g>
+<g transform="rotate(14 8 16.2)"><path d="M7.2 16.8 L5.4 23.6" stroke="#0c0b0a" stroke-width="3" stroke-linecap="round"/><path d="M7.2 16.8 L5.4 23.6" stroke="#b3b9c1" stroke-width="1.6" stroke-linecap="round"/><circle cx="4.6" cy="27" r="2.9" fill="none" stroke="#0c0b0a" stroke-width="2.7"/><circle cx="4.6" cy="27" r="2.9" fill="none" stroke="#c41f29" stroke-width="1.6"/><path d="M8 1 C10.4 5.6 11.4 10.6 11.1 16.2 L7.2 16.2 C7.4 11 7.6 5.6 8 1 Z" fill="url(#c)" stroke="#0c0b0a" stroke-width=".7" stroke-linejoin="round"/></g>
+<circle cx="8" cy="16.2" r="1.2" fill="#e4c584" stroke="#0c0b0a" stroke-width=".5"/>
+</g>
+</svg>
