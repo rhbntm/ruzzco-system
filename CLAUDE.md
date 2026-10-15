@@ -86,7 +86,7 @@ Confirmed by Mart and Bayani (by 2026-10-09): Mart doesn't cut hair. New databas
 
 Unconfirmed. Keep as settings, do not hardcode: the discount base (list vs paid), whether petty cash is shared or shop-only, retail commission, and tip channel.
 
-Ledger decision (Brent, 2026-10-14): the ledger stays, with a read-only day/week/month summary (slice 10), following the advisor's 2026-10-12 request to add a cost summary; Quiza to confirm the meaning on 2026-10-19. This supersedes the 2026-09-28 request to remove it.
+Ledger decision (Brent, 2026-10-14): the ledger stays, with a read-only day/week/month summary (slice 10), following the advisor's 2026-10-12 request to add a cost summary; the advisor to confirm the meaning on 2026-10-19. This supersedes the 2026-09-28 request to remove it.
 
 Conflicts to resolve: the `demo-senior-pwd` demo row contradicts the no-PWD, loyalty-only discount rule (the POS button was removed 2026-10-02). The advisor (2026-09-28) asked to add a payment gateway (done as the QR Ph demo). Keep cash reconciliation either way.
 

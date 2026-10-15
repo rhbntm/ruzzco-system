@@ -1,10 +1,10 @@
 # Slice 10 — Ledger summary, and the forecast split into a simple home panel and a /forecast report
 
-Repo: `ruzzco-system`. Status: **BUILT 2026-10-14 (Brent said go ahead; the consult was not waited for), uncommitted. Not yet checked in a browser: the owner PIN was not read. Brent answered the open questions on 2026-10-14 (§7); what the advisor meant is still not confirmed by Quiza (next consult 2026-10-19).** Items tagged [AI proposal] are not confirmed.
+Repo: `ruzzco-system`. Status: **BUILT 2026-10-14 (Brent said go ahead; the consult was not waited for), uncommitted. Not yet checked in a browser: the owner PIN was not read. Brent answered the open questions on 2026-10-14 (§7); what the advisor meant is still not confirmed by him (next consult 2026-10-19).** Items tagged [AI proposal] are not confirmed.
 Goal: on `/ledger`, above the per-barber payout cards, the owner sees a summary for a day, a week or a month: what came in (by payment method and by service), what goes out (barber commissions, tips, petty cash) and what is left for the shop. Read-only; it never changes how a sale or payout is recorded.
 Goal (Part B): the home page shows a simple forecast, the Random Forest prediction only; a separate owner-only page, `/forecast`, holds the detailed forecast and the method comparison. Part B takes over the on-hold amendment of slice 9 (see §10).
 The sections below are Part A (ledger summary) unless headed Part B.
-Origin: the 2026-10-12 advisor consult asked to "add a summary of the breakdown of the cost to the ledger" (record: `../ruzzco-barbers/20_Decisions/2026-10-12-advisor-consult-ch3-and-system-requests.md`, request 3). Brent reads this as the ledger staying and confirmed on 2026-10-14 that it stays (still to be confirmed with Quiza 2026-10-19). It reverses the 2026-09-28 "remove the ledger" request (CLAUDE.md Client rules).
+Origin: the 2026-10-12 advisor consult asked to "add a summary of the breakdown of the cost to the ledger" (record: `../ruzzco-barbers/20_Decisions/2026-10-12-advisor-consult-ch3-and-system-requests.md`, request 3). Brent reads this as the ledger staying and confirmed on 2026-10-14 that it stays (still to be confirmed with the advisor 2026-10-19). It reverses the 2026-09-28 "remove the ledger" request (CLAUDE.md Client rules).
 
 ## 1. Scope boundary (read first)
 
@@ -16,7 +16,7 @@ Origin: the 2026-10-12 advisor consult asked to "add a summary of the breakdown 
 
 ## 2. Decisions ([AI proposal] unless marked Brent)
 
-1. **Reading of "cost breakdown" (Brent, 2026-10-14: "a combination of all"):** the summary covers money in and money out, **by payment method and by service**, for **a day, a week or a month**. Not confirmed by Quiza; if she meant something narrower, drop the parts she did not.
+1. **Reading of "cost breakdown" (Brent, 2026-10-14: "a combination of all"):** the summary covers money in and money out, **by payment method and by service**, for **a day, a week or a month**. Not confirmed by the advisor; if he meant something narrower, drop the parts he did not.
 2. **Period picker:** Day (default, the page's date), Week (Monday to Sunday containing the date) or Month (the calendar month containing the date), all Manila business dates. The summary header names the exact range, for example "Mon 12 Oct to Sun 18 Oct". The per-barber payout cards below stay per day and are unchanged. [AI proposal] Monday-start weeks.
 3. **Sections, in order, for the chosen period:**
    - **Sales (money in):** revenue by payment method: Cash, GCash, Maya, QR Ph (only when it has paid sales), then **Total revenue** and the number of paid sales. Revenue is `amountPaid`, tips excluded, PAID sales only (invariant).
@@ -63,7 +63,7 @@ Origin: the 2026-10-12 advisor consult asked to "add a summary of the breakdown 
 
 ## 7. Open questions
 
-Answered by Brent, 2026-10-14 (not yet confirmed with Quiza, 2026-10-19):
+Answered by Brent, 2026-10-14 (not yet confirmed with the advisor, 2026-10-19):
 1. "Breakdown of the cost" = a combination of all: money in and out for a day, by payment method and by service, over a day, week or month (§2.1).
 2. The ledger stays, so the plan's Oct 25 "hide the ledger" block is dropped. Update CLAUDE.md (Client rules, "Conflicts to resolve") and the home page at build or wrap-up, not before.
 3. Petty cash stays read from End-of-Day Cash (§2.6).
