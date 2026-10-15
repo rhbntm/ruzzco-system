@@ -77,7 +77,7 @@ Order against the data: step 1 can be built and tested on synthetic data now. Th
 
 ## 9. Open questions
 
-- Q5: What the paper claims if nothing beats the simple methods. Not decided in code; for the Monday consult with Quiza (Open items, "How to frame a Random Forest that does worse than the simple averages").
+- Q5: What the paper claims if nothing beats the simple methods. Not decided in code; for the Monday consult with the advisor (Open items, "How to frame a Random Forest that does worse than the simple averages").
 
 ## 10. Wrap-up
 
