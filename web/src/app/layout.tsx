@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { HistoryFade } from "@/components/HistoryFade";
+import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { ShopCursor } from "@/components/ShopCursor";
 import { ShopRoom } from "@/components/ShopRoom";
 
@@ -15,10 +16,24 @@ const oswald = localFont({
   display: "swap",
 });
 
-// The tab icon is app/icon.png (Next.js file convention); an `icons` entry here would hide it.
+// The tab icon is app/icon.png and the iPhone Home Screen icon is app/apple-icon.png (Next.js
+// file conventions); an `icons` entry here would hide them. The installed app's name and icons
+// are in app/manifest.ts.
 export const metadata: Metadata = {
   title: "Ruzzco Barbers — POS & Revenue Forecasting DSS",
   description: "Offline-First Mobile POS and Decision Support System for Ruzzco Barbers (Caloocan)",
+  // iPhones: Safari > Share > Add to Home Screen opens the system full screen, without Safari's
+  // bars, named "Ruzzco" under its icon. The status bar stays black and the pages start below it.
+  // Works over plain HTTP too; opening offline needs HTTPS (npm run https).
+  appleWebApp: {
+    capable: true,
+    title: "Ruzzco",
+    statusBarStyle: "black",
+  },
+  // Next writes `capable` as mobile-web-app-capable; older iPhones look for the apple- name.
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
 };
 
 // Phone browsers tint their toolbar to the shop's black.
@@ -52,6 +67,8 @@ export default function RootLayout({
         <HistoryFade />
         {/* The shop's shears follow the mouse (desktop only, never under reduced motion) */}
         <ShopCursor />
+        {/* Over HTTPS: the POS and shift log open on an installed phone without a connection */}
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );

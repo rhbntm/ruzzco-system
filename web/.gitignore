@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# HTTPS certificate authority and keys made by npm run https; never committed or shared
+/certs/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

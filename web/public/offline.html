@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c0b0a">
+  <title>Offline · Ruzzco Barbers</title>
+  <!-- Shown by public/sw.js when a page can't load and no copy of it is kept on the phone.
+       Self-contained: it must work with no connection at all. -->
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px 16px; background: #0c0b0a; color: #f5f0e8;
+      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    body::before {
+      content: ""; position: fixed; inset: 0 0 auto 0; height: 6px;
+      background: repeating-linear-gradient(135deg, #c41f29 0 12px, #f5f0e8 12px 24px, #2b4aa6 24px 36px, #f5f0e8 36px 48px);
+    }
+    main { width: 100%; max-width: 26rem; }
+    h1 {
+      margin: 0 0 8px; font: 700 2rem/1.1 "Oswald", "Arial Narrow", "Roboto Condensed", sans-serif;
+      letter-spacing: 0.02em; text-transform: uppercase;
+    }
+    p { margin: 0 0 12px; color: #a69e93; }
+    .actions { display: grid; gap: 12px; margin-top: 24px; }
+    a, button {
+      display: flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 16px;
+      border-radius: 12px; font: 700 1rem/1 "Oswald", "Arial Narrow", "Roboto Condensed", sans-serif;
+      letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; cursor: pointer;
+    }
+    .primary { background: #c41f29; color: #f5f0e8; border: 0; }
+    .secondary { background: #1e1c1a; color: #f5f0e8; border: 1px solid #5f6268; }
+    a:focus-visible, button:focus-visible { outline: 3px solid #f5f0e8; outline-offset: 3px; }
+    .note { margin-top: 20px; font-size: 0.875rem; color: #958d83; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Can't reach the shop PC</h1>
+    <p role="status">This page needs the shop PC, and it isn't answering right now.</p>
+    <p>The POS still opens on this phone. Sales taken there are saved on this phone only: to record them, connect to the shop PC again and open the POS, and they're sent by themselves.</p>
+    <div class="actions">
+      <a class="primary" href="/pos">Open the POS</a>
+      <a class="secondary" href="/shift-log">Shift log</a>
+      <button class="secondary" type="button" onclick="location.reload()">Try again</button>
+    </div>
+    <p class="note">Check that the shop PC is on and running Ruzzco, and that this phone is on the shop Wi-Fi.</p>
+  </main>
+  <script>
+    // Back on the network: try the page again by itself.
+    window.addEventListener("online", function () { location.reload(); });
+  </script>
+</body>
+</html>

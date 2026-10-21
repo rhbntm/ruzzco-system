@@ -10,8 +10,6 @@ import {
 import Link from "next/link";
 import {
   Scissors,
-  Wifi,
-  WifiOff,
   RefreshCw,
   CheckCircle2,
   Clock,
@@ -59,6 +57,7 @@ import { refreshPaymentQrs } from "@/lib/payment-qr-cache";
 import { qrCacheId } from "@/lib/payment-qr-plan";
 import { RejectedSales } from "@/components/RejectedSales";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
+import { ConnectionBadge, ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
 import { createSubmitLock } from "@/lib/submit-lock";
 import { useLiveQuery } from "dexie-react-hooks";
 import { RuzzcoLogoBanner, MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
@@ -248,6 +247,11 @@ export default function MobilePOSPage() {
     if (await verifyCurrentAssignment()) requireRebind();
   }, [triggerSync, requireRebind]);
 
+  // The phone can be online while the shop PC is off. When the PC answers again, send the
+  // waiting sales at once instead of at the next background retry.
+  const shopPc = useShopPc(reconcileWithServer);
+  const pcDown = isShopPcDown(shopPc);
+
   useEffect(() => {
     const handleOnline = () => { reconcileWithServer(); };
     window.addEventListener("online", handleOnline);
@@ -300,7 +304,8 @@ export default function MobilePOSPage() {
         if (active && cachedS.length > 0) setServices(cachedS);
 
         // Refresh catalog from server if online
-        if (navigator.onLine) {
+        const refreshCatalog = async () => {
+          if (!navigator.onLine) return;
           try {
             const res = await fetchWithTimeout("/api/v1/catalog", {}, REQUEST_TIMEOUT_MS.catalog);
             if (res.ok && active) {
@@ -320,7 +325,7 @@ export default function MobilePOSPage() {
           } catch (e) {
             console.warn("Could not refresh catalog, using cache:", e);
           }
-        }
+        };
 
         // Load local binding
         const deviceKey = getOrCreateDeviceKey();
@@ -329,15 +334,19 @@ export default function MobilePOSPage() {
         if (storedBinding) {
           // Bindings from before assignment ids get one now, so new sales are assignment-backed.
           const localBinding = await ensureAssignmentId(storedBinding);
+          // A bound phone opens at once with its cached catalog, which is refreshed meanwhile:
+          // with the shop PC off, the refresh would hold the POS for its whole timeout.
           if (active) {
             setBinding(localBinding);
             setBindingLoaded(true);
           }
+          await refreshCatalog();
           // Register the pending assignment, sync queued sales, then recheck the binding.
           // Offline or unreachable: keep the local binding; sales stay queued with their assignment.
           if (navigator.onLine && active) await reconcileWithServer();
         } else {
-          // No local binding — show first-boot modal
+          // No local binding — show first-boot modal, with the server's barber list when it answers
+          await refreshCatalog();
           if (active) {
             setBindingLoaded(true);
             setShowBindModal(true);
@@ -426,7 +435,8 @@ export default function MobilePOSPage() {
 
       const methodLabel = method === "GCASH" ? "GCash" : method === "MAYA" ? "Maya" : method === "QRPH" ? "QR Ph (pending)" : "Cash";
       setLastActionToast({
-        message: `₱${amountPaid.toFixed(2)} ${methodLabel}${tipAmount ? ` + ₱${tipAmount.toFixed(2)} tip` : ""} — ${binding.barberName}`,
+        // While the shop PC can't record it, say where the sale is.
+        message: `₱${amountPaid.toFixed(2)} ${methodLabel}${tipAmount ? ` + ₱${tipAmount.toFixed(2)} tip` : ""} — ${binding.barberName}${pcDown || !navigator.onLine ? " · saved on this phone" : ""}`,
         type: "success",
       });
       setTimeout(() => setLastActionToast(null), 3000);
@@ -437,7 +447,7 @@ export default function MobilePOSPage() {
       }
       return { id: newTransaction.id, amount: amountPaid };
     },
-    [binding, services, selectedServiceId, customAmountInput, tipChoice, customTipInput, triggerSync]
+    [binding, services, selectedServiceId, customAmountInput, tipChoice, customTipInput, triggerSync, pcDown]
   );
 
   // Every payment method records through here. The lock is checked synchronously before
@@ -600,7 +610,7 @@ export default function MobilePOSPage() {
             </div>
           </div>
 
-          {!isOnline && (
+          {(!isOnline || pcDown) && (
             <p className="animate-rise text-center text-sm text-dust">
               Station is offline — barber assignment will sync upon reconnection.
             </p>
@@ -737,14 +747,7 @@ export default function MobilePOSPage() {
 
           <div className="flex items-center gap-2">
             {/* Network badge */}
-            <div className={`rz-pill transition-colors duration-300 ${isOnline ? "rz-pill-ok" : "rz-pill-danger"}`}>
-              {/* The word is visible from sm up; on phones it stays readable for screen readers. */}
-              {isOnline ? (
-                <><Wifi className="w-3.5 h-3.5" /><span className="sr-only sm:not-sr-only">Online</span></>
-              ) : (
-                <><WifiOff className="w-3.5 h-3.5" /><span className="sr-only sm:not-sr-only">Offline</span></>
-              )}
-            </div>
+            <ConnectionBadge isOnline={isOnline} shopPc={shopPc} />
 
             {/* Manual sync. The counts are in the button's name; the badges only show them. */}
             <button
@@ -782,6 +785,13 @@ export default function MobilePOSPage() {
 
       {/* ── Layout: 1-col mobile → 2-col tablet → 3-col desktop ── */}
       <div className="rz-page relative max-w-6xl mx-auto">
+
+        {/* While the shop PC can't record sales: they stay on this phone until it can. */}
+        {(!isOnline || pcDown) && (
+          <div className="px-4 pt-3">
+            <ShopPcReminder isOnline={isOnline} shopPc={shopPc} pending={pendingCount ?? 0} />
+          </div>
+        )}
 
         {/* Feedback toasts. A polite live region, so screen readers announce a saved sale or a sync result. */}
         <div aria-live="polite" className="px-4 pt-3 space-y-2">
@@ -939,7 +949,7 @@ export default function MobilePOSPage() {
               <div className="animate-rise space-y-1.5">
                 <button
                   onClick={() => { void handleQrphCheckout(); }}
-                  disabled={!binding || isRecording || !isOnline}
+                  disabled={!binding || isRecording || !isOnline || pcDown}
                   type="button"
                   className="rz-btn rz-pay rz-pay-qrph gap-2.5"
                 >
@@ -948,15 +958,26 @@ export default function MobilePOSPage() {
                     QR Ph (test) — ₱{previewAmount.toFixed(2)}
                   </span>
                 </button>
-                {!isOnline && (
+                {!isOnline ? (
                   <p className="text-center text-xs text-warn-ink">Needs internet. Use cash, GCash or Maya.</p>
+                ) : pcDown && (
+                  <p className="text-center text-xs text-warn-ink">Needs the shop PC. Use cash, GCash or Maya.</p>
                 )}
               </div>
             )}
 
-            <p className="text-center text-xs text-dust">
-              Saves to device immediately — syncs to server when online
-            </p>
+            {/* Under the buttons the reminder at the top has usually scrolled away, so repeat it here. */}
+            {!isOnline || pcDown ? (
+              <p className="text-center text-xs text-warn-ink">
+                {(pendingCount ?? 0) > 0
+                  ? `Not connected to the shop PC: ${pendingCount} ${pendingCount === 1 ? "sale is" : "sales are"} on this phone only until it reconnects.`
+                  : "Not connected to the shop PC: sales stay on this phone until it reconnects."}
+              </p>
+            ) : (
+              <p className="text-center text-xs text-dust">
+                Saves to device immediately — syncs to server when online
+              </p>
+            )}
           </section>
 
           {/* ── Col 3: Mini shift preview + link ── */}

@@ -8,8 +8,6 @@ import {
   Clock,
   CheckCircle2,
   RefreshCw,
-  Wifi,
-  WifiOff,
   Banknote,
   Smartphone,
   QrCode,
@@ -21,6 +19,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { RejectedSales } from "@/components/RejectedSales";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
+import { ConnectionBadge, ShopPcReminder, useShopPc } from "@/components/ShopPcStatus";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
 
 function subscribeOnline(callback: () => void) {
@@ -142,6 +141,9 @@ export default function ShiftLogPage() {
     return () => window.removeEventListener("online", handleSync);
   }, [handleSync]);
 
+  // ...and when the shop PC answers again after being down (the phone may have stayed online).
+  const shopPc = useShopPc(handleSync);
+
   if (!mounted) {
     return (
       <div role="status" className="rz-page flex-1 flex items-center justify-center gap-3 text-dust">
@@ -182,14 +184,7 @@ export default function ShiftLogPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <div className={`rz-pill transition-colors duration-300 ${isOnline ? "rz-pill-ok" : "rz-pill-danger"}`}>
-              {/* The word is visible from sm up; on phones it stays readable for screen readers. */}
-              {isOnline ? (
-                <><Wifi className="w-3.5 h-3.5" /><span className="sr-only sm:not-sr-only">Online</span></>
-              ) : (
-                <><WifiOff className="w-3.5 h-3.5" /><span className="sr-only sm:not-sr-only">Offline</span></>
-              )}
-            </div>
+            <ConnectionBadge isOnline={isOnline} shopPc={shopPc} />
             {/* The counts are in the button's name; the badges only show them. */}
             <button
               onClick={handleSync}
@@ -217,6 +212,9 @@ export default function ShiftLogPage() {
       <div className="rz-page relative max-w-3xl mx-auto px-4 py-5 space-y-5">
         {/* Announces sync results to screen readers; out of the layout flow. */}
         <p aria-live="polite" className="sr-only">{syncFeedback ?? ""}</p>
+
+        {/* While the shop PC can't record sales: they stay on this phone until it can. */}
+        <ShopPcReminder isOnline={isOnline} shopPc={shopPc} pending={pendingCount ?? 0} />
 
         {/* Sync feedback */}
         {syncFeedback && (
