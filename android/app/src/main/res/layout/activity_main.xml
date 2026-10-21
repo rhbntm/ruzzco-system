@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <WebView
+        android:id="@+id/web"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/wall" />
+
+    <ProgressBar
+        android:id="@+id/progress"
+        style="@android:style/Widget.Material.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="top"
+        android:max="100"
+        android:maxHeight="3dp"
+        android:minHeight="3dp"
+        android:progressDrawable="@drawable/progress_line"
+        android:visibility="gone" />
+
+    <!-- Covers the page when the shop PC can't be reached. -->
+    <ScrollView
+        android:id="@+id/error_panel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/wall"
+        android:clickable="true"
+        android:fillViewport="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="vertical"
+            android:paddingLeft="24dp"
+            android:paddingTop="32dp"
+            android:paddingRight="24dp"
+            android:paddingBottom="32dp">
+
+            <TextView
+                style="@style/RuzzcoTitle"
+                android:accessibilityHeading="true"
+                android:text="@string/error_title" />
+
+            <TextView
+                android:id="@+id/error_message"
+                style="@style/RuzzcoBody"
+                android:accessibilityLiveRegion="polite" />
+
+            <Button
+                android:id="@+id/retry"
+                style="@style/RuzzcoButtonPrimary"
+                android:layout_marginTop="24dp"
+                android:text="@string/retry" />
+
+            <Button
+                android:id="@+id/change_server"
+                style="@style/RuzzcoButtonSecondary"
+                android:text="@string/change_server" />
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

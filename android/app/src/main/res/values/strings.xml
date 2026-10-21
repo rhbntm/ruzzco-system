@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ruzzco Barbers</string>
+    <!-- Under the home screen icon, where long names get cut off. -->
+    <string name="launcher_name">Ruzzco</string>
+
+    <!-- Connect screen -->
+    <string name="connect_title">Connect to the shop PC</string>
+    <string name="connect_intro">This app opens the Ruzzco system that runs on the shop PC. Keep this phone on the shop Wi-Fi.</string>
+    <string name="connect_changing">Sales that haven\'t synced yet stay with the old address. Before you switch, check that the POS shows everything synced. That includes moving from :3000 to the secure address (https, :3443).</string>
+    <string name="find_button">Find the shop PC</string>
+    <string name="find_again">Look again</string>
+    <string name="find_looking">Looking for the shop PC on %1$s…</string>
+    <string name="find_none">No Ruzzco server answered on this Wi-Fi. Check that the shop PC is on and running Ruzzco, or type its address below.</string>
+    <string name="find_no_wifi">This phone isn\'t on a Wi-Fi network. Connect it to the shop Wi-Fi, then tap Find again.</string>
+    <plurals name="find_found">
+        <item quantity="one">Found the shop PC. Tap it to connect.</item>
+        <item quantity="other">Found %d Ruzzco servers. Tap the one to use.</item>
+    </plurals>
+    <string name="found_button">Connect to %1$s</string>
+    <!-- The secure address: there the POS also opens while the shop PC is off. -->
+    <string name="found_secure_button">Connect to %1$s (opens offline too)</string>
+    <string name="or_type">Or type the address, like 192.168.1.19:3000</string>
+    <string name="connect_button">Connect</string>
+    <string name="keep_button">Keep using %1$s</string>
+    <string name="connect_where">The address is the shop PC\'s Wi-Fi address and :3000. On the PC, run ipconfig and look under Wi-Fi for the IPv4 Address.</string>
+    <string name="connect_checking">Checking %1$s…</string>
+    <string name="connect_bad_address">That doesn\'t look like an address. Type it like 192.168.1.19:3000.</string>
+    <string name="connect_unreachable">No answer from %1$s. Check that the shop PC is on and running Ruzzco, and that this phone is on the shop Wi-Fi.</string>
+    <string name="connect_not_ruzzco">Something answered at %1$s, but it isn\'t the Ruzzco system. Check the number after the colon (usually 3000).</string>
+    <string name="connect_database_down">Connected. The shop PC\'s database isn\'t running, so some pages may show errors.</string>
+
+    <!-- Main screen -->
+    <string name="error_title">Can\'t reach the shop PC</string>
+    <string name="error_message">%1$s didn\'t answer. Check that the shop PC is on and running Ruzzco, and that this phone is on the shop Wi-Fi. Sales already saved on this phone are kept there only: they\'re recorded once it reaches the shop PC again, with the POS open.</string>
+    <string name="error_certificate">This phone doesn\'t trust the shop certificate for %1$s. Rebuild the app on the shop PC after running npm run https there, or install the certificate on this phone from the PC\'s address with :3080.</string>
+    <string name="error_retrying">Trying again…</string>
+    <string name="retry">Try again</string>
+    <string name="change_server">Change address</string>
+    <string name="no_app_for_link">No app on this phone can open that link.</string>
+    <string name="no_file_picker">No app on this phone can pick a file.</string>
+
+    <!-- Home screen shortcut (long-press the icon) -->
+    <string name="shortcut_change_short">Change shop PC</string>
+    <string name="shortcut_change_long">Change the shop PC address</string>
+</resources>

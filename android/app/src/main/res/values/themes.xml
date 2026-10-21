@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Base.Theme.Ruzzco" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/wall</item>
+        <item name="android:colorBackground">@color/wall</item>
+        <item name="android:colorPrimary">@color/wall</item>
+        <item name="android:colorPrimaryDark">@color/wall</item>
+        <item name="android:colorAccent">@color/crimson</item>
+        <item name="android:colorControlNormal">@color/chrome</item>
+        <item name="android:colorControlActivated">@color/crimson</item>
+        <item name="android:statusBarColor">@color/wall</item>
+        <item name="android:navigationBarColor">@color/wall</item>
+        <item name="android:textColorPrimary">@color/bone</item>
+        <item name="android:textColorSecondary">@color/dust</item>
+        <item name="android:textColorHint">@color/dust_2</item>
+    </style>
+
+    <style name="Theme.Ruzzco" parent="Base.Theme.Ruzzco" />
+</resources>

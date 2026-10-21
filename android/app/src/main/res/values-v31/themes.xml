@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+: the launch screen shows the icon on the shop's black. -->
+    <style name="Theme.Ruzzco" parent="Base.Theme.Ruzzco">
+        <item name="android:windowSplashScreenBackground">@color/wall</item>
+    </style>
+</resources>

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Text and controls for the app's own screens: white condensed caps for headings and
+     buttons (like the logo), crimson for the main action, 52dp touch targets. -->
+<resources>
+    <style name="RuzzcoTitle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textSize">28sp</item>
+        <item name="android:textColor">@color/bone</item>
+    </style>
+
+    <style name="RuzzcoBody">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+        <item name="android:textColor">@color/dust</item>
+    </style>
+
+    <style name="RuzzcoSmall" parent="RuzzcoBody">
+        <item name="android:layout_marginTop">12dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/dust_2</item>
+    </style>
+
+    <style name="RuzzcoNote" parent="RuzzcoBody">
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/warn_ink</item>
+        <item name="android:background">@drawable/note</item>
+    </style>
+
+    <style name="RuzzcoLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">32dp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/bone_2</item>
+    </style>
+
+    <style name="RuzzcoButton" parent="@android:style/Widget.Material.Button">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingLeft">16dp</item>
+        <item name="android:paddingRight">16dp</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:letterSpacing">0.06</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">@color/button_text</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="RuzzcoButtonPrimary" parent="RuzzcoButton">
+        <item name="android:background">@drawable/btn_primary</item>
+    </style>
+
+    <style name="RuzzcoButtonSecondary" parent="RuzzcoButton">
+        <item name="android:background">@drawable/btn_secondary</item>
+    </style>
+
+    <style name="RuzzcoField">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingLeft">14dp</item>
+        <item name="android:paddingRight">14dp</item>
+        <item name="android:background">@drawable/field</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textColor">@color/bone</item>
+        <item name="android:textColorHint">@color/dust_2</item>
+    </style>
+</resources>

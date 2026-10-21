@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One button per Ruzzco server the finder heard back from. -->
+<Button xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/RuzzcoButtonPrimary"
+    android:layout_marginTop="12dp"
+    android:textAllCaps="false" />

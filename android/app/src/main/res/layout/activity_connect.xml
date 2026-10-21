@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingLeft="24dp"
+        android:paddingTop="16dp"
+        android:paddingRight="24dp"
+        android:paddingBottom="32dp">
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/ruzzco_logo" />
+
+        <TextView
+            style="@style/RuzzcoTitle"
+            android:layout_marginTop="16dp"
+            android:accessibilityHeading="true"
+            android:text="@string/connect_title" />
+
+        <TextView
+            style="@style/RuzzcoBody"
+            android:text="@string/connect_intro" />
+
+        <TextView
+            android:id="@+id/changing_note"
+            style="@style/RuzzcoNote"
+            android:text="@string/connect_changing"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/find"
+            style="@style/RuzzcoButtonPrimary"
+            android:layout_marginTop="24dp"
+            android:text="@string/find_button" />
+
+        <ProgressBar
+            android:id="@+id/busy"
+            style="@android:style/Widget.Material.ProgressBar.Horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/crimson"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/status"
+            style="@style/RuzzcoBody"
+            android:layout_marginTop="12dp"
+            android:accessibilityLiveRegion="polite"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/found"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <TextView
+            style="@style/RuzzcoLabel"
+            android:labelFor="@id/address"
+            android:text="@string/or_type" />
+
+        <EditText
+            android:id="@+id/address"
+            style="@style/RuzzcoField"
+            android:imeOptions="actionGo"
+            android:importantForAutofill="no"
+            android:inputType="textUri"
+            android:maxLines="1" />
+
+        <Button
+            android:id="@+id/connect"
+            style="@style/RuzzcoButtonSecondary"
+            android:text="@string/connect_button" />
+
+        <TextView
+            style="@style/RuzzcoSmall"
+            android:text="@string/connect_where" />
+
+        <Button
+            android:id="@+id/keep"
+            style="@style/RuzzcoButtonSecondary"
+            android:layout_marginTop="32dp"
+            android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>

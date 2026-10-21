@@ -119,6 +119,8 @@ On each phone, once, on the same Wi-Fi as the PC: open `http://ruzzco.local:3080
 - The service worker (`web/public/sw.js`) keeps copies of `/pos`, `/shift-log` and their files only: never owner pages, the home page or `/api` data, and it never touches the sync POST. Set `NEXT_PUBLIC_SERVICE_WORKER=off` to remove it from phones.
 - On any phone, installed or not, the POS and the shift log say when the shop PC can't record sales and how many sales are on the phone only (`web/src/components/ShopPcStatus.tsx`, which asks `/api/v1/health` every 15 seconds while the page is open). When the PC answers again, they send the waiting sales at once.
 
+For Android phones there is also a real app (`android/`): the same pages full screen, with the shop certificate built in so phones don't need it installed. See [android/README.md](android/README.md).
+
 Want to contribute? Fork the repo and follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---

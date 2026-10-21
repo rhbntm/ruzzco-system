@@ -1,0 +1,17 @@
+# Gradle and Android Studio
+.gradle/
+.kotlin/
+build/
+captures/
+.idea/
+*.iml
+.cxx/
+
+# Path to the Android SDK on this PC
+local.properties
+
+# Built apps and signing keys never go in Git
+*.apk
+*.aab
+*.jks
+*.keystore

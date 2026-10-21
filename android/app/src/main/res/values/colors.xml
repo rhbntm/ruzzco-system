@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The web app's design tokens (ruzzco-system web/src/app/globals.css), so the app's own
+     screens match the pages it shows. -->
+<resources>
+    <color name="wall">#0C0B0A</color>
+    <color name="panel">#171514</color>
+    <color name="panel_2">#1E1C1A</color>
+    <color name="seam">#2B2C30</color>
+    <color name="chrome">#5F6268</color>
+    <color name="bone">#F5F0E8</color>
+    <color name="bone_2">#D8D0C4</color>
+    <color name="dust">#A69E93</color>
+    <color name="dust_2">#958D83</color>
+    <color name="crimson">#C41F29</color>
+    <color name="crimson_deep">#8C1A20</color>
+    <color name="crimson_ink">#F27F84</color>
+    <color name="warn_ink">#F7C67D</color>
+    <color name="ripple">#33F5F0E8</color>
+    <color name="ic_launcher_background">#0C0B0A</color>
+</resources>
