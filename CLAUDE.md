@@ -17,7 +17,9 @@ Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). T
 - `web/.env` needs `DATABASE_URL` and `OWNER_PIN`; optional `ML_SERVICE_URL` (default `http://localhost:8001`); the optional QR Ph demo uses `PAYMENT_GATEWAY` (`off` default | `paymongo_test`), `PAYMONGO_SECRET_KEY` (must be `sk_test_`) and `PAYMONGO_WEBHOOK_SECRET`. Never print, log, or commit their values.
 
 ## Business facts (locked)
+
 Code must respect these. Don't build features from this list unless a slice spec asks for them. Reasoning lives in `../ruzzco-barbers` (`20_Decisions/`, `30_Meetings/`); link there, don't copy it here.
+
 - Haircut: fixed ₱200. Shave & Massage: ₱150. Other services vary in price.
 - Commission: 50/50 between barber and owner. Commissions and payouts are snapshotted at transaction time, never recomputed from current rates.
 - No PWD or student discounts. Loyalty card: 50% off the 6th and 7th haircuts, then it resets.
@@ -28,6 +30,7 @@ Code must respect these. Don't build features from this list unless a slice spec
 - Open 10 AM-10 PM daily, including holidays.
 
 ## Environment (Windows)
+
 - Shell is Windows PowerShell. Claude settings live in `.claude/settings.json`; never create `.claudesettings.json` or other variants.
 - MySQL runs in Docker (host port 3307). Before seeding, migrating or querying, run `docker ps`; if the container is down, tell me instead of failing midway.
 - Run `scripts/dev-reset.ps1` before `prisma generate`/`migrate`, builds and verification: it frees port 3000, starts the DB container, runs `prisma generate` (`-Start` also starts the dev server). A running dev server locks the Prisma engine (EPERM).
@@ -38,12 +41,14 @@ Code must respect these. Don't build features from this list unless a slice spec
 - Schema changes are additive with defaults and committed as migrations in `web/prisma/migrations/` (baseline `0_init`). Write the SQL with `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script` (from Git Bash, to avoid a BOM), review it, apply with `npx prisma migrate deploy`. See README.
 
 ## Git
+
 - Never add `Co-Authored-By: Claude` trailers or other Claude attribution to commits.
 - Commit on `main` unless told otherwise. Check the current branch before committing.
 - Commit only when I ask. Never push, force-push or rewrite history without explicit confirmation.
 - One tool commits at a time. If `.git/index.lock` exists, check `Get-Process git` before removing it.
 
 ## How to work
+
 - One task per session. When done: show a diff summary and a 2-minute manual test, then stop.
 - Verify with `npm run lint`. Run `npm run build` only when I ask.
 - For UI changes: hard-reload the changed page in the browser and confirm the new content is visible. If you can't verify it, say so explicitly; don't call it done.
@@ -81,6 +86,7 @@ Before a session ends, or when I say "log", append to docs/sessions/YYYY-MM-DD.m
   Under ~20 lines. Never rewrite earlier entries.
 
 ## Client rules
+
 Confirmed (one self-filled form, 2026-09-23): daily payout before the barber goes home; the shop absorbs discounts; tips 100% to the barber; petty cash is logged as expenses; payments via cash, GCash, Maya; bundles and custom amounts exist; barbers use both personal phones and a shared device.
 
 Confirmed by Mart and Bayani (by 2026-10-09): Mart doesn't cut hair. New databases seed his barber record inactive; an existing database keeps whatever it has.
@@ -92,11 +98,12 @@ Ledger decision (Brent, 2026-10-14): the ledger stays, with a read-only day/week
 Conflicts to resolve: the `demo-senior-pwd` demo row contradicts the no-PWD, loyalty-only discount rule (the POS button was removed 2026-10-02). The advisor (2026-09-28) asked to add a payment gateway (done as the QR Ph demo). Keep cash reconciliation either way.
 
 ## Data caveats (ML)
+
 In the Dec-Feb dataset, dates and cuts per day are real. The ₱100 per row is the owner's 50% share of the cut, not the price. The haircut price was ₱180 until 2025-09-20 and ₱200 from 2025-09-21. Haircut type, payment method, and customer names are generated or randomized. Never use `haircut_type` or `payment_method` as features or present them as real. Forecast customer counts; revenue = customers × the average ticket from the training data (slice 7, Decision 5), not the current price.
 
 ## Known gaps
 
-- No service worker or manifest: offline means the queue only, and the page must stay open. A service worker needs HTTPS (or localhost); the phones use LAN HTTP, so a PWA slice starts with HTTPS.
+- Offline opening needs the HTTPS gateway (`npm run https`) and the production server (`npm run start`): the service worker stores only `/pos` and `/shift-log`; owner pages and `/` are never stored. Phones on plain LAN HTTP still have the queue only, with the page kept open. Each address (`http://<IP>:3000`, `https://<IP>:3443`, `https://ruzzco.local:3443`) is its own origin with its own sales queue and binding. Concurrent identical binds can deadlock and return 500 (attribution T16.bind.1 is flaky).
 - Counter-station mode, attendance and roster, and inventory are not built.
 - The "Save payout" UX is unclear. The demo seed is placeholder data only.
 - Loyalty-card discounts are not built.
