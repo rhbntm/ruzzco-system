@@ -36,6 +36,7 @@ The first build downloads Gradle's Android plugin and its libraries (a few hundr
 
 ## Put it on a phone
 
+- **Ready-made:** `ruzzco-barbers-debug.apk` in this folder is a debug build of this code (2026-10-19), so you can install it without building. It has the shop certificate of the PC it was built on built in; for another shop PC's secure address, build it on that PC (or install that PC's certificate on the phone).
 - **Copy the file:** send `app-debug.apk` to the phone (USB cable, Google Drive, Messenger) and open it. Android asks once to allow installing apps from that source.
 - **Or over USB:** turn on USB debugging on the phone (Settings, About phone, tap Build number 7 times, then Developer options), plug it in and run `.\gradlew.bat installDebug`.
 
