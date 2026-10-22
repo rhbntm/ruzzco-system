@@ -10,8 +10,10 @@ captures/
 # Path to the Android SDK on this PC
 local.properties
 
-# Built apps and signing keys never go in Git
+# Built apps and signing keys never go in Git,
+# except the ready-made debug build (see README, "Put it on a phone")
 *.apk
+!/ruzzco-barbers-debug.apk
 *.aab
 *.jks
 *.keystore
