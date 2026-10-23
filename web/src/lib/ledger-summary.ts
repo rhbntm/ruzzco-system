@@ -39,9 +39,27 @@ export function remainingToPay(owed: Prisma.Decimal, paid: Prisma.Decimal) {
   return remaining.isNegative() ? new Prisma.Decimal(0) : remaining;
 }
 
-/** Revenue minus the services' list-price sales: negative when discounts applied, positive for custom amounts above list. */
+/**
+ * The "Discounts" line: revenue minus the services' list-price sales, so negative by the
+ * discounts given (list price minus amount paid, e.g. a loyalty haircut). A custom amount is its
+ * own list price and adds nothing.
+ */
 export function serviceGap(revenue: Prisma.Decimal, serviceSales: Prisma.Decimal) {
   return revenue.sub(serviceSales);
+}
+
+/**
+ * A service row's amount for one sale: the sale's list price (slice 13), so a discount shows on
+ * the "Discounts" line instead of lowering the service row. A sale stored before list prices
+ * existed (slice 4) falls back to what was paid, the same amount revenue counts, so it adds
+ * nothing to the discounts line. One service per sale, so the sale's list price is its item's.
+ */
+export function listPriceOf(sale: {
+  listPrice: Prisma.Decimal.Value | null;
+  amountPaid: Prisma.Decimal.Value | null;
+  totalAmount: Prisma.Decimal.Value;
+}): Prisma.Decimal {
+  return new Prisma.Decimal(sale.listPrice ?? sale.amountPaid ?? sale.totalAmount);
 }
 
 /** Latest revision per reconciliation date. */

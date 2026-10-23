@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
-import { latestRevisionPerDate, leftForShop, periodDates, remainingToPay, serviceGap } from "../src/lib/ledger-summary";
+import { latestRevisionPerDate, leftForShop, listPriceOf, periodDates, remainingToPay, serviceGap } from "../src/lib/ledger-summary";
 
 loadEnvConfig(process.cwd());
 
@@ -98,6 +98,9 @@ function pure() {
   check("remaining never goes below zero", remainingToPay(D(50), D(80)).isZero());
   check("a discount makes the service gap negative", serviceGap(D(180), D(200)).equals(-20));
   check("a custom amount above list makes it positive", serviceGap(D(250), D(200)).equals(50));
+  check("a service row uses the sale's list price (slice 13)", listPriceOf({ listPrice: D(250), amountPaid: D(125), totalAmount: D(125) }).equals(250));
+  check("no list price: falls back to the amount paid", listPriceOf({ listPrice: null, amountPaid: D(180), totalAmount: D(180) }).equals(180));
+  check("no list price and no amount paid (before slice 4): falls back to the total", listPriceOf({ listPrice: null, amountPaid: null, totalAmount: D(200) }).equals(200));
   const latest = latestRevisionPerDate([
     { date: "2000-02-08", revision: 1, amount: 10 }, { date: "2000-02-08", revision: 2, amount: 20 }, { date: "2000-02-09", revision: 1, amount: 5 },
   ]);
@@ -175,6 +178,38 @@ async function integration() {
   await summary(TUE, "month");
   await summary(THU, "week");
   check("calling the summary creates no ledger rows", (await countRows()) === before);
+
+  console.log("\nDiscounts line (slice 13): list price minus amount paid");
+  const LOYALTY_DAY = "2000-02-24";
+  const loyaltySale = { ...sale(LOYALTY_DAY, "10:00:00.000", 125), listPrice: 250, discountType: "PERCENT", discountAmount: 125, customAmount: false };
+  const customSale = sale(LOYALTY_DAY, "11:00:00.000", 300); // a custom amount is its own list price
+  const added = await call<{ syncedIds: string[]; rejected: unknown[] }>("POST", "/api/v1/transactions/sync", { transactions: [loyaltySale, customSale] });
+  check("setup: loyalty and custom-amount sales synced", added.status === 200 && added.body.rejected.length === 0, JSON.stringify(added.body));
+  const loyaltyDay = (await summary(LOYALTY_DAY)).body;
+  check("revenue counts what was paid (125 + 300)", loyaltyDay.sales.total === "425.00", loyaltyDay.sales.total);
+  check("the service row counts the list price (250 + 300)", loyaltyDay.services.length === 1 && loyaltyDay.services[0].listSales === "550.00" && loyaltyDay.services[0].count === 2, JSON.stringify(loyaltyDay.services));
+  check("the Discounts line shows the ₱125 loyalty discount, the custom amount adds nothing", loyaltyDay.serviceGap === "-125.00", loyaltyDay.serviceGap);
+  check("service sales + Discounts = revenue", loyaltyDay.services.reduce((n, s) => n.add(s.listSales), D(0)).add(loyaltyDay.serviceGap).equals(loyaltyDay.sales.total));
+
+  // A sale from before slice 4 has no list price and no amount paid; the server never stores
+  // one like that now, so it is written directly, as an old database has it.
+  const legacyId = randomUUID();
+  txIds.push(legacyId);
+  await prisma.transaction.create({
+    data: {
+      id: legacyId, barberId: BARBER, totalAmount: 200, barberCommissionAmount: 100, commissionRate: 0.5,
+      transactionTime: new Date(AT(LOYALTY_DAY, "12:00:00.000")),
+      items: { create: { serviceId: SERVICE_ID, priceAtSale: 200 } },
+      commissionLogs: { create: { barberId: BARBER, amount: 100 } },
+    },
+  });
+  const withLegacy = (await summary(LOYALTY_DAY)).body;
+  check("an old sale without a list price counts what was paid in its service row (550 + 200)", withLegacy.services[0]?.listSales === "750.00", JSON.stringify(withLegacy.services));
+  check("…and adds nothing to Discounts", withLegacy.serviceGap === "-125.00", withLegacy.serviceGap);
+  check("revenue is the amounts paid (125 + 300 + 200), as before slice 13", withLegacy.sales.total === "625.00", withLegacy.sales.total);
+  check("service sales + Discounts = revenue with the old sale too", withLegacy.services.reduce((n, s) => n.add(s.listSales), D(0)).add(withLegacy.serviceGap).equals(withLegacy.sales.total));
+  const loyaltyWeek = (await summary(LOYALTY_DAY, "week")).body;
+  check("over the week too: service sales + Discounts = revenue", loyaltyWeek.services.reduce((n, s) => n.add(s.listSales), D(0)).add(loyaltyWeek.serviceGap).equals(loyaltyWeek.sales.total), `${JSON.stringify(loyaltyWeek.services)} ${loyaltyWeek.serviceGap} ${loyaltyWeek.sales.total}`);
 }
 
 async function cleanupDates() {

@@ -12,8 +12,12 @@ import {
   Smartphone,
   QrCode,
   TriangleAlert,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { db, type LocalTransaction } from "@/lib/db";
+import { DEFAULT_CUSTOM_NOTE, discountLabel } from "@/lib/pricing";
+import { paginate } from "@/lib/paginate";
 import { countPending, isRejected, listRejected, retryRejected, summarizeSync, syncNow } from "@/lib/sync";
 import { useLiveQuery } from "dexie-react-hooks";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
@@ -45,6 +49,8 @@ export default function ShiftLogPage() {
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   // QR payment for a synced QRPH sale (after a Retry, or the row's "QR payment" button).
   const [qrSale, setQrSale] = useState<{ id: string; amount: number } | null>(null);
+  // Slice 13: 20 sales a page, newest first, from the phone's own store (works with the PC off).
+  const [page, setPage] = useState(1);
 
   const localTransactions = useLiveQuery(
     async () => {
@@ -143,6 +149,9 @@ export default function ShiftLogPage() {
 
   // ...and when the shop PC answers again after being down (the phone may have stayed online).
   const shopPc = useShopPc(handleSync);
+
+  // The page number is clamped, so a list that shrank still shows a page that exists.
+  const shown = paginate(localTransactions ?? [], page);
 
   if (!mounted) {
     return (
@@ -296,8 +305,12 @@ export default function ShiftLogPage() {
               </p>
             </div>
           ) : (
+            <>
             <ul className="rz-panel overflow-hidden rz-rows rz-stagger">
-              {localTransactions.map((tx) => (
+              {shown.items.map((tx) => {
+                const discount = discountLabel(tx);
+                const note = tx.customAmount && tx.customAmountNote && tx.customAmountNote !== DEFAULT_CUSTOM_NOTE ? tx.customAmountNote : null;
+                return (
                 <li
                   key={tx.id}
                   className="px-3.5 py-3 flex items-center justify-between gap-3 text-sm transition-colors duration-150 hover:bg-white/2.5"
@@ -318,6 +331,13 @@ export default function ShiftLogPage() {
                       </span>
                       <span className="font-mono text-dust-2">{tx.id.slice(0, 8)}…</span>
                     </div>
+                    {/* Slice 13: a loyalty sale says so; a custom amount shows its note. */}
+                    {(discount || tx.customAmount) && (
+                      <div className="text-xs text-bone-2 whitespace-normal break-words">
+                        {discount && <span className="text-brass">{discount}</span>}
+                        {tx.customAmount && <span>{discount ? " · " : ""}Custom amount{note ? `: ${note}` : ""}</span>}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2.5 shrink-0">
@@ -395,8 +415,31 @@ export default function ShiftLogPage() {
                     )}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
+            {shown.pageCount > 1 && (
+              <nav aria-label="Sales pages" className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPage(shown.page - 1)}
+                  disabled={shown.page <= 1}
+                  className="rz-btn rz-btn-secondary min-h-11 px-4 disabled:opacity-40"
+                >
+                  <ChevronLeft className="w-4 h-4" /> Previous
+                </button>
+                <span aria-live="polite" className="text-sm text-dust tabular-nums">Page {shown.page} of {shown.pageCount}</span>
+                <button
+                  type="button"
+                  onClick={() => setPage(shown.page + 1)}
+                  disabled={shown.page >= shown.pageCount}
+                  className="rz-btn rz-btn-secondary min-h-11 px-4 disabled:opacity-40"
+                >
+                  Next <ChevronRight className="w-4 h-4" />
+                </button>
+              </nav>
+            )}
+            </>
           )}
         </section>
       </div>

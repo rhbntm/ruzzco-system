@@ -8,7 +8,7 @@ import { isBusinessDate, parseBusinessDate } from "@/lib/business-date";
 import { computeExpected } from "@/lib/reconciliation";
 import { totalsForDate } from "@/lib/payout-totals";
 import { countsOnDay } from "@/lib/time-review";
-import { latestRevisionPerDate, leftForShop, periodDates, remainingToPay, serviceGap } from "@/lib/ledger-summary";
+import { latestRevisionPerDate, leftForShop, listPriceOf, periodDates, remainingToPay, serviceGap } from "@/lib/ledger-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
         totalsForDate(day.date, commissionBase),
         prisma.transactionItem.findMany({
           where: { transaction: { ...countsOnDay(day), paymentStatus: "PAID" } },
-          select: { priceAtSale: true, service: { select: { name: true } } },
+          select: { service: { select: { name: true } }, transaction: { select: { listPrice: true, amountPaid: true, totalAmount: true } } },
         }),
       ]);
       let dayCommissions = ZERO;
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
       remaining = remaining.add(remainingToPay(dayOwed, dayPaid));
       for (const item of items) {
         const entry = services.get(item.service.name) ?? { count: 0, listSales: ZERO };
-        services.set(item.service.name, { count: entry.count + 1, listSales: entry.listSales.add(item.priceAtSale) });
+        services.set(item.service.name, { count: entry.count + 1, listSales: entry.listSales.add(listPriceOf(item.transaction)) });
       }
       perDay.push({ date: day.date, revenue: money(expected.totalRevenue), commissions: money(dayCommissions) });
     }

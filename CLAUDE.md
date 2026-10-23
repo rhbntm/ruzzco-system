@@ -11,7 +11,7 @@ Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). T
 
 - Repo root: `docker-compose.yml` (MySQL 8, host port 3307, db `ruzzco_db`; `ml-service` on host port 8001), `web/` and `ml-service/`.
 - `web/`: Next.js 16.4.2 (App Router, Turbopack), React 19, Tailwind 4, Prisma 6 (MySQL), Dexie 4, Zod 4.
-- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npm run seed:demo` (placeholder demo data), `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation`, `npm run test:gateway` and `npm run test:payment-qr` (need the dev server; gateway: started with the gateway env vars; attribution T17 also needs `TEST_ADMIN_DATABASE_URL`, a MySQL user that can create a scratch database, e.g. the local Docker root), `npm run test:owner-unlock` (needs the dev server; at most 5 runs per 15 minutes, see the script), `npm run test:submit-lock`, `npm run test:pricing`, `npm run test:payload-compat`, `npm run test:qr-cache`, `npm run test:pin-attempts`, `npm run test:sync-queue`, `npm run test:qrph-policy`, `npm run test:insights-story`, `npm run test:local-name` (`-- --live` also needs `npm run https` and the app); `npm run test:qrph-charge` needs MySQL only; `npm run test:api-errors`, `npm run test:sync-clock`, `npm run test:time-review` and `npm run test:ledger-summary` need the dev server.
+- Run from `web/`: `npm run dev`, `npm run lint`, `npm run build`, `npm run start`, `npm run seed:demo` (placeholder demo data), `npx prisma migrate deploy`, `npx prisma db seed`, `npm run test:attribution`, `npm run test:sync-rejections`, `npm run test:commission`, `npm run test:reconciliation`, `npm run test:gateway` and `npm run test:payment-qr` (need the dev server; gateway: started with the gateway env vars; attribution T17 also needs `TEST_ADMIN_DATABASE_URL`, a MySQL user that can create a scratch database, e.g. the local Docker root), `npm run test:owner-unlock` (needs the dev server; at most 5 runs per 15 minutes, see the script), `npm run test:submit-lock`, `npm run test:pricing`, `npm run test:payload-compat`, `npm run test:qr-cache`, `npm run test:pin-attempts`, `npm run test:sync-queue`, `npm run test:qrph-policy`, `npm run test:insights-story`, `npm run test:shift-log-pages`, `npm run test:local-name` (`-- --live` also needs `npm run https` and the app); `npm run test:qrph-charge` and `npm run test:seed` (runs the seed twice on the database) need MySQL only; `npm run test:api-errors`, `npm run test:sync-clock`, `npm run test:time-review` and `npm run test:ledger-summary` need the dev server.
 - `ml-service/` commands (train, tests, serving, forecast suites): see `ml-service/CLAUDE.md`, which loads when you work under `ml-service/`.
 - Root `.env` (copy `.env.example`) holds the MySQL passwords that Docker Compose reads; MySQL uses them only when its volume is first created. Never print, log, or commit them.
 - `web/.env` needs `DATABASE_URL` and `OWNER_PIN`; optional `ML_SERVICE_URL` (default `http://localhost:8001`); the optional QR Ph demo uses `PAYMENT_GATEWAY` (`off` default | `paymongo_test`), `PAYMONGO_SECRET_KEY` (must be `sk_test_`) and `PAYMONGO_WEBHOOK_SECRET`. Never print, log, or commit their values.
@@ -20,9 +20,9 @@ Users: Mart (owner) and barbers Bayani (full-time) and Vince (flexible shift). T
 
 Code must respect these. Don't build features from this list unless a slice spec asks for them. Reasoning lives in `../ruzzco-barbers` (`20_Decisions/`, `30_Meetings/`); link there, don't copy it here.
 
-- Haircut: fixed ₱200. Shave & Massage: ₱150. Other services vary in price.
+- Prices (price list, 2026-10-16): Men's haircut ₱250, Haircut + Shampoo ₱300, Shave / Facial / Massage ₱250, Hair coloring ₱500 (varies with color and hair length; a custom amount when it differs).
 - Commission: 50/50 between barber and owner. Commissions and payouts are snapshotted at transaction time, never recomputed from current rates.
-- No PWD or student discounts. Loyalty card: 50% off the 6th and 7th haircuts, then it resets.
+- No PWD or student discounts. Loyalty card: Mart signs 5 visits on a paper card; regular men's haircut 50% off (₱250 to ₱125). Which visit gets it: to confirm with Mart.
 - Digital payments (GCash/Maya) go to the barber's personal account.
 - Forecasting target: customers per day. Revenue is derived from it.
 - Business dates use Asia/Manila (UTC+8). Never derive them from UTC defaults.
@@ -39,6 +39,7 @@ Code must respect these. Don't build features from this list unless a slice spec
 - When writing files from Python or PowerShell, set UTF-8 explicitly (`encoding='utf-8'`, `-Encoding utf8`).
 - Never run `prisma db push`, `prisma migrate dev`, or `prisma migrate reset`. Never kill node processes outside this repo (the script only kills this repo's), never delete `.next` wholesale.
 - Schema changes are additive with defaults and committed as migrations in `web/prisma/migrations/` (baseline `0_init`). Write the SQL with `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script` (from Git Bash, to avoid a BOM), review it, apply with `npx prisma migrate deploy`. See README.
+- If dev pages reload in a loop ("HMR hash mismatch" in the console), stop the dev server and delete only web/.next/dev, then start it again; cause unknown, production server unaffected.
 
 ## Git
 
@@ -95,7 +96,7 @@ Unconfirmed. Keep as settings, do not hardcode: the discount base (list vs paid)
 
 Ledger decision (Brent, 2026-10-14): the ledger stays, with a read-only day/week/month summary (slice 10), following the advisor's 2026-10-12 request to add a cost summary; the advisor to confirm the meaning on 2026-10-19. This supersedes the 2026-09-28 request to remove it.
 
-Conflicts to resolve: the `demo-senior-pwd` demo row contradicts the no-PWD, loyalty-only discount rule (the POS button was removed 2026-10-02). The advisor (2026-09-28) asked to add a payment gateway (done as the QR Ph demo). Keep cash reconciliation either way.
+Conflicts to resolve: the advisor (2026-09-28) asked to add a payment gateway (done as the QR Ph demo). Keep cash reconciliation either way.
 
 ## Data caveats (ML)
 
@@ -106,7 +107,8 @@ In the Dec-Feb dataset, dates and cuts per day are real. The ₱100 per row is t
 - Offline opening needs the HTTPS gateway (`npm run https`) and the production server (`npm run start`): the service worker stores only `/pos` and `/shift-log`; owner pages and `/` are never stored. Phones on plain LAN HTTP still have the queue only, with the page kept open. Each address (`http://<IP>:3000`, `https://<IP>:3443`, `https://ruzzco.local:3443`) is its own origin with its own sales queue and binding. Concurrent identical binds can deadlock and return 500 (attribution T16.bind.1 is flaky).
 - Counter-station mode, attendance and roster, and inventory are not built.
 - The "Save payout" UX is unclear. The demo seed is placeholder data only.
-- Loyalty-card discounts are not built.
+- Request barber and VIP add-ons are not modelled (custom amount with a note); one service per sale.
 - Phone-local totals (shift log) are provisional: they include unsynced sales and sales the server holds for a date review. Server figures are authoritative.
 - A phone clock that was wrong when a sale was made and corrected before it synced is not detected: a past timestamp looks like an ordinary offline sale, and a future one is caught only while it is still in the future.
 - Forecast: no confidence intervals, no scheduled retraining, no per-barber or per-service forecasts. On the last 4 test weeks Random Forest did not beat the plain average on mean error; how the paper frames that is for the advisor.
+- `npm audit --omit=dev` (2026-10-23, after Next 16.4.2): two high advisories, no critical, neither reached by shop data. `deepmerge-ts` 7.1.5 (GHSA-ggr8-5vv4-36mx), via `@prisma/client` → `prisma` → `@prisma/config`, Prisma's CLI config loader (the client runtime and the built server don't load it): patched in 8.x, which only Prisma 7.10.1+ uses, and no Prisma 6 release does; not fixed because Prisma 7 is a major upgrade. `source-map-js` 1.2.1 (GHSA-68fv-2mgg-jv7q), via `next` → `postcss`, CSS source maps at build time: patched in 1.2.2, inside postcss's range, so a lockfile-only `npm audit fix` applies it; not fixed yet because dependency changes go in their own commit.

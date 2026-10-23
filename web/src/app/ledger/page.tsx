@@ -253,7 +253,11 @@ export default function LedgerPage() {
   );
 }
 
-const peso = (value: string) => `₱${Number(value).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// A negative amount (the discounts line) reads −₱125.00, not ₱-125.00.
+const peso = (value: string) => {
+  const amount = Number(value);
+  return `${amount < 0 ? "−" : ""}₱${Math.abs(amount).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 const shortDate = (iso: string) => new Intl.DateTimeFormat("en-PH", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
 
 // One figure on the summary: the label (and a note under it on phones), the amount on the right.
@@ -313,7 +317,7 @@ function SummarySection({ summary }: { summary: Summary }) {
           ) : (
             <>
               {summary.services.map((row) => <Line key={row.name} label={row.name} note={`${row.count} sold`} value={peso(row.listSales)} />)}
-              {Number(summary.serviceGap) !== 0 && <Line label="Discounts and custom amounts" value={peso(summary.serviceGap)} note="services are at list price, so they differ from total revenue" />}
+              {Number(summary.serviceGap) !== 0 && <Line label="Discounts" value={peso(summary.serviceGap)} note="services are at list price, so they differ from total revenue" />}
             </>
           )}
         </div>

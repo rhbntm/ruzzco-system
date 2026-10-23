@@ -27,6 +27,8 @@
     "test:qr-cache": "tsx scripts/test-qr-cache.ts",
     "test:qrph-charge": "tsx scripts/test-qrph-charge.ts",
     "test:qrph-policy": "tsx scripts/test-qrph-policy.ts",
+    "test:seed": "tsx scripts/test-seed.ts",
+    "test:shift-log-pages": "tsx scripts/test-shift-log-pages.ts",
     "test:reconciliation": "tsx scripts/test-reconciliation.ts",
     "test:submit-lock": "tsx scripts/test-submit-lock.ts",
     "test:time-review": "tsx scripts/test-time-review.ts",

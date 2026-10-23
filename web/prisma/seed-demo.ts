@@ -12,7 +12,7 @@ const DEMO_PREFIX = "demo-";
 const BAYANI_ID = "00000000-0000-0000-0000-000000000002";
 const VINCE_ID = "00000000-0000-0000-0000-000000000003"; // Mart doesn't cut hair (Mart and Bayani, Oct 2026)
 const HAIRCUT_ID = "10000000-0000-0000-0000-000000000001";
-const BEARD_ID = "10000000-0000-0000-0000-000000000002";
+const SHAVE_ID = "10000000-0000-0000-0000-000000000002"; // Shave / Facial / Massage
 
 type DemoTx = {
   id: string;
@@ -32,14 +32,15 @@ type DemoTx = {
 
 const DEMO_TRANSACTIONS: DemoTx[] = [
   {
-    id: "demo-senior-pwd",
+    // Loyalty card: 50% off a men's haircut. discountAmount is the pesos taken off.
+    id: "demo-loyalty",
     barberId: VINCE_ID,
     serviceId: HAIRCUT_ID,
     time: "09:30",
-    listPrice: 150,
+    listPrice: 250,
     discountType: "PERCENT",
-    discountAmount: 30,
-    amountPaid: 120,
+    discountAmount: 125,
+    amountPaid: 125,
     paymentMethod: "CASH",
   },
   {
@@ -47,8 +48,8 @@ const DEMO_TRANSACTIONS: DemoTx[] = [
     barberId: BAYANI_ID,
     serviceId: HAIRCUT_ID,
     time: "10:15",
-    listPrice: 150,
-    amountPaid: 150,
+    listPrice: 250,
+    amountPaid: 250,
     tipAmount: 50,
     paymentMethod: "CASH",
   },
@@ -57,8 +58,8 @@ const DEMO_TRANSACTIONS: DemoTx[] = [
     barberId: VINCE_ID,
     serviceId: HAIRCUT_ID,
     time: "11:00",
-    listPrice: 150,
-    amountPaid: 150,
+    listPrice: 250,
+    amountPaid: 250,
     paymentMethod: "MAYA",
     paymentReference: "DEMO-MAYA-0001",
   },
@@ -67,19 +68,19 @@ const DEMO_TRANSACTIONS: DemoTx[] = [
     barberId: BAYANI_ID,
     serviceId: HAIRCUT_ID,
     time: "13:20",
-    listPrice: 300, // custom amount: list price equals the entered amount
-    amountPaid: 300,
+    listPrice: 350, // custom amount: list price equals the entered amount
+    amountPaid: 350,
     customAmount: true,
-    customAmountNote: "Demo custom amount",
+    customAmountNote: "Request barber",
     paymentMethod: "CASH",
   },
   {
     id: "demo-gcash",
     barberId: VINCE_ID,
-    serviceId: BEARD_ID,
+    serviceId: SHAVE_ID,
     time: "14:45",
-    listPrice: 100,
-    amountPaid: 100,
+    listPrice: 250,
+    amountPaid: 250,
     paymentMethod: "GCASH",
     paymentReference: "DEMO-GCASH-0001",
   },
@@ -104,7 +105,7 @@ async function seed() {
     select: { id: true, commissionRate: true },
   });
   const rateByBarber = new Map(barbers.map((b) => [b.id, b.commissionRate]));
-  const services = await prisma.service.count({ where: { id: { in: [HAIRCUT_ID, BEARD_ID] } } });
+  const services = await prisma.service.count({ where: { id: { in: [HAIRCUT_ID, SHAVE_ID] } } });
   if (rateByBarber.size !== 2 || services !== 2) {
     throw new Error("Seeded barbers or services are missing. Run `npx prisma db seed` first.");
   }

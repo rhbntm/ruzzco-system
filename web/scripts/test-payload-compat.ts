@@ -123,6 +123,45 @@ expectParses(
   { customAmount: true, customAmountNote: "POS custom amount", listPrice: 123.46 }
 );
 
+console.log("\nSlice 13: loyalty and the custom-amount note");
+
+expectParses(
+  "Loyalty haircut (PERCENT, ₱125 off a ₱250 list price)",
+  {
+    id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 125,
+    listPrice: 250, discountType: "PERCENT", discountAmount: 125, amountPaid: 125, tipAmount: 50,
+    customAmount: false, customAmountNote: null, paymentMethod: "CASH", paymentReference: null,
+    transactionTime: time, deviceKey: ids.device, assignmentId: ids.assignment,
+  },
+  { discountType: "PERCENT", discountAmount: 125, listPrice: 250, amountPaid: 125, tipAmount: 50 }
+);
+
+expectParses(
+  "Custom amount with the barber's note",
+  {
+    id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 350,
+    listPrice: 350, amountPaid: 350, customAmount: true, customAmountNote: "Request barber",
+    paymentMethod: "GCASH", transactionTime: time, deviceKey: ids.device, assignmentId: ids.assignment,
+  },
+  { customAmount: true, customAmountNote: "Request barber" }
+);
+
+expectParses(
+  "A 255-character note (the column's size) parses unchanged",
+  { id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 300, customAmount: true, customAmountNote: "n".repeat(255), transactionTime: time },
+  { customAmountNote: "n".repeat(255) }
+);
+
+{
+  const result = syncTransactionItemSchema.safeParse({
+    id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 300,
+    customAmount: true, customAmountNote: "n".repeat(256), transactionTime: time,
+  });
+  const message = result.success ? "" : result.error.issues.map((i) => i.message).join("; ");
+  check("a 256-character note is refused, not cut", !result.success, "parsed but should not");
+  check("…with a message that names the note and the limit", /note.*255/i.test(message), message);
+}
+
 console.log("\nFields the server must not take from the client");
 
 {

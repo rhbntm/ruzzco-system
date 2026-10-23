@@ -1391,6 +1391,11 @@ body {
   .rz-dialog {
     width: 100%;
     max-width: 24rem;
+    /* A tall dialog (the GCash/Maya step with a sale summary on a short phone) scrolls inside
+       the overlay instead of losing its top edge above the screen. */
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background-color: var(--color-panel);
     border: 1px solid var(--color-seam-strong);
     border-radius: 18px;

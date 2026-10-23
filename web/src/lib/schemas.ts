@@ -25,7 +25,8 @@ export const syncTransactionItemSchema = z.object({
   amountPaid: z.number().positive().max(MONEY_MAX).optional(),
   tipAmount: z.number().nonnegative().max(MONEY_MAX).default(0),
   customAmount: z.boolean().default(false),
-  customAmountNote: z.string().max(255).nullable().optional(),
+  // The column holds 255; a longer note is refused (INVALID), never cut. The POS allows 100.
+  customAmountNote: z.string().max(255, "customAmountNote is longer than 255 characters").nullable().optional(),
   // QRPH is gateway-only. The client never sends a payment status: the server stores QRPH
   // sales as PENDING and every other method as PAID (unknown keys are stripped).
   paymentMethod: z.enum(["CASH", "GCASH", "MAYA", "QRPH"]).default("CASH"),

@@ -31,6 +31,7 @@ const BARBERS = {
   I: { id: `test-com-I-${RUN}`, rate: 0.3, active: true }, // deactivated after its sale syncs
   J: { id: `test-com-J-${RUN}`, rate: 0.35, active: true }, // deactivated before its sale syncs
   N: { id: `test-com-N-${RUN}`, rate: 0.25, active: false }, // inactive, no sales
+  L: { id: `test-com-L-${RUN}`, rate: 0.5, active: true }, // one loyalty haircut (slice 13)
 };
 
 const txIds: string[] = [];
@@ -228,6 +229,18 @@ async function main() {
     if (!row) continue;
     check(`C13: ${b.id.split("-")[2]} ledger ${row.commissionTotal} = sum of sale snapshots ${sum.toFixed(2)}`, row.commissionTotal === sum.toFixed(2));
   }
+
+  console.log("\nC17 loyalty haircut (slice 13): list ₱250, ₱125 off, paid ₱125, the shop absorbs the discount");
+  const sL = sale({ barberId: BARBERS.L.id, time: "15:00", list: 250, paid: 125, discountType: "PERCENT", discountAmount: 125, tipAmount: 50 });
+  res = await sync([sL]);
+  check("C17: loyalty sale accepted", res.body.syncedIds.includes(sL.id) && res.body.rejected.length === 0, JSON.stringify(res.body));
+  tx = await stored(sL.id);
+  check("C17: stored as list 250, PERCENT 125 off, paid 125", eq(tx?.listPrice, "250") && tx?.discountType === "PERCENT" && eq(tx?.discountAmount, "125") && eq(tx?.amountPaid, "125"));
+  check("C17: barber's commission snapshot is ₱125 (50% of the list price)", eq(tx?.barberCommissionAmount, "125.00") && tx?.commissionBase === "LIST_PRICE");
+  const rowList = rowFor(await ledger("LIST_PRICE"), BARBERS.L.id);
+  check("C17: List price view owes ₱125 commission + ₱50 tip", rowList?.commissionTotal === "125.00" && rowList?.tipTotal === "50.00", JSON.stringify(rowList));
+  const rowPaid = rowFor(await ledger("AMOUNT_PAID"), BARBERS.L.id);
+  check("C17: Amount paid view gives ₱62.50 commission", rowPaid?.commissionTotal === "62.50", JSON.stringify(rowPaid));
 
   console.log("\nC16 schema: commission_rate is required and never null");
   const [col] = await prisma.$queryRaw<{ nullable: string }[]>`

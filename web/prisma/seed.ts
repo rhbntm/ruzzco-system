@@ -1,4 +1,5 @@
 import { PrismaClient, Role } from "@prisma/client";
+import { SERVICE_CATALOG } from "../src/lib/catalog";
 
 const prisma = new PrismaClient();
 
@@ -53,34 +54,24 @@ async function main() {
     },
   });
 
-  // 3. Seed Core Services (prices from the logbook and 2026-09-25 interview).
-  // `update` sets the price too, so re-seeding an existing DB picks it up.
-  const haircut = await prisma.service.upsert({
-    where: { id: "10000000-0000-0000-0000-000000000001" },
-    update: { standardPrice: 200.00 },
-    create: {
-      id: "10000000-0000-0000-0000-000000000001",
-      name: "Haircut",
-      standardPrice: 200.00,
-      isActive: true,
-    },
-  });
-
-  const shaveMassage = await prisma.service.upsert({
-    where: { id: "10000000-0000-0000-0000-000000000002" },
-    update: { name: "Shave & Massage", standardPrice: 150.00 },
-    create: {
-      id: "10000000-0000-0000-0000-000000000002",
-      name: "Shave & Massage",
-      standardPrice: 150.00,
-      isActive: true,
-    },
-  });
+  // 3. Seed Core Services: the shop's price list (src/lib/catalog.ts, slice 13).
+  // `update` sets the name and the price, so re-seeding an existing DB picks up both. Past
+  // sales keep the prices and commissions they were stored with.
+  const services = [];
+  for (const service of SERVICE_CATALOG) {
+    services.push(
+      await prisma.service.upsert({
+        where: { id: service.id },
+        update: { name: service.name, standardPrice: service.standardPrice, isActive: true },
+        create: { id: service.id, name: service.name, standardPrice: service.standardPrice, isActive: true },
+      })
+    );
+  }
 
   console.log("✅ Seed completed successfully!");
   console.log(`- Owner: ${owner.name} (${owner.email})`);
   console.log(`- Barbers: ${bayaniBarber.fullName}, ${vince.fullName} (${mart.fullName}: ${mart.isActive ? "active" : "inactive"})`);
-  console.log(`- Services: ${haircut.name} (₱${haircut.standardPrice}), ${shaveMassage.name} (₱${shaveMassage.standardPrice})`);
+  console.log(`- Services: ${services.map((s) => `${s.name} (₱${s.standardPrice})`).join(", ")}`);
 }
 
 main()

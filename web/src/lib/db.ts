@@ -1,4 +1,5 @@
 import Dexie, { type Table } from "dexie";
+import { SERVICE_CATALOG } from "./catalog";
 
 export interface LocalTransaction {
   id: string; // UUIDv4
@@ -163,20 +164,8 @@ export const DEFAULT_BARBERS: CachedBarber[] = [
   },
 ];
 
-export const DEFAULT_SERVICES: CachedService[] = [
-  {
-    id: "10000000-0000-0000-0000-000000000001",
-    name: "Haircut",
-    standardPrice: 200,
-    isActive: true,
-  },
-  {
-    id: "10000000-0000-0000-0000-000000000002",
-    name: "Shave & Massage",
-    standardPrice: 150,
-    isActive: true,
-  },
-];
+// Same ids, names, prices and order as the seed: both come from the price list in catalog.ts.
+export const DEFAULT_SERVICES: CachedService[] = SERVICE_CATALOG.map((service) => ({ ...service, isActive: true }));
 
 /**
  * Initializes IndexedDB catalog caches with fallback defaults if empty.
