@@ -11,6 +11,7 @@ export const METHOD_NAMES: Record<string, string> = {
   naive: "Repeat the last open day's count",
   linear: "Straight-line model (linear regression)",
   gboost: "Gradient boosting model",
+  tree: "Single decision tree",
   random_forest: "Random Forest",
   random_forest_last7: "Random Forest + last-7 input",
 };
@@ -18,11 +19,12 @@ export const METHOD_NAMES: Record<string, string> = {
 // Groups in display order (slice 9 Decision 2).
 const GROUPS: { title: string; methods: string[] }[] = [
   { title: "Simple guesses", methods: ["average", "weekday", "last7", "naive"] },
-  { title: "Other models", methods: ["linear", "gboost"] },
+  { title: "Other models", methods: ["linear", "gboost", "tree"] },
   { title: "Random Forest", methods: ["random_forest", "random_forest_last7"] },
 ];
 
-export type ComparisonRow = { method: string; name: string; mean: number; spread: number | null; served: boolean };
+// rmse (slice 12) is null on runs saved before it.
+export type ComparisonRow = { method: string; name: string; mean: number; spread: number | null; rmse: number | null; served: boolean };
 export type ComparisonGroup = { title: string; rows: ComparisonRow[] };
 export type ComparisonView = { basisLine: string; groups: ComparisonGroup[] };
 
@@ -46,6 +48,7 @@ export function buildComparisonView(
         name: METHOD_NAMES[method],
         mean: comparison.mean[method],
         spread: method in comparison.spread ? comparison.spread[method] : null,
+        rmse: comparison.rmse && method in comparison.rmse ? comparison.rmse[method] : null,
         served: method === comparison.served,
       })),
   })).filter((group) => group.rows.length > 0);
@@ -61,14 +64,15 @@ export const METHOD_NOTES: Record<string, string> = {
   naive: "Guesses that today will look like the last open day.",
   linear: "A straight-line model fitted on the calendar features. Shown for comparison only.",
   gboost: "A gradient boosting model on the same calendar features. Shown for comparison only.",
+  tree: "One decision tree on the same calendar features. Random Forest averages many of these. Shown for comparison only.",
   random_forest: "Many decision trees that vote, using the calendar features (weekday, payday, month and so on).",
   random_forest_last7: "The same Random Forest, plus the average of the last 7 open days as an extra input.",
 };
 
 // Methods that are shown for comparison only and never become the best simple method.
-export const COMPARISON_ONLY = new Set(["linear", "gboost"]);
+export const COMPARISON_ONLY = new Set(["linear", "gboost", "tree"]);
 
-export type RankedRow = { method: string; name: string; mean: number; served: boolean; note: string };
+export type RankedRow = { method: string; name: string; mean: number; rmse: number | null; served: boolean; note: string };
 export type WeekRow = { label: string; mae: Record<string, number> };
 export type ReportView = {
   basisLine: string;
@@ -89,7 +93,7 @@ export function buildReportView(
   const rows = base.groups.flatMap((g) => g.rows);
   const ranked = [...rows]
     .sort((a, b) => a.mean - b.mean)
-    .map((r) => ({ method: r.method, name: r.name, mean: r.mean, served: r.served, note: METHOD_NOTES[r.method] ?? "" }));
+    .map((r) => ({ method: r.method, name: r.name, mean: r.mean, rmse: r.rmse, served: r.served, note: METHOD_NOTES[r.method] ?? "" }));
   const methodsInTable = rows.map((r) => r.method);
   const weeks = comparison.weeks
     ? comparison.weeks.map((w) => ({ label: `${formatDate(w.start)} to ${formatDate(w.end)}`, mae: w.mae }))

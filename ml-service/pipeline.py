@@ -7,11 +7,13 @@ docs/slices/slice-8.md section 2. Nothing here reads POS transactions.
 
 import calendar
 import datetime as dt
+import math
 import statistics
 
 import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
 
 # Advisor guidance 2026-10-05: train only on the logbook from this date on (post-gap).
 POST_GAP_START = pd.Timestamp("2026-07-13")
@@ -75,7 +77,9 @@ def build_daily_table(entries, day_check):
 
     Decision 1: open days count their Entries rows, closed days are 0, "No page found" days
     are blank (missing, never 0), and only open days are used for training. Fails loudly,
-    naming the dates, when the two sheets disagree inside that range.
+    naming the dates, when the two sheets disagree inside that range. Slice 12 Decision 1:
+    Entries dates after that range are checked too; only a "Not yet encoded" day may have
+    rows there (they are left out, see entries_left_out).
     """
     check = day_check[day_check["date"] >= POST_GAP_START]
     open_dates = check.loc[check["status"] == "Has entries", "date"]
@@ -85,8 +89,9 @@ def build_daily_table(entries, day_check):
 
     dates = pd.date_range(POST_GAP_START, data_to, freq="D")
     status_by_date = check.set_index("date")["status"]
-    in_range = entries[(entries["date"] >= POST_GAP_START) & (entries["date"] <= data_to)]
-    rows_by_date = in_range.groupby("date").size()
+    rows_by_date = entries[entries["date"] >= POST_GAP_START].groupby("date").size()
+    # Dates after data_to that have Entries rows (slice 12 Decision 1).
+    later = rows_by_date.index[rows_by_date.index > data_to]
 
     problems = []
 
@@ -96,14 +101,20 @@ def build_daily_table(entries, day_check):
 
     statuses = status_by_date.reindex(dates)
     rows = rows_by_date.reindex(dates, fill_value=0)
+    # Every date with Entries rows, inside the range or after it.
+    with_rows = dates[(rows > 0).to_numpy()].union(later)
+    rows_status = status_by_date.reindex(with_rows)
+    # Inside the range every date is checked; after it, only the dates with Entries rows.
+    checked = dates.union(later)
+    checked_status = status_by_date.reindex(checked)
     problem("No Day_Check row", dates[statuses.isna().to_numpy()])
     problem("'Has entries' but no Entries rows", dates[((statuses == "Has entries") & (rows == 0)).to_numpy()])
-    problem("'Closed (written)' but has Entries rows", dates[((statuses == "Closed (written)") & (rows > 0)).to_numpy()])
-    problem("'No page found' but has Entries rows", dates[((statuses == "No page found") & (rows > 0)).to_numpy()])
+    problem("'Closed (written)' but has Entries rows", with_rows[(rows_status == "Closed (written)").to_numpy()])
+    problem("'No page found' but has Entries rows", with_rows[(rows_status == "No page found").to_numpy()])
     problem(f"'{NOT_YET_ENCODED}' on or before {data_to.date()}", dates[(statuses == NOT_YET_ENCODED).to_numpy()])
     known = set(STATUS_MEANING) | {NOT_YET_ENCODED}
-    problem("Unrecognised Day_Check status", dates[(statuses.notna() & ~statuses.isin(known)).to_numpy()])
-    problem("Entries date missing from Day_Check", rows_by_date.index.difference(status_by_date.index))
+    problem("Unrecognised Day_Check status", checked[(checked_status.notna() & ~checked_status.isin(known)).to_numpy()])
+    problem("Entries date missing from Day_Check", rows_by_date.index.difference(status_by_date.dropna().index))
     if problems:
         raise ValueError("Logbook check failed.\n" + "\n".join(problems))
 
@@ -116,6 +127,14 @@ def build_daily_table(entries, day_check):
         "use_for_training": (status == "open").to_numpy(),
     })
     return pd.concat([table, calendar_features(dates)], axis=1)
+
+
+def entries_left_out(entries, daily):
+    """Entries rows after the daily table's last date. build_daily_table allows them only on
+    "Not yet encoded" days (slice 12 Decision 1). Returns {"rows", "dates"}: how many were left out.
+    """
+    later = entries[entries["date"] > daily["date"].max()]
+    return {"rows": int(len(later)), "dates": int(later["date"].nunique())}
 
 
 def calendar_features(dates):
@@ -168,10 +187,11 @@ def average_ticket(entries, data_from, data_to):
     }
 
 
-# Slice 8 Decision 5. The dashboard claim is "beats the simple methods"; linear and gboost are
-# evidence for Chapter 3 ("why Random Forest") and never become best_baseline.
+# Slice 8 Decision 5. The dashboard claim is "beats the simple methods"; linear, gboost and
+# (slice 12 Decision 3) tree are evidence for Chapter 3 ("why Random Forest") and never become
+# best_baseline.
 SIMPLE_METHODS = ["average", "weekday", "last7", "naive"]
-EVIDENCE_METHODS = ["linear", "gboost"]
+EVIDENCE_METHODS = ["linear", "gboost", "tree"]
 METHODS = SIMPLE_METHODS + EVIDENCE_METHODS + ["random_forest", "random_forest_last7"]
 
 
@@ -180,9 +200,9 @@ def baseline_predictions(train, dates):
 
     average: mean customers over all training days. weekday: mean for that weekday, falling
     back to the overall average when the weekday has no training rows. last7: mean of the
-    last 7 training days. naive: customers of the last training day, repeated. linear and
-    gboost: scikit-learn models on the four calendar inputs, default settings. Returns a
-    DataFrame with one column per method.
+    last 7 training days. naive: customers of the last training day, repeated. linear,
+    gboost and tree (one decision tree, slice 12 Decision 3): scikit-learn models on the four
+    calendar inputs, default settings. Returns a DataFrame with one column per method.
     """
     train = train.sort_values("date")
     overall = train["customers"].astype(float).mean()
@@ -199,6 +219,7 @@ def baseline_predictions(train, dates):
         "naive": [naive] * len(weekdays),
         "linear": LinearRegression().fit(train[FEATURES], actual).predict(inputs[FEATURES]),
         "gboost": GradientBoostingRegressor(random_state=42).fit(train[FEATURES], actual).predict(inputs[FEATURES]),
+        "tree": DecisionTreeRegressor(random_state=42).fit(train[FEATURES], actual).predict(inputs[FEATURES]),
     })
 
 
@@ -245,10 +266,12 @@ def walk_forward(daily, weeks=4, block_days=7, test_from=None):
     open days. Score = mean absolute error (MAE) in customers per day. With `test_from`
     (slice 8 Decision 3) only blocks starting on or after that date are used; if none fit,
     the result has no weeks and no best baseline. Returns per-week results (oldest first),
-    the mean MAE per method, the best simple method (lowest mean; linear and gboost never
+    the mean MAE per method, the best simple method (lowest mean; the evidence methods never
     count), and the number of weeks Random Forest beat it (Decision 6: no tuning here;
     slice 8 Decision 7). spread is the sample standard deviation of each method's weekly
-    MAEs: how much the error moves from one test week to the next.
+    MAEs: how much the error moves from one test week to the next. Slice 12 Decision 2: each
+    week also has the root mean squared error (RMSE) from the same guesses and scored days,
+    and `rmse` is the mean of the weekly RMSEs. MAE alone picks best_baseline and weeks won.
     """
     data_to = daily["date"].max()
     training_rows = daily[daily["use_for_training"]]
@@ -271,24 +294,28 @@ def walk_forward(daily, weeks=4, block_days=7, test_from=None):
         test_last7 = test.assign(last7_mean=last7_at(train, start))
         guesses["random_forest_last7"] = _fit_random_forest(train_last7, FEATURES_LAST7).predict(test_last7[FEATURES_LAST7])
         actual = test["customers"].astype(float).to_numpy()
+        errors = {m: guesses[m].to_numpy() - actual for m in METHODS}
         results.append({
             "start": start,
             "end": end,
             "train_to": train["date"].max(),
             "scored_dates": list(test["date"]),
             "days": len(test),
-            "mae": {m: float(abs(guesses[m].to_numpy() - actual).mean()) for m in METHODS},
+            "mae": {m: float(abs(e).mean()) for m, e in errors.items()},
+            "rmse": {m: math.sqrt(float((e ** 2).mean())) for m, e in errors.items()},
         })
 
     if not results:
-        return {"weeks": [], "mean": {}, "spread": {}, "best_baseline": None, "weeks_rf_won": 0, "weeks_tested": 0}
+        return {"weeks": [], "mean": {}, "spread": {}, "rmse": {}, "best_baseline": None, "weeks_rf_won": 0, "weeks_tested": 0}
     mean = {m: sum(w["mae"][m] for w in results) / len(results) for m in METHODS}
     spread = {m: statistics.stdev(w["mae"][m] for w in results) if len(results) > 1 else 0.0 for m in METHODS}
+    rmse = {m: sum(w["rmse"][m] for w in results) / len(results) for m in METHODS}
     best = min(SIMPLE_METHODS, key=lambda m: mean[m])
     return {
         "weeks": results,
         "mean": mean,
         "spread": spread,
+        "rmse": rmse,
         "best_baseline": best,
         "weeks_rf_won": sum(w["mae"]["random_forest"] < w["mae"][best] for w in results),
         "weeks_tested": len(results),

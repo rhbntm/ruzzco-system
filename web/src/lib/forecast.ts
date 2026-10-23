@@ -23,8 +23,19 @@ export const comparisonSchema = z
     served: z.string().min(1),
     mean: z.record(z.string(), nonNegative),
     spread: z.record(z.string(), nonNegative),
+    // Slice 12: the mean of each method's weekly RMSE, next to its MAE. Absent on runs saved before it.
+    rmse: z.record(z.string(), nonNegative).optional(),
     // Slice 10: each tested week's error per method, oldest first. Absent on runs saved before it.
-    weeks: z.array(z.object({ start: isoDate, end: isoDate, mae: z.record(z.string(), nonNegative) })).optional(),
+    weeks: z
+      .array(
+        z.object({
+          start: isoDate,
+          end: isoDate,
+          mae: z.record(z.string(), nonNegative),
+          rmse: z.record(z.string(), nonNegative).optional(), // slice 12
+        })
+      )
+      .optional(),
   })
   .refine((c) => c.served in c.mean, "served method must have a mean error");
 

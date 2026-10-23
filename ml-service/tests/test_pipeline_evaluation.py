@@ -72,6 +72,57 @@ def test_spread_is_the_standard_deviation_of_the_weekly_errors():
         assert result["spread"][method] == pytest.approx(statistics.stdev(weekly))
 
 
+# Slice 12 Decision 2: RMSE next to MAE, from the same guesses and the same scored days.
+def test_weekly_rmse_on_known_errors():
+    # Train on a flat 5; then three open test days at 6, 6 and 9: the average guesses 5 every
+    # day, so its errors are 1, 1 and 4. MAE = 2, RMSE = sqrt((1 + 1 + 16) / 3) = sqrt(6).
+    test_days = {pd.Timestamp("2026-09-19"): 6, pd.Timestamp("2026-09-20"): 6, pd.Timestamp("2026-09-21"): 9}
+    daily = make_daily(
+        "2026-07-13", "2026-09-25",
+        customers=lambda d: test_days.get(d, 5),
+        closed=["2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25"],
+    )
+    result = pipeline.walk_forward(daily, weeks=1)
+    week = result["weeks"][0]
+    assert week["days"] == 3
+    assert week["mae"]["average"] == pytest.approx(2)
+    assert week["rmse"]["average"] == pytest.approx(6 ** 0.5)
+    assert result["rmse"]["average"] == pytest.approx(6 ** 0.5)
+
+
+def test_rmse_is_never_below_mae_and_its_mean_is_the_mean_of_the_weeks():
+    result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 3 + d.dayofweek + d.day % 4))
+    for method in pipeline.METHODS:
+        for week in result["weeks"]:
+            assert week["rmse"][method] >= week["mae"][method] - 1e-12
+        weekly = [w["rmse"][method] for w in result["weeks"]]
+        assert result["rmse"][method] == pytest.approx(sum(weekly) / len(weekly))
+
+
+def test_rmse_does_not_change_best_baseline_or_weeks_won():
+    result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 3 + d.dayofweek + d.day % 4))
+    best = min(pipeline.SIMPLE_METHODS, key=lambda m: result["mean"][m])
+    assert result["best_baseline"] == best
+    assert result["weeks_rf_won"] == sum(w["mae"]["random_forest"] < w["mae"][best] for w in result["weeks"])
+
+
+# Slice 12 Decision 3: the single decision tree is an evidence method.
+def test_tree_is_an_evidence_method_in_every_week():
+    assert "tree" in pipeline.METHODS and "tree" in pipeline.EVIDENCE_METHODS
+    assert "tree" not in pipeline.SIMPLE_METHODS
+    result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 3 + d.dayofweek))
+    assert all("tree" in w["mae"] and "tree" in w["rmse"] for w in result["weeks"])
+
+
+def test_tree_never_becomes_best_baseline_nor_counts_in_weeks_won():
+    # A day-of-month pattern: a tree on the calendar inputs learns it exactly; no simple method can.
+    result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 2 + d.day % 5))
+    best = result["best_baseline"]
+    assert result["mean"]["tree"] < result["mean"][best]
+    assert best in pipeline.SIMPLE_METHODS
+    assert result["weeks_rf_won"] == sum(w["mae"]["random_forest"] < w["mae"][best] for w in result["weeks"])
+
+
 def test_constant_series_has_no_spread():
     result = pipeline.walk_forward(make_daily("2026-07-13", "2026-09-25", customers=lambda d: 6))
     for method in pipeline.SIMPLE_METHODS:

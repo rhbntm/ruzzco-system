@@ -4,7 +4,8 @@
  *
  *   npm run test:forecast-comparison
  */
-import { METHOD_NAMES, METHOD_NOTES, buildComparisonView, buildReportView } from "../src/lib/forecast-comparison";
+import { COMPARISON_ONLY, METHOD_NAMES, METHOD_NOTES, buildComparisonView, buildReportView } from "../src/lib/forecast-comparison";
+import { forecastChart } from "../src/lib/forecast-chart";
 import type { Comparison } from "../src/lib/forecast";
 
 let passed = 0;
@@ -20,7 +21,7 @@ function check(name: string, ok: boolean, detail = "") {
   }
 }
 
-const ALL = ["average", "weekday", "last7", "naive", "linear", "gboost", "random_forest", "random_forest_last7"];
+const ALL = ["average", "weekday", "last7", "naive", "linear", "gboost", "tree", "random_forest", "random_forest_last7"];
 
 function make(change: Partial<Comparison> = {}, methods = ALL): Comparison {
   return {
@@ -39,7 +40,7 @@ console.log("Groups and order");
 const view = buildComparisonView(make(), date)!;
 check("three groups in the agreed order", view.groups.map((g) => g.title).join("|") === "Simple guesses|Other models|Random Forest");
 check("simple methods in order", view.groups[0].rows.map((r) => r.method).join() === "average,weekday,last7,naive");
-check("other models are linear and gboost", view.groups[1].rows.map((r) => r.method).join() === "linear,gboost");
+check("other models are linear, gboost and tree", view.groups[1].rows.map((r) => r.method).join() === "linear,gboost,tree");
 check("Random Forest group has both variants", view.groups[2].rows.map((r) => r.method).join() === "random_forest,random_forest_last7");
 check("rows carry mean and spread", view.groups[0].rows[1].mean === 1.1 && view.groups[0].rows[1].spread === 0.6);
 check("every shown method has a plain name", view.groups.every((g) => g.rows.every((r) => r.name === METHOD_NAMES[r.method] && r.name.length > 0)));
@@ -88,6 +89,56 @@ check("spread is carried for the swing row", report.spread.average === 0.5);
 const old = buildReportView(make(), date)!;
 check("a run saved without weeks has no week rows but still ranks", old.weeks === null && old.ranked.length === ALL.length);
 check("nothing saved gives no report", buildReportView(null, date) === null);
+
+console.log("\nRMSE and the decision tree (slice 12)");
+const oldRun = make({}, ALL.filter((m) => m !== "tree")); // saved before slice 12: no rmse, no tree
+const oldView = buildComparisonView(oldRun, date)!;
+check("an old run renders without the tree", oldView.groups[1].rows.map((r) => r.method).join() === "linear,gboost");
+check("an old run has no RMSE (shown as —)", oldView.groups.every((g) => g.rows.every((r) => r.rmse === null)));
+const oldReport = buildReportView(oldRun, date)!;
+check("an old run still ranks, with null RMSE", oldReport.ranked.length === ALL.length - 1 && oldReport.ranked.every((r) => r.rmse === null));
+const rmse = Object.fromEntries(ALL.map((m, i) => [m, 2 + i / 10]));
+const newView = buildComparisonView(make({ rmse }), date)!;
+check("rows carry RMSE next to MAE", newView.groups.flatMap((g) => g.rows).every((r) => r.rmse === rmse[r.method]));
+check(
+  "RMSE does not change the MAE ranking",
+  buildReportView(make({ rmse }), date)!.ranked.map((r) => r.method).join() === report.ranked.map((r) => r.method).join()
+);
+const partial = buildComparisonView(make({ rmse: { random_forest: 4 } }), date)!.groups.flatMap((g) => g.rows);
+check(
+  "a method missing from rmse shows null",
+  partial.find((r) => r.method === "average")?.rmse === null && partial.find((r) => r.method === "random_forest")?.rmse === 4
+);
+check("the tree has its plain name", METHOD_NAMES.tree === "Single decision tree");
+check("the tree is for comparison only", COMPARISON_ONLY.has("tree") && COMPARISON_ONLY.has("linear") && COMPARISON_ONLY.has("gboost"));
+check(
+  "the tree has its note",
+  METHOD_NOTES.tree === "One decision tree on the same calendar features. Random Forest averages many of these. Shown for comparison only."
+);
+
+console.log("\nForecast chart (slice 12)");
+const week = ["2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"].map((d, i) => ({
+  date: d,
+  customers: i === 3 ? null : 10 + i / 2,
+  revenue: (2000 + i * 100).toFixed(2),
+}));
+const chart = forecastChart([...week].reverse());
+check("seven columns, oldest first", chart.columns.length === 7 && chart.columns[0].key === "2026-10-27" && chart.columns[6].key === "2026-11-02");
+check("axis label is the short weekday", chart.columns[0].axisLabel === "Tue" && chart.columns[4].axisLabel === "Sat");
+check("label is weekday, month and day", chart.columns[0].label === "Tue, Oct 27");
+check("value is the expected customers", chart.columns[0].value === 10 && chart.columns[1].value === 10.5);
+check("valueText has one decimal", chart.columns[1].valueText === "10.5 customers");
+check("detail is revenue in pesos with two decimals", chart.columns[0].detail === "₱2,000.00 expected revenue");
+check("a null day is a zero-height column with —", chart.columns[3].value === 0 && chart.columns[3].valueText === "—");
+check(
+  "summary names the range and the busiest day",
+  chart.summary === "Expected customers per day, Tue, Oct 27 to Mon, Nov 2. Busiest day: Mon, Nov 2, 13.0 customers.",
+  chart.summary
+);
+check("no emphasised column", chart.columns.every((c) => !("emphasis" in c)));
+const allNull = forecastChart(week.map((d) => ({ ...d, customers: null })));
+check("all days null: no busiest day, still seven columns", allNull.columns.length === 7 && !allNull.summary.includes("Busiest"));
+check("no days gives no columns", forecastChart([]).columns.length === 0);
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

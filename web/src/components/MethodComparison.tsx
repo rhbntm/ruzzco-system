@@ -27,22 +27,23 @@ export function MethodComparison({ run }: { run: NonNullable<SerializedForecast[
           <p className="text-xs text-dust leading-relaxed max-w-prose">
             Each method guessed how many customers came on each day of weeks it had not seen. The number is how far off it was, on
             average, in customers per day. <span className="text-bone font-semibold">Lower is better.</span> “Week-to-week swing” is
-            how much that changed from one week to the next; smaller means steadier.
+            how much that changed from one week to the next; smaller means steadier. RMSE is larger when a method sometimes misses by a lot.
           </p>
           <p className="text-xs font-semibold text-brass-bright">{view.basisLine}</p>
           {view.groups.map((group) => (
             <div key={group.title} className="space-y-1.5">
               <p className="rz-label">{group.title}</p>
               <div className="rz-well overflow-hidden divide-y divide-seam tabular-nums">
-                <div className="hidden sm:grid grid-cols-[1fr_9rem_9rem] gap-2 px-3 py-2 text-[0.6875rem] font-semibold text-dust uppercase tracking-[0.08em]">
+                <div className="hidden sm:grid grid-cols-[1fr_8rem_8rem_8rem] gap-2 px-3 py-2 text-[0.6875rem] font-semibold text-dust uppercase tracking-[0.08em]">
                   <span>Method</span>
-                  <span className="text-right">Off by (customers a day)</span>
+                  <span className="text-right">Typical miss (MAE)</span>
+                  <span className="text-right">Penalises big misses (RMSE)</span>
                   <span className="text-right">Week-to-week swing</span>
                 </div>
                 {group.rows.map((row) => (
                   <div
                     key={row.method}
-                    className={`px-3 py-2.5 sm:grid sm:grid-cols-[1fr_9rem_9rem] sm:gap-2 sm:items-center text-sm transition-colors duration-150 ${
+                    className={`px-3 py-2.5 sm:grid sm:grid-cols-[1fr_8rem_8rem_8rem] sm:gap-2 sm:items-center text-sm transition-colors duration-150 ${
                       row.served ? "bg-crimson/12 shadow-[inset_0_0_0_1px_rgb(218_44_53/0.45)]" : "hover:bg-white/2.5"
                     }`}
                   >
@@ -51,8 +52,12 @@ export function MethodComparison({ run }: { run: NonNullable<SerializedForecast[
                       {row.served && <span className="ml-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-crimson-ink">Used for this forecast</span>}
                     </div>
                     <div className="flex justify-between sm:block sm:text-right text-bone font-semibold">
-                      <span className="sm:hidden text-xs font-normal text-dust">Off by</span>
+                      <span className="sm:hidden text-xs font-normal text-dust">Typical miss (MAE)</span>
                       {row.mean.toFixed(2)}
+                    </div>
+                    <div className="flex justify-between sm:block sm:text-right text-bone-2">
+                      <span className="sm:hidden text-xs text-dust">Penalises big misses (RMSE)</span>
+                      {row.rmse === null ? "—" : row.rmse.toFixed(2)}
                     </div>
                     <div className="flex justify-between sm:block sm:text-right text-bone-2">
                       <span className="sm:hidden text-xs text-dust">Week-to-week swing</span>

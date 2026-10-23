@@ -89,6 +89,61 @@ def test_fails_not_yet_encoded_inside_range():
     check_fails(entries, day_check, "Not yet encoded' on or before 2026-07-16: 2026-07-15")
 
 
+# Slice 12 Decision 1: Entries dates after data_to (the last "Has entries" day, 2026-07-16 here).
+def test_fails_entries_after_data_to_without_day_check_row():
+    entries, day_check = three_day_logbook()
+    entries = pd.concat([entries, make_entries([("2026-07-20", 200)])])
+    check_fails(entries, day_check, "Entries date missing from Day_Check: 2026-07-20")
+
+
+def test_fails_entries_after_data_to_with_blank_status():
+    entries, day_check = three_day_logbook()
+    entries = pd.concat([entries, make_entries([("2026-07-20", 200)])])
+    day_check = pd.concat([day_check, make_day_check({"2026-07-20": None})])
+    check_fails(entries, day_check, "Entries date missing from Day_Check: 2026-07-20")
+
+
+def test_fails_closed_with_rows_after_data_to():
+    entries, day_check = three_day_logbook()
+    entries = pd.concat([entries, make_entries([("2026-07-18", 200)])])
+    day_check = pd.concat([day_check, make_day_check({"2026-07-18": "Closed (written)"})])
+    check_fails(entries, day_check, "Closed \\(written\\)' but has Entries rows: 2026-07-18")
+
+
+def test_fails_no_page_with_rows_after_data_to():
+    entries, day_check = three_day_logbook()
+    entries = pd.concat([entries, make_entries([("2026-07-18", 200)])])
+    day_check = pd.concat([day_check, make_day_check({"2026-07-18": "No page found"})])
+    check_fails(entries, day_check, "No page found' but has Entries rows: 2026-07-18")
+
+
+def test_fails_unrecognised_status_with_rows_after_data_to():
+    entries, day_check = three_day_logbook()
+    entries = pd.concat([entries, make_entries([("2026-07-18", 200)])])
+    day_check = pd.concat([day_check, make_day_check({"2026-07-18": "Half day"})])
+    check_fails(entries, day_check, "Unrecognised Day_Check status: 2026-07-18")
+
+
+def test_not_yet_encoded_rows_after_data_to_pass_and_are_left_out():
+    entries, day_check = three_day_logbook()
+    entries = pd.concat([entries, make_entries([("2026-07-18", 200), ("2026-07-18", 150), ("2026-07-19", 200)])])
+    day_check = pd.concat([day_check, make_day_check({
+        "2026-07-17": "Not yet encoded",
+        "2026-07-18": "Not yet encoded",
+        "2026-07-19": "Not yet encoded",
+    })])
+    table = pipeline.build_daily_table(entries, day_check)
+    assert table["date"].max() == D("2026-07-16")
+    assert int(table["customers"].sum()) == 3
+    assert pipeline.entries_left_out(entries, table) == {"rows": 3, "dates": 2}
+
+
+def test_nothing_left_out_when_entries_end_at_data_to():
+    entries, day_check = three_day_logbook()
+    table = pipeline.build_daily_table(entries, day_check)
+    assert pipeline.entries_left_out(entries, table) == {"rows": 0, "dates": 0}
+
+
 def test_load_workbook_drops_dateless_day_check_rows(tmp_path):
     path = tmp_path / "logbook.xlsx"
     with pd.ExcelWriter(path) as writer:

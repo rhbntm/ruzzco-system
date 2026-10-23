@@ -105,21 +105,34 @@ function RankedBars({ view }: { view: ReportView }) {
     <section className={card}>
       <h2 className={heading}>How the methods compare</h2>
       <p className="text-xs text-dust leading-relaxed max-w-prose">
-        Each method guessed customers per day for weeks it had not seen. The number is how far off it was, on average. A shorter bar is better.
+        Each method guessed customers per day for weeks it had not seen. The typical miss is how far off it was, on average; the bar shows it,
+        and a shorter bar is better. RMSE is larger when a method sometimes misses by a lot.
       </p>
+      <div aria-hidden="true" className="hidden sm:grid grid-cols-[1fr_8rem_8rem] gap-3 px-3 text-[0.6875rem] font-semibold text-dust uppercase tracking-[0.08em]">
+        <span>Method</span>
+        <span className="text-right">Typical miss (MAE)</span>
+        <span className="text-right">Penalises big misses (RMSE)</span>
+      </div>
       <ol className="space-y-1.5">
         {view.ranked.map((row) => (
           <li
             key={row.method}
             className={`rounded-[10px] px-3 py-2.5 ${row.served ? "bg-crimson/12 shadow-[inset_0_0_0_1px_rgb(218_44_53/0.45)]" : ""}`}
           >
-            <div className="flex items-baseline justify-between gap-3 text-sm">
+            <div className="sm:grid sm:grid-cols-[1fr_8rem_8rem] sm:gap-3 sm:items-baseline text-sm">
               <span className="text-bone">
                 {row.name}
                 {row.served && <span className="ml-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-crimson-ink">Used for this forecast</span>}
                 {COMPARISON_ONLY.has(row.method) && <span className="ml-2 text-[0.6875rem] uppercase tracking-wider text-dust">for comparison only</span>}
               </span>
-              <span className="font-semibold text-bone tabular-nums">{row.mean.toFixed(2)}</span>
+              <span className="mt-1 sm:mt-0 flex justify-between sm:block sm:text-right font-semibold text-bone tabular-nums">
+                <span className="sm:hidden text-xs font-normal text-dust">Typical miss (MAE)</span>
+                {row.mean.toFixed(2)}
+              </span>
+              <span className="flex justify-between sm:block sm:text-right text-bone-2 tabular-nums">
+                <span className="sm:hidden text-xs text-dust">Penalises big misses (RMSE)</span>
+                {row.rmse === null ? "—" : row.rmse.toFixed(2)}
+              </span>
             </div>
             <div className="mt-1.5 h-2 rounded-full bg-black/30 ring-1 ring-inset ring-seam overflow-hidden">
               <div
@@ -176,7 +189,7 @@ function WeekTable({ view }: { view: ReportView }) {
               </tr>
             </tfoot>
           </table>
-          <p className="mt-2 text-[0.6875rem] text-dust">Customers a day, lower is better. Linear and gradient boosting are for comparison only.</p>
+          <p className="mt-2 text-[0.6875rem] text-dust">Typical miss (MAE) in customers a day, lower is better. Linear, gradient boosting and the single decision tree are for comparison only.</p>
         </div>
       ) : (
         <p className="text-sm text-dust">Weekly detail was not saved with this forecast.</p>

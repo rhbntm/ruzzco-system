@@ -55,7 +55,7 @@ def test_forecast_seven_days(client):
         assert day["revenue"] == round(day["customers"] * body["avg_ticket"], 2)
     assert body["avg_ticket"] == TICKET
     assert body["training_days"] == 75
-    assert set(body["evaluation"]) == {"weeks_tested", "rf_mae", "best_baseline", "best_baseline_mae", "weeks_rf_won", "basis", "test_from"}
+    assert set(body["evaluation"]) == {"weeks_tested", "rf_mae", "rf_rmse", "best_baseline", "best_baseline_mae", "weeks_rf_won", "basis", "test_from"}
 
 
 def test_forecast_defaults_to_today_in_manila_and_seven_days(client):
@@ -79,9 +79,10 @@ def test_forecast_fourteen_days(client):
 def test_forecast_includes_the_saved_comparison(client):
     body = client.get("/forecast", params={"start": "2026-10-12", "days": 7}).json()
     comparison = body["comparison"]
-    assert set(comparison) == {"basis", "test_from", "served", "mean", "spread", "weeks"}
+    assert set(comparison) == {"basis", "test_from", "served", "mean", "spread", "rmse", "weeks"}
     assert comparison["served"] == "random_forest"
-    assert set(comparison["mean"]) == set(pipeline.METHODS) == set(comparison["spread"])
+    assert set(comparison["mean"]) == set(pipeline.METHODS) == set(comparison["spread"]) == set(comparison["rmse"])
+    assert "tree" in comparison["mean"]
     assert all(isinstance(v, float) and v >= 0 for v in comparison["mean"].values())
 
 

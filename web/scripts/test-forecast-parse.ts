@@ -100,6 +100,25 @@ expectRejected("a week with a bad date", { ...valid(), comparison: comparison({ 
 check("a saved comparison that is malformed reads back as null", parseSavedComparison({ basis: "test" }) === null && parseSavedComparison(null) === null);
 check("a saved valid comparison reads back", parseSavedComparison(comparison()) !== null);
 
+// Slice 12: RMSE and the decision tree survive the check, and older comparisons without them still pass.
+const withTree = comparison({
+  mean: { ...comparison().mean, tree: 4.2 },
+  spread: { ...comparison().spread, tree: 0.9 },
+  rmse: { random_forest: 3.6, tree: 5.1 },
+  weeks: [{ start: "2026-09-26", end: "2026-10-02", mae: { random_forest: 2, tree: 3 }, rmse: { random_forest: 2.5, tree: 3.9 } }],
+});
+const parsedTree = parseForecastResponse({ ...valid(), comparison: withTree }, START, 7);
+const keptTree = parsedTree.ok ? parsedTree.data.comparison : null;
+check(
+  "tree is kept in mean, spread and weeks",
+  keptTree?.mean.tree === 4.2 && keptTree?.spread.tree === 0.9 && keptTree?.weeks?.[0].mae.tree === 3
+);
+check("rmse is kept, overall and per week", keptTree?.rmse?.tree === 5.1 && keptTree?.weeks?.[0].rmse?.random_forest === 2.5);
+check("a saved comparison keeps rmse and tree", parseSavedComparison(withTree)?.rmse?.tree === 5.1);
+check("a comparison without rmse still passes", parseSavedComparison(comparison())?.rmse === undefined);
+expectRejected("a negative rmse", { ...valid(), comparison: comparison({ rmse: { random_forest: -1 } }) });
+expectRejected("a week with a negative rmse", { ...valid(), comparison: comparison({ weeks: [{ start: "2026-09-26", end: "2026-10-02", mae: { random_forest: 2 }, rmse: { random_forest: -1 } }] }) });
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   for (const f of failures) console.log(`  FAIL ${f}`);

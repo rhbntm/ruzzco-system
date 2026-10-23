@@ -147,14 +147,16 @@ def test_comparison_summary_uses_the_chosen_weeks_and_rounds_to_two_decimals():
     chosen, basis = train.choose_evaluation(reference, test)
     summary = train.comparison_summary(chosen, basis)
     assert summary["basis"] == "test" and summary["test_from"] == "2026-09-26" and summary["served"] == "random_forest"
-    assert set(summary["mean"]) == set(pipeline.METHODS) == set(summary["spread"])
+    assert set(summary["mean"]) == set(pipeline.METHODS) == set(summary["spread"]) == set(summary["rmse"])
     assert summary["mean"]["average"] == round(chosen["mean"]["average"], 2)
+    assert summary["rmse"]["average"] == round(chosen["rmse"]["average"], 2)
     assert all(round(v, 2) == v for v in summary["mean"].values())
     weeks = summary["weeks"]
     assert len(weeks) == chosen["weeks_tested"]
     assert [w["start"] for w in weeks] == sorted(w["start"] for w in weeks)
-    assert all(set(w) == {"start", "end", "mae"} and set(w["mae"]) == set(pipeline.METHODS) for w in weeks)
-    assert all(round(v, 2) == v for w in weeks for v in w["mae"].values())
+    assert all(set(w) == {"start", "end", "mae", "rmse"} for w in weeks)
+    assert all(set(w["mae"]) == set(pipeline.METHODS) == set(w["rmse"]) for w in weeks)
+    assert all(round(v, 2) == v for w in weeks for v in [*w["mae"].values(), *w["rmse"].values()])
 
 
 def test_comparison_summary_falls_back_to_the_reference_weeks():

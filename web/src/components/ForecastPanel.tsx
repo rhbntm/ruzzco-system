@@ -6,7 +6,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LineChart, LockKeyhole, RefreshCw, WifiOff } from "lucide-react";
+import { ColumnChart } from "@/components/ColumnChart";
 import type { SerializedForecast } from "@/lib/forecast";
+import { forecastChart } from "@/lib/forecast-chart";
 
 const peso = (value: number) => `₱${Math.round(value).toLocaleString("en-PH")}`;
 
@@ -87,6 +89,8 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
 
       {run && days.length > 0 ? (
         <>
+          {/* Slice 12: the same saved days as the table below, so it also shows when the service is offline. */}
+          <ColumnChart {...forecastChart(days)} unit="count" labelHeading="Day" valueHeading="Customers" />
           <table className="rz-table">
             <thead>
               <tr>

@@ -52,6 +52,12 @@ def main():
         f"average ticket ₱{ticket['avg_ticket']:,.2f} "
         f"(₱{ticket['amount_total']:,.0f} / {ticket['rows_with_amount']} rows with an amount)"
     )
+    # Slice 12 Decision 1: rows after the range, allowed only on "Not yet encoded" days.
+    left_out = pipeline.entries_left_out(entries, daily)
+    print(
+        f"Left out: {left_out['rows']} Entries rows on {left_out['dates']} dates after {data_to.date()} "
+        f"('{pipeline.NOT_YET_ENCODED}' in Day_Check)."
+    )
 
     reference = pipeline.walk_forward(daily)
     test = pipeline.walk_forward(daily, test_from=pipeline.TEST_FROM)
@@ -94,7 +100,8 @@ def comparison_summary(evaluation, basis, served=SERVED_METHOD):
     Built from the evaluation that feeds the dashboard (the test weeks, else the reference
     weeks) and saved in metadata.json next to the model it describes. Errors are in customers
     per day, rounded to 2 decimals. `weeks` (slice 10) holds each tested week's errors, oldest
-    first, with no day counts.
+    first, with no day counts. `rmse` and `weeks[].rmse` (slice 12) sit next to them; MAE stays
+    the main measure.
     """
     return {
         "basis": basis,
@@ -102,11 +109,13 @@ def comparison_summary(evaluation, basis, served=SERVED_METHOD):
         "served": served,
         "mean": {method: round(value, 2) for method, value in evaluation["mean"].items()},
         "spread": {method: round(value, 2) for method, value in evaluation["spread"].items()},
+        "rmse": {method: round(value, 2) for method, value in evaluation["rmse"].items()},
         "weeks": [
             {
                 "start": week["start"].date().isoformat(),
                 "end": week["end"].date().isoformat(),
                 "mae": {method: round(value, 2) for method, value in week["mae"].items()},
+                "rmse": {method: round(value, 2) for method, value in week["rmse"].items()},
             }
             for week in evaluation["weeks"]
         ],
@@ -142,6 +151,7 @@ def write_artifacts(model, daily, ticket, evaluation, out_dir, reference=None, t
         "evaluation": {
             "weeks_tested": evaluation["weeks_tested"],
             "rf_mae": round(evaluation["mean"]["random_forest"], 2),
+            "rf_rmse": round(evaluation["rmse"]["random_forest"], 2),
             "best_baseline": best,
             "best_baseline_mae": round(evaluation["mean"][best], 2),
             "weeks_rf_won": evaluation["weeks_rf_won"],
@@ -163,25 +173,35 @@ def week_label(week):
 
 COLUMNS = [
     ("average", "Average"), ("weekday", "Weekday"), ("last7", "Last-7"), ("naive", "Naive"),
-    ("linear", "Linear*"), ("gboost", "GBoost*"), ("random_forest", "RF"), ("random_forest_last7", "RF+last7"),
+    ("linear", "Linear*"), ("gboost", "GBoost*"), ("tree", "Tree*"),
+    ("random_forest", "RF"), ("random_forest_last7", "RF+last7"),
 ]
 
 
 def print_comparison(evaluation, title):
-    """MAE in customers per day for each week, the mean and the spread. * = evidence for Chapter 3, not a simple method."""
+    """MAE in customers per day for each week, the mean and the spread, then the same weeks' RMSE
+    and its mean (slice 12). * = evidence for Chapter 3, not a simple method."""
     print(title)
     if not evaluation["weeks"]:
         print(f"No full test week after {pipeline.TEST_FROM.date() - dt.timedelta(days=1)} yet.")
         return
-    print(f"{'Week':<18} {'Days':>4}  " + "  ".join(f"{label:>8}" for _, label in COLUMNS))
+
+    def header(measure):
+        print(f"{measure:<18} {'Days':>4}  " + "  ".join(f"{label:>8}" for _, label in COLUMNS))
 
     def row(label, days, values):
         print(f"{label:<18} {days:>4}  " + "  ".join(f"{values[m]:>8.2f}" for m, _ in COLUMNS))
 
+    header("MAE, week")
     for week in evaluation["weeks"]:
         row(week_label(week), week["days"], week["mae"])
     row("Mean", "", evaluation["mean"])
     row("Spread (SD weeks)", "", evaluation["spread"])
+    print()
+    header("RMSE, week")
+    for week in evaluation["weeks"]:
+        row(week_label(week), week["days"], week["rmse"])
+    row("Mean of weeks", "", evaluation["rmse"])
 
 
 def print_verdicts(evaluation, basis):
@@ -211,11 +231,13 @@ def weeks_summary(evaluation):
                 "end": week["end"].date().isoformat(),
                 "days": week["days"],
                 "mae": {m: round(v, 4) for m, v in week["mae"].items()},
+                "rmse": {m: round(v, 4) for m, v in week["rmse"].items()},
             }
             for week in evaluation["weeks"]
         ],
         "mean": {m: round(v, 4) for m, v in evaluation["mean"].items()},
         "spread": {m: round(v, 4) for m, v in evaluation["spread"].items()},
+        "rmse": {m: round(v, 4) for m, v in evaluation["rmse"].items()},
         "best_baseline": evaluation["best_baseline"],
         "weeks_rf_won": evaluation["weeks_rf_won"],
         "weeks_tested": evaluation["weeks_tested"],
