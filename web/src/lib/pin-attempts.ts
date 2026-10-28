@@ -1,4 +1,5 @@
-// Limits wrong owner PIN attempts on POST /api/v1/owner/unlock.
+// Limits wrong PIN attempts on POST /api/v1/owner/unlock and POST /api/v1/devices/approve
+// (one limiter each, separate counters).
 //
 // Two limits, both counted over the last 15 minutes:
 // - per client: 5 wrong PINs lock that client for 15 minutes.
@@ -64,8 +65,21 @@ export function createPinLimiter(limits: PinLimits = DEFAULT_PIN_LIMITS, now: ()
 }
 
 // One limiter per server process. Kept on globalThis so dev hot reloads don't reset it.
-const globalForPin = globalThis as unknown as { ownerPinLimiter?: ReturnType<typeof createPinLimiter> };
+// Phone approval (POST /api/v1/devices/approve) has its own counters, same limits.
+const globalForPin = globalThis as unknown as {
+  ownerPinLimiter?: ReturnType<typeof createPinLimiter>;
+  devicePinLimiter?: ReturnType<typeof createPinLimiter>;
+};
 export const ownerPinLimiter = (globalForPin.ownerPinLimiter ??= createPinLimiter());
+export const devicePinLimiter = (globalForPin.devicePinLimiter ??= createPinLimiter());
+
+export function tooManyPinsResponse(waitMs: number) {
+  const minutes = Math.ceil(waitMs / 60000);
+  return Response.json(
+    { success: false, error: `Too many wrong PINs. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.` },
+    { status: 429, headers: { "Retry-After": String(Math.ceil(waitMs / 1000)) } }
+  );
+}
 
 // The first x-forwarded-for entry. Next sets it from the socket address when the client
 // didn't send one; a client that sends its own is still capped by the shop-wide limit.

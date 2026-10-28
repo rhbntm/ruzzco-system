@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { deviceBindSchema } from "@/lib/schemas";
 import { readJson, serverError } from "@/lib/api";
 import { isUniqueViolation, isWriteConflict } from "@/lib/prisma-errors";
+import { authenticateDevice, deviceNotApprovedResponse } from "@/lib/device-auth";
 
 type AssignmentRow = { id: string; deviceKey: string; barberId: string; assignedAt: Date; revokedAt: Date | null };
 type BarberRow = { id: string; fullName: string; commissionRate: Prisma.Decimal; isActive: boolean };
@@ -59,6 +60,10 @@ function respondToExisting(existing: AssignmentRow, deviceKey: string, barber: B
  */
 export async function POST(request: NextRequest) {
   try {
+    // Only an approved phone may bind (slice 15), and only itself.
+    const authenticatedKey = await authenticateDevice(request);
+    if (!authenticatedKey) return deviceNotApprovedResponse();
+
     const body = await readJson(request, "Invalid request");
     if (!body.ok) return body.response;
     const parsed = deviceBindSchema.safeParse(body.data);
@@ -71,6 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { deviceKey, barberId, assignmentId } = parsed.data;
+    if (deviceKey !== authenticatedKey) return deviceNotApprovedResponse();
 
     const barber = await prisma.barber.findUnique({ where: { id: barberId }, select: barberSelect });
     if (!barber) {

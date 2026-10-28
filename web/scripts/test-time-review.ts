@@ -8,13 +8,16 @@
  *   npm run dev                 (in another terminal; OWNER_PIN in web/.env)
  *   npm run test:time-review    (TEST_BASE_URL overrides http://localhost:3000)
  *
- * Uses a throwaway barber and two fixed past business dates (2000-03-15, 2000-03-16). One
- * sale is reviewed onto today for a moment; everything it creates is deleted at the end.
+ * Sales are synced from an approved scratch phone (slice 15), and the reconciliation GET needs
+ * the owner cookie (slice 15, finding #5). Uses a throwaway barber and two fixed past business
+ * dates (2000-03-15, 2000-03-16). One sale is reviewed onto today for a moment; everything it
+ * creates (the phone included) is deleted at the end.
  */
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
 import { manilaToday } from "../src/lib/business-date";
+import { createTestDevices } from "./lib/test-devices";
 
 loadEnvConfig(process.cwd());
 
@@ -26,6 +29,8 @@ const D_REC = "2000-03-15";
 const D_PAY = "2000-03-16";
 // Manila wall time as a UTC ISO string: the sync schema accepts only `Z` timestamps.
 const AT = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00+08:00`).toISOString();
+const devices = createTestDevices(BASE);
+let deviceKey = ""; // the scratch phone every sale is synced from (its sales carry no deviceKey)
 const txIds: string[] = [];
 let ownerCookie = "";
 let passed = 0;
@@ -41,10 +46,10 @@ function check(name: string, ok: boolean, detail = "") {
   }
 }
 
-async function request<T>(method: "GET" | "POST", path: string, body?: unknown, owner = true): Promise<{ status: number; body: T }> {
+async function request<T>(method: "GET" | "POST", path: string, body?: unknown, owner = true, extraHeaders: Record<string, string> = {}): Promise<{ status: number; body: T }> {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", ...(owner && ownerCookie ? { Cookie: ownerCookie } : {}) },
+    headers: { "Content-Type": "application/json", ...(owner && ownerCookie ? { Cookie: ownerCookie } : {}), ...extraHeaders },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   return { status: res.status, body: (await res.json().catch(() => null)) as T };
@@ -61,6 +66,7 @@ type LedgerRow = { barberId: string; commissionTotal: string; totalOwed: string;
 type Ledger = { rows: LedgerRow[]; heldForReview: number };
 type Review = { success: boolean; status?: string; businessDate?: string; error?: string };
 
+// Sends the owner cookie (request's default): the reconciliation GET is owner-only (slice 15).
 const recon = async (date: string) => (await request<Recon>("GET", `/api/v1/reports/reconciliation?date=${date}`)).body;
 const ledger = async (date: string) => (await request<Ledger>("GET", `/api/v1/reports/payouts?date=${date}`)).body;
 const myRow = (l: Ledger) => l.rows.find((r) => r.barberId === BARBER);
@@ -73,9 +79,10 @@ function sale(transactionTime: string, amount: number) {
 }
 
 // sentAt is the phone's clock at sending. Sending a 2000-dated sale with a 2000 clock makes
-// the server flag it DEVICE_CLOCK_SKEW (the server's clock says today).
+// the server flag it DEVICE_CLOCK_SKEW (the server's clock says today). No owner cookie, but the
+// approved phone's key and secret (slice 15).
 async function syncSale(item: ReturnType<typeof sale>, sentAt?: string) {
-  const res = await request<{ syncedIds: string[] }>("POST", "/api/v1/transactions/sync", { transactions: [item], ...(sentAt ? { sentAt } : {}) }, false);
+  const res = await request<{ syncedIds: string[] }>("POST", "/api/v1/transactions/sync", { transactions: [item], ...(sentAt ? { sentAt } : {}) }, false, devices.headers(deviceKey));
   return res.body.syncedIds.includes(item.id);
 }
 
@@ -92,6 +99,7 @@ async function main() {
   ownerCookie = unlock.headers.get("set-cookie")?.split(";")[0] ?? "";
   if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
   await prisma.barber.create({ data: { id: BARBER, fullName: `Test Barber Review ${RUN}`, commissionRate: 0.5 } });
+  deviceKey = await devices.approve();
   const today = manilaToday();
   const todayCash0 = Number((await recon(today)).expected.cashTotal);
 
@@ -107,6 +115,13 @@ async function main() {
   let todayRec = await recon(today);
   check("and on the day it was received", todayRec.needsDateReview.some((s) => s.id === flagged.id));
   check("but it is not in today's figures either", Number(todayRec.expected.cashTotal) === todayCash0);
+
+  console.log("\nThe reconciliation GET is owner-only (slice 15, finding #5)");
+  const anonymous = await request<Record<string, unknown> | null>("GET", `/api/v1/reports/reconciliation?date=${D_REC}`, undefined, false);
+  check("without the owner cookie → 401 Owner PIN required", anonymous.status === 401 && anonymous.body?.success === false && anonymous.body.error === "Owner PIN required", `${anonymous.status} ${JSON.stringify(anonymous.body)}`);
+  check("…and its body carries no expected figures or review list", !!anonymous.body && !("expected" in anonymous.body) && !("needsDateReview" in anonymous.body), JSON.stringify(anonymous.body));
+  const withOwner = await request<{ success: boolean }>("GET", `/api/v1/reports/reconciliation?date=${D_REC}`);
+  check("with the owner cookie → 200, success", withOwner.status === 200 && withOwner.body?.success === true, String(withOwner.status));
 
   const saved = await request<Recon>("POST", "/api/v1/reports/reconciliation", { date: D_REC, countedCash: 200 });
   check("the stated day is reconciled at ₱200, not stale", saved.status === 200 && saved.body.staleness?.stale === false);
@@ -176,10 +191,14 @@ async function main() {
 
 async function cleanup() {
   const dates = [D_REC, D_PAY].map((d) => new Date(`${d}T00:00:00.000Z`));
-  await prisma.shiftReconciliation.deleteMany({ where: { reconciliationDate: { in: dates } } });
-  await prisma.dailyPayoutLedger.deleteMany({ where: { OR: [{ businessDate: { in: dates } }, { barberId: BARBER }] } });
-  await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: BARBER }] } });
-  await prisma.barber.deleteMany({ where: { id: BARBER } });
+  try {
+    await prisma.shiftReconciliation.deleteMany({ where: { reconciliationDate: { in: dates } } });
+    await prisma.dailyPayoutLedger.deleteMany({ where: { OR: [{ businessDate: { in: dates } }, { barberId: BARBER }] } });
+    await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: BARBER }] } });
+    await prisma.barber.deleteMany({ where: { id: BARBER } });
+  } finally {
+    await devices.cleanup(prisma); // even when a delete above fails
+  }
 }
 
 main()

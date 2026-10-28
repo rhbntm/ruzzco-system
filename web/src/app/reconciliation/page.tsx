@@ -105,6 +105,8 @@ export default function ReconciliationPage() {
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
   const [ownerPin, setOwnerPin] = useState("");
   const [showOwnerUnlock, setShowOwnerUnlock] = useState(false);
+  // The day's figures need the owner PIN to view, not only to save.
+  const [locked, setLocked] = useState(false);
 
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -120,9 +122,17 @@ export default function ReconciliationPage() {
       setFeedback(null);
       try {
         const res = await fetch(`/api/v1/reports/reconciliation?date=${date}`);
+        // Owner-only (slice 15): no figure is shown until the owner PIN is entered.
+        if (res.status === 401) {
+          if (!active) return;
+          setLocked(true);
+          setShowOwnerUnlock(true);
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!active) return;
+        setLocked(false);
         if (data.success) {
           setExpected(data.expected);
           setSaved(data.saved);
@@ -239,7 +249,7 @@ export default function ReconciliationPage() {
     <div className="flex-1">
       {showOwnerUnlock && (
         <div className="rz-overlay items-center">
-          <form role="dialog" aria-modal="true" aria-labelledby="owner-pin-title" onSubmit={async (event) => { event.preventDefault(); const res = await fetch("/api/v1/owner/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: ownerPin }) }); if (res.ok) { setShowOwnerUnlock(false); setOwnerPin(""); setFeedback({ msg: "Owner access granted. Save again.", ok: true }); } else { const data = await res.json().catch(() => null); setFeedback({ msg: data?.error ?? "Invalid owner PIN.", ok: false }); } }} className="rz-dialog p-5 space-y-4">
+          <form role="dialog" aria-modal="true" aria-labelledby="owner-pin-title" onSubmit={async (event) => { event.preventDefault(); const res = await fetch("/api/v1/owner/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: ownerPin }) }); if (res.ok) { setShowOwnerUnlock(false); setOwnerPin(""); if (locked) { setLocked(false); setRefreshKey((k) => k + 1); } else { setFeedback({ msg: "Owner access granted. Save again.", ok: true }); } } else { const data = await res.json().catch(() => null); setFeedback({ msg: data?.error ?? "Invalid owner PIN.", ok: false }); } }} className="rz-dialog p-5 space-y-4">
             <div className="flex items-center gap-2.5">
               <span aria-hidden="true" className="w-9 h-9 rounded-full bg-brass/10 ring-1 ring-brass/40 text-brass-bright flex items-center justify-center shrink-0">
                 <LockKeyhole className="w-4 h-4" />
@@ -304,6 +314,15 @@ export default function ReconciliationPage() {
             <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-crimson-ink" : ""}`} />
           </button>
         </div>
+
+        {/* Owner-only: nothing below shows until the owner PIN is entered. */}
+        {locked && !showOwnerUnlock && (
+          <div className="rz-notice flex-wrap items-center">
+            <LockKeyhole className="w-4 h-4 text-brass shrink-0" />
+            <span className="flex-1 min-w-48">End-of-Day Cash needs the owner PIN.</span>
+            <button type="button" onClick={() => setShowOwnerUnlock(true)} className="rz-btn rz-btn-secondary text-sm pointer-coarse:min-h-11">Unlock</button>
+          </div>
+        )}
 
         {/* While the register totals load: the strip's shape, not a spinner. */}
         {isLoading && !expected && (

@@ -59,6 +59,12 @@ enum TimeReviewChoice {
   RECEIVED_DATE
 }
 
+// Which PIN approved a phone (slice 15): the owner PIN or the approval-only PIN.
+enum DeviceApprover {
+  OWNER
+  APPROVER
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -308,6 +314,21 @@ model BarberPaymentQr {
 
   @@unique([barberId, method])
   @@map("barber_payment_qrs")
+}
+
+/// A phone approved to send sales and binds (slice 15). Only the sha256 of its secret is
+/// stored; the secret itself is returned once, on approval. Approving again replaces it.
+/// Never deleted by the app: a lost or replaced phone is revoked (revokedAt set).
+model Device {
+  deviceKey    String         @id @map("device_key") // the phone's localStorage UUID
+  secretHash   String         @map("secret_hash") @db.Char(64)
+  approvedAt   DateTime       @map("approved_at")
+  approvedWith DeviceApprover @map("approved_with")
+  label        String?        @db.VarChar(60)
+  revokedAt    DateTime?      @map("revoked_at") // null = approved
+  lastSeenAt   DateTime?      @map("last_seen_at")
+
+  @@map("devices")
 }
 
 /// Persistent audit record written whenever the sync route overrides a client-supplied

@@ -5,14 +5,15 @@
  *   npm run dev                     (in another terminal)
  *   npm run test:ledger-summary     (TEST_BASE_URL overrides http://localhost:3000)
  *
- * Needs OWNER_PIN in web/.env (read, never printed). Uses a throwaway barber and fixed past dates
- * in February 2000 (no real data); its sales, ledger rows, reconciliations and barber are deleted
- * at the end.
+ * Needs OWNER_PIN in web/.env (read, never printed). Uses a throwaway barber, an approved scratch
+ * phone (sync needs one, slice 15) and fixed past dates in February 2000 (no real data); its
+ * sales, ledger rows, reconciliations, phone and barber are deleted at the end.
  */
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestDevices } from "./lib/test-devices";
 import { latestRevisionPerDate, leftForShop, listPriceOf, periodDates, remainingToPay, serviceGap } from "../src/lib/ledger-summary";
 
 loadEnvConfig(process.cwd());
@@ -29,6 +30,8 @@ const dateValue = (date: string) => new Date(`${date}T00:00:00.000Z`);
 const AT = (date: string, time: string) => new Date(`${date}T${time}+08:00`).toISOString();
 const D = (value: string | number) => new Prisma.Decimal(value);
 
+const devices = createTestDevices(BASE);
+let deviceKey = ""; // the scratch phone every sale is synced from (its sales carry no deviceKey)
 const txIds: string[] = [];
 let ownerCookie = "";
 let passed = 0;
@@ -56,10 +59,10 @@ type Summary = {
   pettyCashMissingDays: number;
 };
 
-async function call<T>(method: "GET" | "POST", path: string, body?: unknown, cookie = ownerCookie): Promise<{ status: number; body: T }> {
+async function call<T>(method: "GET" | "POST", path: string, body?: unknown, cookie = ownerCookie, extraHeaders: Record<string, string> = {}): Promise<{ status: number; body: T }> {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}) },
+    headers: { "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}), ...extraHeaders },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   return { status: res.status, body: (await res.json()) as T };
@@ -67,6 +70,9 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown, coo
 
 const summary = (date: string, period = "day", base = "LIST_PRICE", cookie = ownerCookie) =>
   call<Summary>("GET", `/api/v1/reports/ledger-summary?date=${date}&period=${period}&commissionBase=${base}`, undefined, cookie);
+// Sync needs an approved phone (slice 15): the scratch device's key and secret ride along.
+const sync = (transactions: unknown[]) =>
+  call<{ syncedIds: string[]; rejected: unknown[] }>("POST", "/api/v1/transactions/sync", { transactions }, ownerCookie, devices.headers(deviceKey));
 
 function sale(date: string, time: string, amount: number, method: "CASH" | "GCASH" | "MAYA" = "CASH", tipAmount = 0) {
   const id = randomUUID();
@@ -123,6 +129,7 @@ async function integration() {
   if (existing > 0) throw new Error(`${existing} sales already exist in February 2000; refusing to run`);
   await cleanupDates();
   await prisma.barber.create({ data: { id: BARBER, fullName: `Test Summary ${RUN}`, commissionRate: 0.5 } });
+  deviceKey = await devices.approve();
 
   console.log("\nAccess and input");
   check("no owner cookie → 401", (await summary(TUE, "day", "LIST_PRICE", "")).status === 401);
@@ -134,7 +141,7 @@ async function integration() {
     sale(TUE, "11:00:00.000", 100, "GCASH"),
     sale(THU, "10:00:00.000", 400, "CASH"),
   ];
-  const synced = await call<{ syncedIds: string[]; rejected: unknown[] }>("POST", "/api/v1/transactions/sync", { transactions: batch });
+  const synced = await sync(batch);
   check("setup: sales synced", synced.status === 200 && batch.every((b) => synced.body.syncedIds.includes(b.id)) && synced.body.rejected.length === 0, JSON.stringify(synced.body));
   const rec = await call<{ success: boolean }>("POST", "/api/v1/reports/reconciliation", { date: TUE, countedCash: 220, pettyCashAmount: 50 });
   check("setup: petty cash saved for the day", rec.status === 200 || rec.status === 201, String(rec.status));
@@ -183,7 +190,7 @@ async function integration() {
   const LOYALTY_DAY = "2000-02-24";
   const loyaltySale = { ...sale(LOYALTY_DAY, "10:00:00.000", 125), listPrice: 250, discountType: "PERCENT", discountAmount: 125, customAmount: false };
   const customSale = sale(LOYALTY_DAY, "11:00:00.000", 300); // a custom amount is its own list price
-  const added = await call<{ syncedIds: string[]; rejected: unknown[] }>("POST", "/api/v1/transactions/sync", { transactions: [loyaltySale, customSale] });
+  const added = await sync([loyaltySale, customSale]);
   check("setup: loyalty and custom-amount sales synced", added.status === 200 && added.body.rejected.length === 0, JSON.stringify(added.body));
   const loyaltyDay = (await summary(LOYALTY_DAY)).body;
   check("revenue counts what was paid (125 + 300)", loyaltyDay.sales.total === "425.00", loyaltyDay.sales.total);
@@ -218,11 +225,15 @@ async function cleanupDates() {
 }
 
 async function cleanup() {
-  await cleanupDates();
-  await prisma.dailyPayoutLedger.deleteMany({ where: { barberId: BARBER } });
-  await prisma.syncMismatchLog.deleteMany({ where: { transactionId: { in: txIds } } });
-  await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: BARBER }] } });
-  await prisma.barber.deleteMany({ where: { id: BARBER } });
+  try {
+    await cleanupDates();
+    await prisma.dailyPayoutLedger.deleteMany({ where: { barberId: BARBER } });
+    await prisma.syncMismatchLog.deleteMany({ where: { transactionId: { in: txIds } } });
+    await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: BARBER }] } });
+    await prisma.barber.deleteMany({ where: { id: BARBER } });
+  } finally {
+    await devices.cleanup(prisma); // even when a delete above fails
+  }
 }
 
 async function main() {

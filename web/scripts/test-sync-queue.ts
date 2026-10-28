@@ -1,6 +1,6 @@
 /**
- * Tests the sync queue in src/lib/sync.ts: chunked requests, one run at a time, and request
- * timeouts (src/lib/fetch-timeout.ts). Runs the real sync code on fake-indexeddb with a fake
+ * Tests the sync queue in src/lib/sync.ts: chunked requests, one run at a time, request
+ * timeouts (src/lib/fetch-timeout.ts), and an unapproved phone (slice 15). Runs the real sync code on fake-indexeddb with a fake
  * server (a stubbed fetch). No dev server or database needed.
  *
  *   npm run test:sync-queue
@@ -34,12 +34,18 @@ Object.defineProperty(globalThis, "localStorage", {
 });
 Object.defineProperty(globalThis, "window", { configurable: true, value: globalThis });
 Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, get: () => true });
+// An approved phone (slice 15): its key and the secret it got on approval.
+const DEVICE_KEY = randomUUID();
+const SECRET = "c".repeat(64);
+store.set("ruzzco_device_key", DEVICE_KEY);
+store.set("ruzzco_device_secret", SECRET);
 
 // ── Fake server ──────────────────────────────────────────────────────────────
-type Behaviour = { fail?: (requestNo: number) => boolean; reject?: Set<string>; reason?: string; delayMs?: number; onRequest?: () => Promise<void> | void };
+type Behaviour = { notApproved?: boolean; fail?: (requestNo: number) => boolean; reject?: Set<string>; reason?: string; delayMs?: number; onRequest?: () => Promise<void> | void };
 let behaviour: Behaviour = {};
 let requests: string[][] = [];
 let sentAts: (string | undefined)[] = [];
+let sentHeaders: Record<string, string>[] = [];
 let inFlight = 0;
 let maxInFlight = 0;
 
@@ -53,7 +59,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const ids = body.transactions.map((t) => t.id);
     requests.push(ids);
     sentAts.push(body.sentAt);
+    sentHeaders.push(Object.fromEntries(new Headers(init?.headers).entries()));
     await behaviour.onRequest?.();
+    if (behaviour.notApproved) return Response.json({ success: false, code: "DEVICE_NOT_APPROVED" }, { status: 401 });
     if (behaviour.delayMs) await new Promise((r) => setTimeout(r, behaviour.delayMs));
     if (behaviour.fail?.(requests.length)) return new Response("{}", { status: 500 });
     const rejected = ids.filter((id) => behaviour.reject?.has(id)).map((id) => ({ id, reason: behaviour.reason ?? "INVALID" }));
@@ -66,7 +74,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 
 async function main() {
   const { db } = await import("../src/lib/db");
-  const { syncNow, retryRejected, SYNC_CHUNK_SIZE } = await import("../src/lib/sync");
+  const { syncNow, retryRejected, isWaitingForApproval, summarizeSync, SYNC_CHUNK_SIZE } = await import("../src/lib/sync");
   const { fetchWithTimeout } = await import("../src/lib/fetch-timeout");
   const { SYNC_BATCH_MAX } = await import("../src/lib/schemas");
 
@@ -96,6 +104,7 @@ async function main() {
     behaviour = {};
     requests = [];
     sentAts = [];
+    sentHeaders = [];
     maxInFlight = 0;
   };
   const unsyncedCount = () => db.transactions.where("synced").equals(0).count();
@@ -186,6 +195,37 @@ async function main() {
   await db.transactions.add(cashRejected);
   retried = await retryRejected(cashRejected.id);
   check("retrying a non-QRPH sale never offers a QR payment", !retried.qrCharge && (await db.transactions.get(cashRejected.id))?.synced === 1);
+
+  console.log("\nAn unapproved phone (slice 15)");
+  await reset();
+  await addSales(3);
+  outcome = await syncNow();
+  check("every request carries the phone's key and secret in headers", sentHeaders.length === 1 && sentHeaders[0]["x-ruzzco-device"] === DEVICE_KEY && sentHeaders[0].authorization === `Bearer ${SECRET}`, JSON.stringify(sentHeaders[0]));
+  check("...never in a sale", !JSON.stringify(requests).includes(SECRET));
+
+  await reset();
+  await addSales(60);
+  behaviour.notApproved = true;
+  outcome = await syncNow();
+  const after401 = await db.transactions.toArray();
+  check("a 401 DEVICE_NOT_APPROVED stops the run after one request", requests.length === 1 && outcome.status === "waiting", `requests ${requests.length}, ${outcome.status}`);
+  check("...leaves every sale queued, unsynced, without syncError", after401.length === 60 && after401.every((t) => t.synced === 0 && !t.syncError));
+  check("...reports them as waiting for approval, none rejected", outcome.waiting === 60 && outcome.rejected === 0 && outcome.attention === 0, JSON.stringify(outcome));
+  check("...and says so", summarizeSync(outcome) === "60 waiting for approval", summarizeSync(outcome));
+  check("the phone shows as waiting for approval", isWaitingForApproval());
+  check("the secret is kept (a server-side slip never wipes it)", store.get("ruzzco_device_secret") === SECRET);
+
+  behaviour.notApproved = false; // approved again on the server
+  outcome = await syncNow();
+  check("the next accepted sync sends everything and clears the waiting state", outcome.status === "synced" && (await unsyncedCount()) === 0 && !isWaitingForApproval(), JSON.stringify(outcome));
+
+  await reset();
+  store.delete("ruzzco_device_secret");
+  await addSales(2);
+  outcome = await syncNow();
+  check("without a secret nothing is sent", requests.length === 0 && outcome.status === "waiting" && outcome.waiting === 2, JSON.stringify(outcome));
+  check("...and the phone shows as waiting", isWaitingForApproval());
+  store.set("ruzzco_device_secret", SECRET);
 
   console.log("\nTimeouts");
   const hanging = ((_input: RequestInfo | URL, init?: RequestInit) =>

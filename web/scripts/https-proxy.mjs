@@ -1,6 +1,7 @@
-// Serves the Ruzzco web app over HTTPS on the shop network, so phones can install it as an app
-// (a PWA) that opens even without a connection. Installing and service workers need HTTPS; the
-// app itself keeps running on plain HTTP port 3000 (npm run dev or npm run start), unchanged.
+// Serves the Ruzzco web app over HTTPS on the shop network: the only way phones reach it. The app
+// itself listens on 127.0.0.1:3000 only (npm run dev / npm run start pass -H 127.0.0.1), so no
+// PIN, owner cookie or phone secret crosses the Wi-Fi unencrypted (slice 15). HTTPS also lets
+// phones install the POS as an app (a PWA) that opens even without a connection.
 //
 //   npm run https        (from web/, while the app runs on port 3000)
 //

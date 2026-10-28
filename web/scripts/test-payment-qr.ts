@@ -9,17 +9,20 @@
  *
  * Uses only scripts/fixtures/sample-qr.png, which encodes the plain text
  * "DEMO ONLY - NOT A PAYMENT QR" (not a payment payload). Never use a real account QR here.
- * Throwaway barbers; everything it creates is deleted at the end.
+ * Throwaway barbers and one approved test phone (sync needs an approved device, slice 15);
+ * everything it creates is deleted at the end.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestDevices } from "./lib/test-devices";
 
 loadEnvConfig(process.cwd());
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:3000";
+const devices = createTestDevices(BASE);
 const SERVICE_ID = "10000000-0000-0000-0000-000000000001"; // seeded Haircut
 const RUN = randomUUID().slice(0, 8);
 const BARBER = `test-qr-${RUN}`;
@@ -115,6 +118,7 @@ async function main() {
   check("1 MB + 1 byte → 413", (await put(BARBER, "GCASH", huge)).status === 413);
   check("nothing stored after the rejections", (await rowCount(BARBER)) === 0);
 
+  // The upload sends raw image bytes; the JSON-only rule for writes (slice 15) does not apply to it.
   console.log("\nQ5 upload, list and download round trip");
   const up = await put(BARBER, "GCASH", SAMPLE);
   check("PUT the sample QR → 200", up.status === 200, JSON.stringify(up.body));
@@ -135,9 +139,10 @@ async function main() {
   console.log("\nQ7 a sale synced while a QR exists is stored as before");
   const id = randomUUID();
   txIds.push(id);
+  const phone = await devices.approve(); // the sale has no deviceKey, so it counts as this phone's
   const syncRes = await fetch(`${BASE}/api/v1/transactions/sync`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: devices.headers(phone),
     body: JSON.stringify({ transactions: [{
       id, barberId: BARBER, serviceId: SERVICE_ID, totalAmount: 200, listPrice: 200, amountPaid: 200, tipAmount: 20,
       paymentMethod: "GCASH", paymentReference: `REF-${RUN}`, transactionTime: "2000-01-22T03:00:00.000Z",
@@ -169,6 +174,8 @@ async function main() {
 }
 
 async function cleanup() {
+  // First and on its own, so the approved test phone is removed even if a later step fails.
+  await devices.cleanup(prisma).catch((e) => console.error("Device cleanup failed:", e));
   const barberIds = [BARBER, INACTIVE];
   await prisma.barberPaymentQr.deleteMany({ where: { barberId: { in: barberIds } } });
   await prisma.dailyPayoutLedger.deleteMany({ where: { barberId: { in: barberIds } } });

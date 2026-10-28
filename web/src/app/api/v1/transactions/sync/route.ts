@@ -6,6 +6,7 @@ import { readJson, serverError } from "@/lib/api";
 import { isUniqueViolation } from "@/lib/prisma-errors";
 import { gatewayStatus } from "@/lib/gateway";
 import { detectTimeAnomaly } from "@/lib/time-anomaly";
+import { authenticateDevice, deviceNotApprovedResponse } from "@/lib/device-auth";
 import {
   syncBatchSchema,
   syncTransactionItemSchema,
@@ -38,6 +39,11 @@ function toEntry(raw: unknown): Entry {
 
 export async function POST(request: NextRequest) {
   try {
+    // Only an approved phone may send sales (slice 15). Refused as a whole, before anything is
+    // read or written: the phone keeps every sale queued and sends them once approved.
+    const deviceKey = await authenticateDevice(request);
+    if (!deviceKey) return deviceNotApprovedResponse();
+
     // A body that is not JSON is a bad outer shape too: 400, like a failed schema check.
     const body = await readJson(request, "Invalid sync payload format");
     if (!body.ok) return body.response;
@@ -107,13 +113,13 @@ export async function POST(request: NextRequest) {
 
     // An assignment made offline and then superseded before it reached /bind is only
     // known through its sales. Record it as historical (already revoked): sync never
-    // creates or disturbs the device's active binding.
+    // creates or disturbs the device's active binding. Only for this phone's own sales.
     const missing = new Map<string, { id: string; deviceKey: string; barberId: string }>();
     for (const item of pending) {
       // Only from a sale whose barber exists: skipDuplicates would swallow the FK error,
       // and a sale with an unknown barber is rejected below anyway.
       if (
-        item.assignmentId && item.deviceKey && barberRates.has(item.barberId) &&
+        item.assignmentId && item.deviceKey === deviceKey && barberRates.has(item.barberId) &&
         !assignments.has(item.assignmentId) && !missing.has(item.assignmentId)
       ) {
         missing.set(item.assignmentId, { id: item.assignmentId, deviceKey: item.deviceKey, barberId: item.barberId });
@@ -147,6 +153,14 @@ export async function POST(request: NextRequest) {
 
       if (!item) {
         reject(entryId, "INVALID");
+        continue;
+      }
+
+      // A sale is this phone's only if it carries the authenticated device key. A legacy sale
+      // with no device key at all (older than device keys) came in this phone's request, so it
+      // counts as this phone's; it keeps its stamped barberId below.
+      if ((item.deviceKey ?? deviceKey) !== deviceKey) {
+        reject(item.id, "DEVICE_MISMATCH");
         continue;
       }
 

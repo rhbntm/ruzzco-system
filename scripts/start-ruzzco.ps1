@@ -10,8 +10,10 @@
        the HTTPS gateway. Missing ones are installed with winget after you say yes.
     2. Docker: starts Docker Desktop when it isn't running and waits for it.
     3. Settings: creates the root .env (new database passwords) when there is no database yet,
-       and fills DATABASE_URL and OWNER_PIN in web/.env when they are empty (asks for the PIN).
-       Never changes a value that is set, and never prints one.
+       and fills DATABASE_URL, OWNER_SESSION_SECRET, OWNER_PIN and DEVICE_APPROVAL_PIN in
+       web/.env when they are empty (asks for the two PINs, 6 to 8 digits, never the same).
+       Never changes a value that is set (a PIN shorter than 6 digits is only warned about),
+       and never prints one.
     4. Stops Ruzzco servers still running: Node.js on ports 3000, 3443 and 3080, and Node.js
        started from this repo (an `npm run dev` in a terminal too). Other programs are left alone.
     5. npm packages: npm ci when web/node_modules is missing or package-lock.json changed since
@@ -21,8 +23,9 @@
     7. Forecast: starts ml-service when a trained model exists; offers to train one when only
        the logbook is there. The POS works without it.
     8. App: production build when the code changed since the last build, then next start.
-       -Dev runs next dev instead. A failed build falls back to next dev.
-    9. HTTPS gateway (npm run https) for installing the POS as an app on phones.
+       -Dev runs next dev instead. A failed build falls back to next dev. The app listens on
+       127.0.0.1 only: phones reach it through the HTTPS gateway, never over plain HTTP.
+    9. HTTPS gateway (npm run https): the only way phones reach the app.
    10. Phones: checks the Windows Firewall rules (scripts\phone-firewall.ps1), then prints the
        addresses for this PC and the phones.
   It then stays open: Ctrl+C or closing the window stops the app and the gateway. MySQL and the
@@ -39,7 +42,7 @@
 param(
   [switch]$Dev,         # next dev instead of a production build
   [switch]$Rebuild,     # build even when nothing changed
-  [switch]$NoHttps,     # skip the HTTPS gateway for phones
+  [switch]$NoHttps,     # skip the HTTPS gateway (phones then can't reach the app)
   [switch]$NoForecast,  # skip the forecast service
   [switch]$NoBrowser,   # don't open the app on this PC
   [switch]$Yes,         # install and set up without asking (the owner PIN is still asked)
@@ -166,10 +169,10 @@ function Set-EnvValue($path, $key, $value) {
   [System.IO.File]::WriteAllText($path, (($lines -join $newline) + $newline), $utf8)
 }
 
-function New-Secret {
-  $bytes = New-Object byte[] 18
-  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-  return (($bytes | ForEach-Object { $_.ToString("x2") }) -join "")
+function New-Secret([int]$Bytes = 18) {
+  $buffer = New-Object byte[] $Bytes
+  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($buffer)
+  return (($buffer | ForEach-Object { $_.ToString("x2") }) -join "")
 }
 
 function Read-Secret($prompt) {
@@ -180,12 +183,30 @@ function Read-Secret($prompt) {
 }
 
 function Read-OwnerPin {
-  Say "  The owner PIN unlocks the owner pages (ledger, forecast, insights, payment QRs). Use 4 to 8 digits."
+  Say "  The owner PIN (Mart) unlocks the owner pages (ledger, End-of-Day Cash, forecast, insights, payment QRs, phones). Use 6 to 8 digits."
   for ($try = 0; $try -lt 3; $try++) {
     try {
       $pin = Read-Secret "  New owner PIN (Enter to skip)"
       if ($pin -eq "") { return $null }
-      if ($pin -notmatch '^\d{4,8}$') { Say "  Use 4 to 8 digits."; continue }
+      if ($pin -notmatch '^\d{6,8}$') { Say "  Use 6 to 8 digits."; continue }
+      $again = Read-Secret "  Same PIN again"
+    } catch { return $null }
+    if ($again -eq $pin) { return $pin }
+    Say "  The two PINs differ, try again."
+  }
+  return $null
+}
+
+# The approval PIN (Bayani) only approves phones. It must differ from the owner PIN: the same
+# PIN would give its holder the owner pages too.
+function Read-ApprovalPin($ownerPin) {
+  Say "  The approval PIN (Bayani) only approves phones to send sales; it opens no owner page. Use 6 to 8 digits, not the owner PIN."
+  for ($try = 0; $try -lt 3; $try++) {
+    try {
+      $pin = Read-Secret "  New approval PIN (Enter to skip)"
+      if ($pin -eq "") { return $null }
+      if ($pin -notmatch '^\d{6,8}$') { Say "  Use 6 to 8 digits."; continue }
+      if ($ownerPin -and $pin -eq $ownerPin) { Say "  That is the owner PIN. Choose a different one."; continue }
       $again = Read-Secret "  Same PIN again"
     } catch { return $null }
     if ($again -eq $pin) { return $pin }
@@ -361,7 +382,7 @@ if ($useHttps -and -not (Find-OpenSsl)) {
   Say "  OpenSSL is missing. The HTTPS gateway for phone apps needs it; it comes with Git for Windows."
   Install-Tool "Git.Git" "Git for Windows" "about 350 MB" | Out-Null
   if (-not (Find-OpenSsl)) {
-    Warn ("continuing without the HTTPS gateway: phones can still open the POS at http://<PC address>:" + $appPort)
+    Warn "continuing without the HTTPS gateway: phones can't reach the POS until it runs (they keep their sales). Install Git for Windows, then run this again."
     $useHttps = $false
   }
 }
@@ -419,6 +440,10 @@ if (-not $webValues["DATABASE_URL"]) {
   Set-EnvValue $webEnv "DATABASE_URL" $url
   Say "  set DATABASE_URL in web/.env (from the root .env)"
 }
+if (-not $webValues["OWNER_SESSION_SECRET"]) {
+  Set-EnvValue $webEnv "OWNER_SESSION_SECRET" (New-Secret 32)
+  Say "  made a new owner session secret in web/.env"
+}
 if (-not $webValues["OWNER_PIN"]) {
   $pin = Read-OwnerPin
   if ($pin) {
@@ -427,6 +452,26 @@ if (-not $webValues["OWNER_PIN"]) {
   } else {
     Warn "no owner PIN: the owner pages stay locked until OWNER_PIN is set in web/.env (or run this again)"
   }
+}
+$webValues = Read-EnvFile $webEnv
+if (-not $webValues["DEVICE_APPROVAL_PIN"]) {
+  $approval = Read-ApprovalPin $webValues["OWNER_PIN"]
+  if ($approval) {
+    Set-EnvValue $webEnv "DEVICE_APPROVAL_PIN" $approval
+    Say "  saved the approval PIN in web/.env"
+  } else {
+    Warn "no approval PIN: only the owner PIN approves phones until DEVICE_APPROVAL_PIN is set in web/.env (or run this again)"
+  }
+}
+$webValues = Read-EnvFile $webEnv
+if ($webValues["OWNER_PIN"] -and $webValues["OWNER_PIN"] -notmatch '^\d{6,}$') {
+  Warn "the owner PIN in web/.env is shorter than 6 digits. Change it to 6 to 8 digits (OWNER_PIN in web/.env)."
+}
+if ($webValues["DEVICE_APPROVAL_PIN"] -and $webValues["DEVICE_APPROVAL_PIN"] -notmatch '^\d{6,}$') {
+  Warn "the approval PIN in web/.env is shorter than 6 digits. Change it to 6 to 8 digits (DEVICE_APPROVAL_PIN in web/.env)."
+}
+if ($webValues["DEVICE_APPROVAL_PIN"] -and $webValues["DEVICE_APPROVAL_PIN"] -eq $webValues["OWNER_PIN"]) {
+  Warn "the approval PIN equals the owner PIN, so it is ignored: only the owner PIN approves phones. Set a different DEVICE_APPROVAL_PIN in web/.env."
 }
 Say "  .env files are ready"
 
@@ -571,7 +616,8 @@ if ($Dev) {
 $mode = "start"
 if ($Dev) { $mode = "dev" }
 $nextBin = Join-Path $web "node_modules\next\dist\bin\next"
-$app = Start-Server "app" @(('"' + $nextBin + '"'), $mode, "--port", "$appPort")
+# 127.0.0.1 only: phones reach the app through the HTTPS gateway, never over plain HTTP (slice 15).
+$app = Start-Server "app" @(('"' + $nextBin + '"'), $mode, "--hostname", "127.0.0.1", "--port", "$appPort")
 Say ("  next " + $mode + " started; waiting for http://localhost:" + $appPort)
 $deadline = (Get-Date).AddSeconds(180)
 $up = $false
@@ -601,7 +647,7 @@ if (-not $useHttps) {
   }
   if ($gateway.HasExited) {
     Show-LogTail "https"
-    Warn ("the HTTPS gateway stopped (see above): phones can still open the POS at http://<PC address>:" + $appPort)
+    Warn "the HTTPS gateway stopped (see above): phones can't reach the POS until it runs again (they keep their sales)"
     $gateway = $null
   } else {
     Show-NewLines $gatewayLog "  [https] "
@@ -635,11 +681,13 @@ Say ("  On this PC:          http://localhost:" + $appPort)
 if ($lan.Count -eq 0) {
   Warn "this PC isn't on a network, so phones can't reach it. Join the shop Wi-Fi."
 } else {
-  Say "  Phones on the same Wi-Fi as this PC:"
-  foreach ($ip in $lan) { Say ("    POS in the browser:   http://" + $ip + ":" + $appPort) }
+  Say "  Phones on the same Wi-Fi as this PC (HTTPS only; plain http://<PC address>:3000 is closed):"
   if ($gateway) {
-    Say ("    installed app:        https://" + $localName + ":3443")
-    Say ("    first-time setup:     http://" + $localName + ":3080  (or http://" + $lan[0] + ":3080)")
+    Say ("    POS:                  https://" + $localName + ":3443  (or https://" + $lan[0] + ":3443)")
+    Say ("    first-time setup:     http://" + $localName + ":3080  (or http://" + $lan[0] + ":3080): install the shop certificate, compare the fingerprint above")
+    Say "    then approve each phone on the POS with the approval PIN (once per phone)"
+  } else {
+    Warn "the HTTPS gateway isn't running, so phones can't reach the POS. They keep their sales until it runs."
   }
 }
 Say "  Owner pages ask for the owner PIN."
@@ -665,7 +713,7 @@ try {
     }
     if ($gateway -and $gateway.HasExited) {
       Show-LogTail "https"
-      Warn ("the HTTPS gateway stopped: phones can still open the POS at http://<PC address>:" + $appPort)
+      Warn "the HTTPS gateway stopped: phones can't reach the POS until it runs again (they keep their sales). Run this again to restart it."
       $gateway = $null
     }
   }

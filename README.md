@@ -21,7 +21,7 @@ Double-click `start-ruzzco.cmd` in the repo root (or run `scripts\start-ruzzco.p
 
 - **Installs what's missing:** offers to install Node.js, Docker Desktop and Git for Windows with winget, and asks first.
 - **Starts the services:** starts Docker Desktop and MySQL.
-- **Creates settings:** fills in missing `.env` files (new database passwords; it asks for the owner PIN and never prints either).
+- **Creates settings:** fills in missing `.env` files (new database passwords and owner session secret; it asks for the owner PIN and the approval PIN and never prints any of them).
 - **Prepares the code:** runs `npm ci` when `package-lock.json` changed, applies new migrations and seeds an empty database.
 - **Starts the app:** starts the forecast service when a model is trained, builds the app when the code changed, then starts it with the HTTPS gateway for phones.
 - **Prints the addresses** for this PC and the phones.
@@ -59,7 +59,9 @@ _Note: MySQL runs on port `3307` locally to prevent conflicts with default port 
 
 ```bash
 cd web
-cp .env.example .env         # DATABASE_URL: the user and password from the root .env, port 3307
+cp .env.example .env         # DATABASE_URL: the user and password from the root .env, port 3307;
+                             # OWNER_PIN and DEVICE_APPROVAL_PIN (6-8 digits, different);
+                             # OWNER_SESSION_SECRET: 32 random bytes, hex
 npx prisma migrate deploy    # Apply the migrations in prisma/migrations
 npx prisma db seed           # Seed barbers (Bayani, Vince; Mart inactive) and services
 ```
@@ -98,9 +100,9 @@ docker compose up -d ml-service                       # serve on http://localhos
 
 Commands, tests and the rules around the forecast are in `CLAUDE.md`.
 
-### 5. Install on phones as an app (optional, HTTPS)
+### 5. Phones: HTTPS gateway and phone approval
 
-Phones normally open the POS at `http://<PC address>:3000`. Installed as an app (a PWA), the POS and the shift log also open when the shop PC can't be reached: opened while the PC doesn't answer, the app goes straight to the POS within about 5 seconds. Installing needs HTTPS, so run the app in production and put the HTTPS gateway in front of it:
+Phones reach the app only over HTTPS: the app listens on `127.0.0.1:3000` (this PC only), and the HTTPS gateway puts it on the shop network, so no PIN, owner cookie or phone secret crosses the Wi-Fi unencrypted. Installed as an app (a PWA), the POS and the shift log also open when the shop PC can't be reached: opened while the PC doesn't answer, the app goes straight to the POS within about 5 seconds. Run the app in production with the gateway in front of it:
 
 ```bash
 cd web
@@ -110,12 +112,14 @@ npm run https                    # second terminal: https://ruzzco.local:3443, p
 
 On each phone, once, on the same Wi-Fi as the PC: open `http://ruzzco.local:3080` (or the number address `npm run https` prints, `http://<PC address>:3080`), install the shop certificate as the page explains, then tap the app address the page offers and install the app (Android Chrome: menu, Install app; iPhone Safari: Share, Add to Home Screen).
 
+Then approve each phone, once: on the POS, tap "Approve this phone" and have Bayani or Mart type the approval PIN (`DEVICE_APPROVAL_PIN`; the owner PIN works too). Until then the phone records sales and keeps them; they are sent once it is approved. Mart can revoke a lost or replaced phone on the owner page Phones (`/devices`).
+
 - **Any Wi-Fi.** `ruzzco.local` is the PC's name on whatever network it is on: `npm run https` answers for it (multicast DNS, `web/scripts/mdns-responder.mjs`, nothing to install). An app installed from `https://ruzzco.local:3443` finds the PC on any Wi-Fi the phone and the PC share, whenever both servers run, even after the PC's address changes. The setup page checks whether the phone can find the name and only offers the number address when it can't. An app installed by number stops reaching the PC when its address changes (another Wi-Fi), and needs installing again from there.
 - **When the name doesn't work:** older phones can't look up `.local` names, and Android can't while it is the hotspot itself or on mobile data; use another phone's hotspot or a router. If the PC's Wi-Fi has IPv6 switched off, Android takes about 2 seconds longer to find the name. With two PCs running Ruzzco on one network, give one its own name: `RUZZCO_LOCAL_NAME=ruzzco-2.local` (the proxy warns when another device answers to its name). `npm run test:local-name` checks the name answers; add `-- --live` to ask the network the way an Android phone does while `npm run https` runs.
 - **On the PC itself** use `http://localhost:3000`. The name is for other devices: Windows ignores the answers coming from its own address. Antivirus HTTPS scanning (Avast's Web Shield, for one) also re-signs HTTPS opened on the PC, so the HTTPS addresses show a certificate warning there; phones aren't affected.
-- **Windows Firewall:** Windows treats a Wi-Fi it hasn't seen before as public and blocks phones there. Run `scripts\phone-firewall.ps1` once (it asks for administrator rights): it lets Node.js take the Ruzzco ports (TCP 3000, 3443, 3080 and UDP 5353) from devices on the same local network, on any Wi-Fi. `-Remove` takes the rules out. Without it, set each new network to Private. On public Wi-Fi (a cafe), guests on that network can then reach the app while it runs; owner pages still need the owner PIN. An antivirus firewall (Avast's, for one) filters on its own: if phones still can't connect, allow Node.js there or mark the network as private or trusted in it.
+- **Windows Firewall:** Windows treats a Wi-Fi it hasn't seen before as public and blocks phones there. Run `scripts\phone-firewall.ps1` once (it asks for administrator rights): it lets Node.js take the Ruzzco ports (TCP 3443, 3080 and UDP 5353) from devices on the same local network, on any Wi-Fi; port 3000 stays closed to the network. Run it again after updating to replace an older rule that opened 3000. `-Remove` takes the rules out. Without it, set each new network to Private. On public Wi-Fi (a cafe), guests on that network can then reach the app while it runs; owner pages still need the owner PIN. An antivirus firewall (Avast's, for one) filters on its own: if phones still can't connect, allow Node.js there or mark the network as private or trusted in it.
 - `npm run https` creates a certificate authority for this PC in `web/certs/` (git-ignored). Never commit or share it. It can only sign private network addresses and `.local` names, and a new name or PC address only needs a new certificate from the same authority (made automatically, also when the PC joins another network while it runs), not a new install on the phones.
-- Each address (`http://<PC address>:3000`, `https://<PC address>:3443`, `https://ruzzco.local:3443`) is its own device for the POS, with its own sales queue. Sync everything on the old address before switching a phone; the barber then picks their name again.
+- Each address (`https://<PC address>:3443`, `https://ruzzco.local:3443`) is its own device for the POS, with its own sales queue and approval. Sync everything on the old address before switching a phone; the barber then picks their name again and the phone is approved again.
 - The service worker (`web/public/sw.js`) keeps copies of `/pos`, `/shift-log` and their files only: never owner pages, the home page or `/api` data, and it never touches the sync POST. Set `NEXT_PUBLIC_SERVICE_WORKER=off` to remove it from phones.
 - On any phone, installed or not, the POS and the shift log say when the shop PC can't record sales and how many sales are on the phone only (`web/src/components/ShopPcStatus.tsx`, which asks `/api/v1/health` every 15 seconds while the page is open). When the PC answers again, they send the waiting sales at once.
 

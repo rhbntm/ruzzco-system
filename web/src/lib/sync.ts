@@ -25,12 +25,112 @@ import { REQUEST_TIMEOUT_MS, fetchWithTimeout } from "@/lib/fetch-timeout";
  * One run at a time: syncNow() calls never overlap. A call made while a run is in progress
  * waits for it and then runs once more (calls that pile up share that one extra run), so a
  * sale saved or retried mid-run is still picked up. Queued sales go SYNC_CHUNK_SIZE per request.
+ *
+ * Approved phones only (slice 15): bind and sync carry the phone's key and secret in headers.
+ * Without a secret, nothing is sent; a 401 DEVICE_NOT_APPROVED leaves every sale queued as it
+ * is (no syncError) and the outcome reports them as waiting for approval.
  */
 
 /** Sales per sync request. The server accepts up to SYNC_BATCH_MAX (src/lib/schemas.ts). */
 export const SYNC_CHUNK_SIZE = 50;
 
 const PENDING_KEY = "ruzzco_pending_bind";
+
+// ── Phone approval (slice 15) ────────────────────────────────────────────────
+// Bind and sync need this phone's secret, which it gets once, when Bayani or Mart types the
+// approval PIN on it. Until then sales stay queued here, untouched. A 401 DEVICE_NOT_APPROVED
+// (revoked, or the server lost the approval) sets the waiting flag; the secret is kept, so a
+// server-side slip never wipes every phone's secret at once. The next accepted bind or sync,
+// or a new approval, clears the flag.
+
+const SECRET_KEY = "ruzzco_device_secret";
+const NOT_APPROVED_KEY = "ruzzco_device_not_approved";
+const APPROVAL_EVENT = "ruzzco-approval-change";
+
+function storageGet(key: string): string | null {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storageSet(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Storage unavailable: the phone stays waiting; its sales stay queued.
+  }
+  if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+    window.dispatchEvent(new Event(APPROVAL_EVENT));
+  }
+}
+
+function getDeviceSecret(): string | null {
+  return storageGet(SECRET_KEY);
+}
+
+/** True while the phone can't send sales: never approved, or the server refused it last time. */
+export function isWaitingForApproval(): boolean {
+  return !getDeviceSecret() || storageGet(NOT_APPROVED_KEY) === "1";
+}
+
+/** For useSyncExternalStore: fires when the approval state changes (here or in another tab). */
+export function subscribeApproval(callback: () => void) {
+  window.addEventListener(APPROVAL_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(APPROVAL_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function markNotApproved() {
+  if (storageGet(NOT_APPROVED_KEY) !== "1") storageSet(NOT_APPROVED_KEY, "1");
+}
+
+function markAccepted() {
+  if (storageGet(NOT_APPROVED_KEY) !== null) storageSet(NOT_APPROVED_KEY, null);
+}
+
+/** Headers for bind and sync: this phone's key and secret. Never part of a sale. */
+function deviceHeaders(secret: string): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "X-Ruzzco-Device": getOrCreateDeviceKey(),
+    Authorization: `Bearer ${secret}`,
+  };
+}
+
+async function isNotApproved(res: Response) {
+  if (res.status !== 401) return false;
+  const body = await res.clone().json().catch(() => null);
+  return body?.code === "DEVICE_NOT_APPROVED";
+}
+
+export type ApproveResult = { ok: true } | { ok: false; error: string };
+
+/** Approves this phone with the approval PIN or the owner PIN, typed on the phone itself. */
+export async function approveThisDevice(pin: string, label?: string): Promise<ApproveResult> {
+  try {
+    const res = await fetchWithTimeout("/api/v1/devices/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceKey: getOrCreateDeviceKey(), pin, ...(label?.trim() ? { label: label.trim() } : {}) }),
+    }, REQUEST_TIMEOUT_MS.bind);
+    const data = await res.json().catch(() => null);
+    if (res.ok && typeof data?.secret === "string") {
+      storageSet(SECRET_KEY, data.secret);
+      markAccepted();
+      return { ok: true };
+    }
+    if (res.status === 401) return { ok: false, error: "Wrong PIN." };
+    return { ok: false, error: data?.error ?? `Approval failed (HTTP ${res.status}).` };
+  } catch {
+    return { ok: false, error: "Can't reach the shop PC. Try again when it's on." };
+  }
+}
 
 export type PendingBind = { deviceKey: string; barberId: string; assignmentId?: string };
 
@@ -102,7 +202,8 @@ export async function ensureAssignmentId(binding: LocalDeviceBinding): Promise<L
 }
 
 export type RegisterResult = {
-  status: "none" | "registered" | "rejected" | "retry";
+  /** waiting: this phone isn't approved yet; the pending bind is kept for after approval. */
+  status: "none" | "registered" | "rejected" | "retry" | "waiting";
   /** The local binding was dropped; the POS must ask for a barber again. */
   bindingCleared: boolean;
 };
@@ -111,15 +212,23 @@ export type RegisterResult = {
 export async function registerPendingAssignment(): Promise<RegisterResult> {
   const pending = readPendingBind();
   if (!pending) return { status: "none", bindingCleared: false };
+  const secret = getDeviceSecret();
+  if (!secret) return { status: "waiting", bindingCleared: false };
   try {
     const res = await fetchWithTimeout("/api/v1/devices/bind", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: deviceHeaders(secret),
       body: JSON.stringify(pending),
     }, REQUEST_TIMEOUT_MS.bind);
     if (res.ok) {
+      markAccepted();
       clearPendingBindIfSame(pending);
       return { status: "registered", bindingCleared: false };
+    }
+    // Not approved (or revoked): the binding is fine, the phone isn't. Keep everything.
+    if (await isNotApproved(res)) {
+      markNotApproved();
+      return { status: "waiting", bindingCleared: false };
     }
     if (res.status >= 400 && res.status < 500) {
       // 409 ASSIGNMENT_REVOKED / ASSIGNMENT_CONFLICT / BARBER_INACTIVE, 404 unknown barber,
@@ -214,20 +323,25 @@ export function summarizeSync(outcome: SyncOutcome): string {
   const parts: string[] = [];
   if (outcome.status === "synced") {
     parts.push(`Synced ${outcome.processed} new, ${outcome.duplicates} verified`);
-  } else if (outcome.attention === 0 && outcome.held === 0) {
+  } else if (outcome.status !== "waiting" && outcome.attention === 0 && outcome.held === 0) {
     parts.push("All transactions are synced");
   }
+  if (outcome.waiting > 0) parts.push(`${outcome.waiting} waiting for approval`);
   if (outcome.held > 0) parts.push(`${outcome.held} queued until barber assignment reaches the server`);
   if (outcome.attention > 0) parts.push(`${outcome.attention} need attention`);
+  if (parts.length === 0 && outcome.status === "waiting") parts.push("This phone isn't approved yet");
   return parts.join(" · ");
 }
 
 export type SyncOutcome = {
-  status: "offline" | "empty" | "synced" | "failed";
+  /** waiting: this phone isn't approved (yet, or any more); nothing was sent. */
+  status: "offline" | "empty" | "synced" | "failed" | "waiting";
   processed: number;
   duplicates: number;
   /** Queued under the current assignment, waiting for /bind to accept it. */
   held: number;
+  /** Queued and not sent because this phone isn't approved; they stay in the queue untouched. */
+  waiting: number;
   /** Refused by the server in this run; now marked rejected locally. */
   rejected: number;
   /** All rejected sales on this device after this run (including earlier ones). */
@@ -263,6 +377,7 @@ async function runSync(): Promise<SyncOutcome> {
     processed: 0,
     duplicates: 0,
     held: 0,
+    waiting: 0,
     rejected: 0,
     attention: 0,
     bind: { status: "none", bindingCleared: false },
@@ -280,6 +395,14 @@ async function runSync(): Promise<SyncOutcome> {
   const toSend = queued.filter((t) => !(heldAssignmentId && t.assignmentId === heldAssignmentId));
   outcome.held = queued.length - toSend.length;
   outcome.attention = unsynced.length - queued.length;
+
+  // Not approved: nothing is sent. Sales stay queued exactly as they are (no syncError).
+  const secret = getDeviceSecret();
+  if (!secret || outcome.bind.status === "waiting") {
+    outcome.waiting = toSend.length;
+    outcome.status = "waiting";
+    return outcome;
+  }
   if (toSend.length === 0) {
     outcome.status = "empty";
     return outcome;
@@ -287,8 +410,14 @@ async function runSync(): Promise<SyncOutcome> {
 
   const currentDeviceKey = getOrCreateDeviceKey();
   for (let start = 0; start < toSend.length; start += SYNC_CHUNK_SIZE) {
-    const sent = await sendChunk(toSend.slice(start, start + SYNC_CHUNK_SIZE), currentDeviceKey, outcome);
-    if (!sent) {
+    const sent = await sendChunk(toSend.slice(start, start + SYNC_CHUNK_SIZE), currentDeviceKey, secret, outcome);
+    if (sent === "waiting") {
+      // Earlier chunks are already marked; the rest stay queued, untouched, for after approval.
+      outcome.waiting = toSend.length - start;
+      outcome.status = "waiting";
+      return outcome;
+    }
+    if (sent === "failed") {
       // Earlier chunks are already marked; the rest stay queued for the next run.
       outcome.status = "failed";
       return outcome;
@@ -298,8 +427,13 @@ async function runSync(): Promise<SyncOutcome> {
   return outcome;
 }
 
-/** Sends one chunk and applies the per-sale results to Dexie. False when the request failed. */
-async function sendChunk(chunk: LocalTransaction[], currentDeviceKey: string, outcome: SyncOutcome): Promise<boolean> {
+/** Sends one chunk and applies the per-sale results to Dexie. */
+async function sendChunk(
+  chunk: LocalTransaction[],
+  currentDeviceKey: string,
+  secret: string,
+  outcome: SyncOutcome
+): Promise<"sent" | "failed" | "waiting"> {
   const payload = {
     // This phone's clock right now. The server compares it with its own to spot a wrong
     // phone clock; the sales keep their own timestamps either way.
@@ -328,12 +462,18 @@ async function sendChunk(chunk: LocalTransaction[], currentDeviceKey: string, ou
   try {
     const response = await fetchWithTimeout("/api/v1/transactions/sync", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: deviceHeaders(secret),
       body: JSON.stringify(payload),
     }, REQUEST_TIMEOUT_MS.sync);
+    // Not approved (or revoked): not a per-sale rejection. Nothing in the chunk is touched.
+    if (await isNotApproved(response)) {
+      markNotApproved();
+      return "waiting";
+    }
     if (!response.ok) throw new Error(`Sync failed: HTTP ${response.status}`);
     const result = await response.json();
     if (result.success && Array.isArray(result.syncedIds)) {
+      markAccepted();
       const rejections: { id: string; reason: string }[] = (Array.isArray(result.rejected) ? result.rejected : [])
         .filter((r: { id?: unknown; reason?: unknown }) => typeof r?.id === "string" && typeof r?.reason === "string");
       await db.transaction("rw", db.transactions, async () => {
@@ -356,12 +496,12 @@ async function sendChunk(chunk: LocalTransaction[], currentDeviceKey: string, ou
       outcome.duplicates += result.duplicatesSkipped ?? 0;
       outcome.rejected += rejections.length;
       outcome.attention += rejections.length;
-      return true;
+      return "sent";
     }
-    return false;
+    return "failed";
   } catch (err) {
     console.error("Sync error:", err);
-    return false;
+    return "failed";
   }
 }
 

@@ -8,8 +8,11 @@
   connections there, and Node.js is usually only allowed on private networks. This adds two
   inbound rules (group "Ruzzco phones") for node.exe, on every network type, that accept only
   devices on the same local network (LocalSubnet):
-    TCP 3000, 3443, 3080  the app (plain HTTP and HTTPS) and the phone setup page
+    TCP 3443, 3080        the app over HTTPS and the phone setup page
     UDP 5353              phones asking for ruzzco.local (multicast DNS)
+  Port 3000 (the app over plain HTTP) is not opened: the app listens on 127.0.0.1 only and
+  phones reach it through the HTTPS gateway, so no PIN, cookie or phone secret crosses the
+  Wi-Fi unencrypted (slice 15). Re-running this replaces an older rule that opened 3000.
   Devices beyond the local network stay blocked. On public Wi-Fi (a cafe), other guests on the
   same network can reach these ports while the servers run; owner pages still need the owner PIN.
 
@@ -84,7 +87,7 @@ try {
   }
 
   $common = @{ Group = $group; Direction = "Inbound"; Action = "Allow"; Program = $node; RemoteAddress = "LocalSubnet"; Profile = "Any" }
-  New-NetFirewallRule @common -DisplayName "Ruzzco: phones open the app (TCP 3000, 3443, 3080)" -Protocol TCP -LocalPort 3000, 3443, 3080 | Out-Null
+  New-NetFirewallRule @common -DisplayName "Ruzzco: phones open the app (TCP 3443, 3080)" -Protocol TCP -LocalPort 3443, 3080 | Out-Null
   New-NetFirewallRule @common -DisplayName "Ruzzco: phones find ruzzco.local (UDP 5353)" -Protocol UDP -LocalPort 5353 | Out-Null
   Say "Added the $group rules for $node."
   Show-BlockRules $node

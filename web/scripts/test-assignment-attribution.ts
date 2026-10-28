@@ -4,6 +4,9 @@
  * Calls the REAL routes (POST /api/v1/devices/bind, POST /api/v1/transactions/sync)
  * on a running dev server and checks the stored rows with Prisma. Uses throwaway
  * barbers, device keys and assignments; everything it creates is deleted at the end.
+ * Bind and sync need an approved phone (slice 15): every device key is approved as a
+ * scratch device through the real approve route (OWNER_PIN from web/.env, never printed),
+ * each request carries its phone's key and secret, and those devices are deleted at the end.
  *
  *   npm run dev                      (in another terminal)
  *   npm run test:attribution         (TEST_BASE_URL overrides http://localhost:3000)
@@ -13,12 +16,17 @@
  */
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { loadEnvConfig } from "@next/env";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
+import { createTestDevices, groupByDevice } from "./lib/test-devices";
+
+loadEnvConfig(process.cwd());
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:3000";
 const SERVICE_ID = "10000000-0000-0000-0000-000000000001"; // seeded Haircut
 const RUN = randomUUID().slice(0, 8);
+const devices = createTestDevices(BASE);
 
 // Distinct rates so a wrong barber shows up as a wrong commission too.
 const BARBERS = {
@@ -45,23 +53,25 @@ function check(name: string, ok: boolean, detail = "") {
   }
 }
 
-function newDevice() {
-  const key = randomUUID();
+/** A new phone, approved (slice 15) so bind and sync accept its requests. */
+async function newDevice() {
+  const key = await devices.approve();
   deviceKeys.push(key);
   return key;
 }
 
-async function post(path: string, body: unknown) {
+/** POST as the given (approved) phone: its key and secret go in the headers. */
+async function post(path: string, body: unknown, deviceKey: string) {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: devices.headers(deviceKey),
     body: JSON.stringify(body),
   });
   return { status: res.status, body: await res.json() };
 }
 
 const bind = (deviceKey: string, barber: Key, assignmentId?: string) =>
-  post("/api/v1/devices/bind", { deviceKey, barberId: BARBERS[barber].id, ...(assignmentId ? { assignmentId } : {}) });
+  post("/api/v1/devices/bind", { deviceKey, barberId: BARBERS[barber].id, ...(assignmentId ? { assignmentId } : {}) }, deviceKey);
 
 type SaleOpts = { barber: Key; assignmentId?: string; deviceKey?: string; id?: string };
 function sale({ barber, assignmentId, deviceKey, id }: SaleOpts) {
@@ -81,7 +91,39 @@ function sale({ barber, assignmentId, deviceKey, id }: SaleOpts) {
   };
 }
 
-const sync = (items: unknown[]) => post("/api/v1/transactions/sync", { transactions: items });
+type SyncItem = { id: string; deviceKey?: string };
+type SyncBody = {
+  success: boolean;
+  processedCount: number;
+  duplicatesSkipped: number;
+  syncedIds: string[];
+  rejected: { id: string; reason: string }[]; // id is null only for malformed items, which this suite never sends
+};
+
+/**
+ * A sync request carries one phone's sales (slice 15), so the sales are sent per device key,
+ * each from its own phone, and the per-sale results are merged as if one batch. Legacy sales
+ * without a device key go with the first approved phone's request.
+ */
+async function sync<T extends SyncItem>(items: T[]): Promise<{ status: number; body: SyncBody }> {
+  const groups = groupByDevice(items, devices.keys()[0]);
+  const results = [];
+  for (const [deviceKey, group] of groups) {
+    results.push(await post("/api/v1/transactions/sync", { transactions: group }, deviceKey));
+  }
+  if (results.length === 1) return results[0];
+  const failed = results.find((r) => r.status !== 200);
+  return {
+    status: failed?.status ?? 200,
+    body: {
+      success: results.every((r) => r.body.success),
+      processedCount: results.reduce((n, r) => n + (r.body.processedCount ?? 0), 0),
+      duplicatesSkipped: results.reduce((n, r) => n + (r.body.duplicatesSkipped ?? 0), 0),
+      syncedIds: results.flatMap((r) => r.body.syncedIds ?? []),
+      rejected: results.flatMap((r) => r.body.rejected ?? []),
+    },
+  };
+}
 
 async function stored(id: string) {
   return prisma.transaction.findUnique({ where: { id }, include: { commissionLogs: true } });
@@ -115,7 +157,7 @@ async function main() {
     await prisma.barber.create({ data: { id: b.id, fullName: `Test Barber ${key} ${RUN}`, commissionRate: b.rate, isActive: b.active } });
   }
 
-  const dev1 = newDevice();
+  const dev1 = await newDevice();
   const idA = randomUUID();
   const idB = randomUUID();
   const idC = randomUUID();
@@ -134,7 +176,7 @@ async function main() {
   console.log("\nT3 same assignmentId with a different barber / device");
   const t3 = await bind(dev1, "B", idA);
   check("T3: different barber → 409 ASSIGNMENT_CONFLICT", t3.status === 409 && t3.body.code === "ASSIGNMENT_CONFLICT", JSON.stringify(t3.body));
-  const t3b = await bind(newDevice(), "A", idA);
+  const t3b = await bind(await newDevice(), "A", idA);
   check("T3: different device → 409 ASSIGNMENT_CONFLICT", t3b.status === 409 && t3b.body.code === "ASSIGNMENT_CONFLICT", JSON.stringify(t3b.body));
   check("T3: A unchanged and active", (await assignment(idA))?.revokedAt === null);
 
@@ -169,7 +211,7 @@ async function main() {
   await expectAttributed("T7", s1.id, "A", idA);
 
   console.log("\nT8 A → B → C offline, sales under each");
-  const dev2 = newDevice();
+  const dev2 = await newDevice();
   const idX = randomUUID();
   check("T8: device starts bound online to C (X)", (await bind(dev2, "C", idX)).status === 200);
   const idP = randomUUID(); // offline: A
@@ -199,7 +241,7 @@ async function main() {
   await expectAttributed("T8 R", r1.id, "C", idR);
   // If the current assignment's sale had synced before its bind (lost localStorage),
   // it would be registered revoked, still attributed correctly, and /bind refuses it:
-  const dev2b = newDevice();
+  const dev2b = await newDevice();
   const idS = randomUUID();
   const s8 = sale({ barber: "B", assignmentId: idS, deviceKey: dev2b });
   await sync([s8]);
@@ -216,6 +258,8 @@ async function main() {
   check("T9: one mismatch log (claimed A, resolved B)", log9.length === 1 && log9[0].claimedBarberId === BARBERS.A.id && log9[0].resolvedBarberId === BARBERS.B.id);
 
   console.log("\nT10 assignmentId sent with the wrong deviceKey");
+  // Sent from dev2 itself (its own approved key), so the assignment check rejects it:
+  // idA belongs to dev1.
   const m1 = sale({ barber: "A", assignmentId: idA, deviceKey: dev2 });
   const t10 = await sync([m1]);
   check(
@@ -225,7 +269,7 @@ async function main() {
   );
   check("T10: not inserted", (await stored(m1.id)) === null);
   const noDevice = sale({ barber: "A", assignmentId: idA });
-  const t10b = await post("/api/v1/transactions/sync", { transactions: [{ ...noDevice, deviceKey: undefined }] });
+  const t10b = await post("/api/v1/transactions/sync", { transactions: [{ ...noDevice, deviceKey: undefined }] }, dev1);
   check(
     "T10: assignmentId without deviceKey → rejected INVALID for that sale only (per-item result)",
     t10b.status === 200 && t10b.body.rejected?.some((r: { id: string; reason: string }) => r.id === noDevice.id && r.reason === "INVALID") && !t10b.body.syncedIds.includes(noDevice.id),
@@ -243,7 +287,7 @@ async function main() {
   check("T11: not reactivated; C still the active binding", active11.length === 1 && active11[0].id === idC);
 
   console.log("\nT12 inactive barber");
-  const dev3 = newDevice();
+  const dev3 = await newDevice();
   const idE = randomUUID();
   await bind(dev3, "A", idE);
   const idD1 = randomUUID();
@@ -262,7 +306,7 @@ async function main() {
   check("T12: legacy bind (no id) for inactive barber → 404", (await bind(dev3, "D")).status === 404);
 
   console.log("\nT13 legacy sale (no assignmentId) synced after a rebind");
-  const dev4 = newDevice();
+  const dev4 = await newDevice();
   await bind(dev4, "A", randomUUID());
   await bind(dev4, "B", randomUUID());
   const l1 = sale({ barber: "A", deviceKey: dev4 });
@@ -272,6 +316,7 @@ async function main() {
   check("T13: no mismatch log", (await mismatchLogs(l1.id)) === 0);
 
   console.log("\nT14 legacy sale with no assignmentId and no deviceKey");
+  // Sent from an approved phone (dev1, slice 15); it still keeps its stamped barber.
   const l2 = sale({ barber: "B" });
   // Exactly the shape older clients sent (no listPrice/amountPaid either).
   const t14 = await sync([{ id: l2.id, barberId: l2.barberId, serviceId: SERVICE_ID, totalAmount: 150, paymentMethod: "CASH", transactionTime: l2.transactionTime }]);
@@ -291,7 +336,7 @@ async function main() {
 
   console.log("\nT16 overlapping registration / sync for the same assignment");
   for (let round = 1; round <= 5; round++) {
-    const dev5 = newDevice();
+    const dev5 = await newDevice();
     const idH = randomUUID();
     await bind(dev5, "A", idH);
     const idU = randomUUID();
@@ -307,14 +352,14 @@ async function main() {
     check(`T16.${round}: each sale stored once, attributed to B`, rows.length === 3 && rows.every((r) => r.barberId === BARBERS.B.id && r.assignmentId === idU));
   }
   for (let round = 1; round <= 5; round++) {
-    const dev6 = newDevice();
+    const dev6 = await newDevice();
     const idV = randomUUID();
     const binds = await Promise.all([bind(dev6, "A", idV), bind(dev6, "A", idV), bind(dev6, "A", idV)]);
     check(`T16.bind.${round}: concurrent identical binds all 200`, binds.every((r) => r.status === 200), binds.map((r) => r.status).join(","));
     const rows = await prisma.deviceAssignment.findMany({ where: { deviceKey: dev6 } });
     check(`T16.bind.${round}: one row, active`, rows.length === 1 && rows[0].id === idV && rows[0].revokedAt === null);
 
-    const dev7 = newDevice();
+    const dev7 = await newDevice();
     const [idJ, idK] = [randomUUID(), randomUUID()];
     const racing = await Promise.all([bind(dev7, "A", idJ), bind(dev7, "B", idK)]);
     check(`T16.bind.${round}: two different concurrent binds both 200`, racing.every((r) => r.status === 200), racing.map((r) => r.status).join(","));
@@ -380,6 +425,7 @@ async function cleanup() {
   await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: { in: barberIds } }] } });
   await prisma.deviceAssignment.deleteMany({ where: { OR: [{ deviceKey: { in: deviceKeys } }, { barberId: { in: barberIds } }] } });
   await prisma.barber.deleteMany({ where: { id: { in: barberIds } } });
+  await devices.cleanup(prisma);
 }
 
 main()

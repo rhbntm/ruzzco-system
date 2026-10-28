@@ -6,12 +6,14 @@
  *   npm run test:sync-clock   (TEST_BASE_URL overrides http://localhost:3000)
  *
  * Flagged sales are recorded, never rejected, and keep their timestamps. Uses a throwaway
- * barber; everything it creates is deleted at the end.
+ * barber and an approved scratch phone (sync needs one, slice 15; needs OWNER_PIN in web/.env,
+ * read, never printed); everything it creates is deleted at the end.
  */
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
 import { CLOCK_TOLERANCE_MS, detectTimeAnomaly } from "../src/lib/time-anomaly";
+import { createTestDevices } from "./lib/test-devices";
 
 loadEnvConfig(process.cwd());
 
@@ -23,6 +25,8 @@ const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 const YEARS_2 = 2 * 365 * DAY;
+const devices = createTestDevices(BASE);
+let deviceKey = ""; // the scratch phone every batch is sent from (its sales carry no deviceKey)
 const txIds: string[] = [];
 let passed = 0;
 const failures: string[] = [];
@@ -42,7 +46,7 @@ type SyncResponse = { syncedIds: string[]; rejected: { id: string | null; reason
 async function sync(items: unknown[], sentAt?: unknown) {
   const res = await fetch(`${BASE}/api/v1/transactions/sync`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: devices.headers(deviceKey), // JSON plus the approved phone's key and secret (slice 15)
     body: JSON.stringify({ transactions: items, ...(sentAt === undefined ? {} : { sentAt }) }),
   });
   return { status: res.status, body: (await res.json()) as SyncResponse };
@@ -78,6 +82,7 @@ async function main() {
   const health = await fetch(`${BASE}/api/v1/health`).catch(() => null);
   if (!health?.ok) throw new Error(`Dev server not reachable at ${BASE}. Start it with \`npm run dev\`.`);
   await prisma.barber.create({ data: { id: BARBER, fullName: `Test Barber Clock ${RUN}`, commissionRate: 0.5 } });
+  deviceKey = await devices.approve();
   const now = () => new Date();
 
   const ahead = sale(new Date(Date.now() + HOUR));
@@ -138,8 +143,12 @@ async function main() {
 }
 
 async function cleanup() {
-  await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: BARBER }] } });
-  await prisma.barber.deleteMany({ where: { id: BARBER } });
+  try {
+    await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: BARBER }] } });
+    await prisma.barber.deleteMany({ where: { id: BARBER } });
+  } finally {
+    await devices.cleanup(prisma); // even when a delete above fails
+  }
 }
 
 main()

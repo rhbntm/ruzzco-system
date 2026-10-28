@@ -22,6 +22,7 @@ import { countPending, isRejected, listRejected, retryRejected, summarizeSync, s
 import { useLiveQuery } from "dexie-react-hooks";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { RejectedSales } from "@/components/RejectedSales";
+import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { ConnectionBadge, ShopPcReminder, useShopPc } from "@/components/ShopPcStatus";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
@@ -224,6 +225,8 @@ export default function ShiftLogPage() {
 
         {/* While the shop PC can't record sales: they stay on this phone until it can. */}
         <ShopPcReminder isOnline={isOnline} shopPc={shopPc} pending={pendingCount ?? 0} />
+
+        <DeviceApprovalBanner onApproved={() => void handleSync()} />
 
         {/* Sync feedback */}
         {syncFeedback && (

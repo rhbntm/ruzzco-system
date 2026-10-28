@@ -8,18 +8,23 @@
  *   npm run test:commission      (TEST_BASE_URL overrides http://localhost:3000)
  *
  * Needs OWNER_PIN in web/.env (read, never printed). Uses throwaway barbers and a fixed
- * past business date; its sales, ledger rows (for every barber on that date), assignments
- * and barbers are deleted at the end.
+ * past business date; its sales, ledger rows (for every barber on that date), assignments,
+ * approved test devices and barbers are deleted at the end.
+ *
+ * Bind and sync need an approved device (slice 15): the suite approves a default phone for
+ * its legacy sales (no deviceKey) and the C10 phone, and sends each sale from its own phone.
  */
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { commissionFor } from "../src/lib/commission";
+import { createTestDevices, groupByDevice } from "./lib/test-devices";
 
 loadEnvConfig(process.cwd());
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:3000";
+const devices = createTestDevices(BASE);
 const SERVICE_ID = "10000000-0000-0000-0000-000000000001"; // seeded Haircut
 const RUN = randomUUID().slice(0, 8);
 const DATE = "2000-01-03"; // no real sales; every ledger row on it is test data
@@ -36,6 +41,7 @@ const BARBERS = {
 
 const txIds: string[] = [];
 const deviceKeys: string[] = [];
+let defaultDevice = ""; // approved in main(); sends the sales that carry no deviceKey
 let ownerCookie = "";
 let passed = 0;
 const failures: string[] = [];
@@ -52,22 +58,43 @@ function check(name: string, ok: boolean, detail = "") {
 
 // ── HTTP helpers ─────────────────────────────────────────────────────────────
 
-async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; body: T }> {
+async function request<T>(
+  method: "GET" | "POST", path: string, body?: unknown, deviceKey?: string
+): Promise<{ status: number; body: T }> {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", ...(ownerCookie ? { Cookie: ownerCookie } : {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(deviceKey ? devices.headers(deviceKey) : {}),
+      ...(ownerCookie ? { Cookie: ownerCookie } : {}),
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   return { status: res.status, body: (await res.json()) as T };
 }
 
-type SyncResponse = { syncedIds: string[]; rejected: { id: string | null; reason: string }[]; duplicatesSkipped: number };
+type SyncResponse = {
+  syncedIds: string[]; rejected: { id: string | null; reason: string }[]; processedCount: number; duplicatesSkipped: number;
+};
 type LedgerRow = {
   barberId: string; commissionTotal: string; tipTotal: string; totalOwed: string;
   cashPaid: string; gcashPaid: string; paid: boolean; additionalOwed: boolean;
 };
 
-const sync = (items: unknown[]) => request<SyncResponse>("POST", "/api/v1/transactions/sync", { transactions: items });
+// One request per phone (slice 15: a sync is authenticated as one device); the results are merged.
+async function sync(items: (Record<string, unknown> & { deviceKey?: string })[]): Promise<{ status: number; body: SyncResponse }> {
+  const merged: SyncResponse = { syncedIds: [], rejected: [], processedCount: 0, duplicatesSkipped: 0 };
+  let status = 200;
+  for (const [key, group] of groupByDevice(items, defaultDevice)) {
+    const res = await request<SyncResponse>("POST", "/api/v1/transactions/sync", { transactions: group }, key);
+    if (res.status !== 200) status = res.status;
+    merged.syncedIds.push(...(res.body.syncedIds ?? []));
+    merged.rejected.push(...(res.body.rejected ?? []));
+    merged.processedCount += res.body.processedCount ?? 0;
+    merged.duplicatesSkipped += res.body.duplicatesSkipped ?? 0;
+  }
+  return { status, body: merged };
+}
 const ledger = async (base: "LIST_PRICE" | "AMOUNT_PAID" = "LIST_PRICE") => {
   const res = await request<{ success: boolean; rows: LedgerRow[] }>("GET", `/api/v1/reports/payouts?date=${DATE}&commissionBase=${base}`);
   if (res.status !== 200 || !res.body.success) throw new Error(`ledger GET failed with ${res.status}`);
@@ -119,6 +146,8 @@ async function main() {
   });
   ownerCookie = unlock.headers.get("set-cookie")?.split(";")[0] ?? "";
   if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
+
+  defaultDevice = await devices.approve();
 
   await prisma.dailyPayoutLedger.deleteMany({ where: { businessDate: new Date(`${DATE}T00:00:00.000Z`) } });
   for (const [key, b] of Object.entries(BARBERS)) {
@@ -202,10 +231,10 @@ async function main() {
   check("C9: no ledger row stored for N", (await prisma.dailyPayoutLedger.count({ where: { barberId: BARBERS.N.id } })) === 0);
 
   console.log("\nC10 a barber deactivated before sync: the sale is accepted and payable");
-  const devJ = randomUUID();
+  const devJ = await devices.approve();
   deviceKeys.push(devJ);
   const asgJ = randomUUID();
-  const bindJ = await request<{ success: boolean }>("POST", "/api/v1/devices/bind", { deviceKey: devJ, barberId: BARBERS.J.id, assignmentId: asgJ });
+  const bindJ = await request<{ success: boolean }>("POST", "/api/v1/devices/bind", { deviceKey: devJ, barberId: BARBERS.J.id, assignmentId: asgJ }, devJ);
   check("C10: setup: device bound to J while active", bindJ.status === 200);
   const sJ = sale({ barberId: BARBERS.J.id, time: "13:00", list: 150, deviceKey: devJ, assignmentId: asgJ });
   await deactivate(BARBERS.J.id);
@@ -252,6 +281,8 @@ async function main() {
 }
 
 async function cleanup() {
+  // First and on its own, so the approved test phones are removed even if a later step fails.
+  await devices.cleanup(prisma).catch((e) => console.error("Device cleanup failed:", e));
   const barberIds = Object.values(BARBERS).map((b) => b.id);
   // Every row on the test date, including the zero rows the GET creates for real barbers.
   await prisma.dailyPayoutLedger.deleteMany({ where: { OR: [{ businessDate: new Date(`${DATE}T00:00:00.000Z`) }, { barberId: { in: barberIds } }] } });

@@ -2,13 +2,14 @@
 
 // The owner's drawer: the counter's own drawer, under the day's tools. It starts shut: the front
 // carries a brass nameplate, the lock and the pull, and the whole front is its handle. Out slides a
-// tray with the owner's tools: Barber Ledger, Detailed Forecast, Insights and Payment QR (each page
+// tray with the owner's tools: Barber Ledger, Detailed Forecast, Insights, Payment QR and Phones (each page
 // still asks for the PIN itself) and the 7/14/30-day forecast, which shows its numbers only once the
 // owner PIN has been entered on this device. Until then no figure reaches the page.
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, LayoutDashboard, LineChart, LockKeyhole, LockKeyholeOpen, QrCode, TriangleAlert, Wallet } from "lucide-react";
+import { ArrowRight, LayoutDashboard, LineChart, LockKeyhole, LockKeyholeOpen, QrCode, Smartphone, TriangleAlert, Wallet } from "lucide-react";
 import type { SerializedForecast } from "@/lib/forecast";
 import { ForecastLocked, ForecastPanel } from "@/components/ForecastPanel";
 
@@ -20,6 +21,7 @@ const ownerPages: OwnerPage[] = [
   { href: "/forecast", title: "Detailed Forecast", body: "How the 7-day forecast compares with simpler guesses and other models.", icon: LineChart },
   { href: "/insights", title: "Insights", body: "Dashboards, trends and calculations from the shop's own numbers.", icon: LayoutDashboard },
   { href: "/payment-qr", title: "Payment QR", body: "Add or change the GCash and Maya QR shown for each barber.", icon: QrCode },
+  { href: "/devices", title: "Phones", body: "See the approved phones and revoke a lost or replaced one.", icon: Smartphone },
 ];
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -57,6 +59,19 @@ export function OwnerDrawer({
   const frontRef = useRef<HTMLDivElement>(null);
   const firstToolRef = useRef<HTMLAnchorElement>(null);
   const forecastRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const [locking, setLocking] = useState(false);
+
+  // Ends the owner session on this device only; the page re-renders locked.
+  async function lock() {
+    setLocking(true);
+    try {
+      await fetch("/api/v1/owner/lock", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    } finally {
+      setLocking(false);
+      router.refresh();
+    }
+  }
 
   useEffect(() => {
     if (justUnlocked) forecastRef.current?.focus({ preventScroll: true });
@@ -135,6 +150,15 @@ export function OwnerDrawer({
             {isOwner ? (
               <>
                 <LockKeyholeOpen className="w-3.5 h-3.5 text-brass" /> Unlocked on this device
+                {/* Above the pull's hit area (z-index 1), so it locks instead of opening the drawer. */}
+                <button
+                  type="button"
+                  onClick={() => void lock()}
+                  disabled={locking}
+                  className="relative z-2 ml-1.5 rz-btn rz-btn-secondary px-2.5 py-1 text-xs pointer-coarse:min-h-11"
+                >
+                  {locking ? "Locking…" : "Lock"}
+                </button>
               </>
             ) : (
               <>

@@ -36,6 +36,8 @@ const MAX_REVISION_ATTEMPTS = 3;
  * (a frozen snapshot) if any, and whether that revision is stale against the live state.
  */
 export async function GET(request: NextRequest) {
+  // The day's revenue, e-wallet totals, counted cash and notes are owner-only (slice 15).
+  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
   const day = parseBusinessDate(new URL(request.url).searchParams.get("date") ?? "");
   if (!day) {
     return NextResponse.json(

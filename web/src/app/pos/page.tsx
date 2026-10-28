@@ -73,6 +73,7 @@ import { checkQrphAvailable } from "@/lib/qrph-client";
 import { refreshPaymentQrs } from "@/lib/payment-qr-cache";
 import { qrCacheId } from "@/lib/payment-qr-plan";
 import { RejectedSales } from "@/components/RejectedSales";
+import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { ConnectionBadge, ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
 import { createSubmitLock } from "@/lib/submit-lock";
@@ -949,6 +950,7 @@ export default function MobilePOSPage() {
 
         {/* Feedback toasts. A polite live region, so screen readers announce a saved sale or a sync result. */}
         <div aria-live="polite" className="px-4 pt-3 space-y-2">
+          <DeviceApprovalBanner onApproved={() => void reconcileWithServer()} />
           {syncFeedback && (
             <div className="animate-drop rz-notice py-2.5 text-sm">
               <Sparkles className="w-4 h-4 text-brass shrink-0 mt-0.5" />

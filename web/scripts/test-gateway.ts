@@ -11,15 +11,18 @@
  *   npm run test:gateway         (TEST_BASE_URL overrides http://localhost:3000)
  *
  * G8 runs the real src/lib/sync.ts (retryRejected) on fake-indexeddb against the same server.
+ * Sync needs an approved device (slice 15): the suite's own sales go from one approved test
+ * phone, and G8's fake phone gets its own approved key and secret in its localStorage.
  * The QR charge itself (one per sale) is covered by test:qrph-charge, without PayMongo.
  *
  * Secrets are read, never printed. Uses a throwaway barber and a fixed past business date
- * (2000-01-20); everything it creates is deleted at the end.
+ * (2000-01-20); everything it creates (approved test devices included) is deleted at the end.
  */
 import "fake-indexeddb/auto";
 import { createHmac, randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestDevices } from "./lib/test-devices";
 
 loadEnvConfig(process.cwd());
 
@@ -31,9 +34,11 @@ const NEXT_DAY_NOON = Math.floor(new Date("2000-01-21T12:00:00+08:00").getTime()
 const AT = (hhmm: string) => new Date(`${DATE}T${hhmm}:00+08:00`).toISOString();
 const BARBER = `test-gw-${RUN}`;
 const SECRET = process.env.PAYMONGO_WEBHOOK_SECRET ?? "";
+const devices = createTestDevices(BASE);
 
 const txIds: string[] = [];
 const eventIds: string[] = [];
+let device = ""; // approved in main(); every sale here has no deviceKey, so it counts as this phone's
 let ownerCookie = "";
 let passed = 0;
 const failures: string[] = [];
@@ -48,10 +53,16 @@ function check(name: string, ok: boolean, detail = "") {
   }
 }
 
-async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; body: T }> {
+async function request<T>(
+  method: "GET" | "POST", path: string, body?: unknown, deviceKey?: string
+): Promise<{ status: number; body: T }> {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", ...(ownerCookie ? { Cookie: ownerCookie } : {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(deviceKey ? devices.headers(deviceKey) : {}),
+      ...(ownerCookie ? { Cookie: ownerCookie } : {}),
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   return { status: res.status, body: (await res.json()) as T };
@@ -64,7 +75,8 @@ type Expected = {
 };
 type LedgerRow = { barberId: string; commissionTotal: string };
 
-const sync = (items: unknown[]) => request<SyncResponse>("POST", "/api/v1/transactions/sync", { transactions: items });
+const sync = (items: unknown[]) => request<SyncResponse>("POST", "/api/v1/transactions/sync", { transactions: items }, device);
+// Owner-only since slice 15: request() sends the owner cookie from main().
 const reconciliation = async () => (await request<{ expected: Expected }>("GET", `/api/v1/reports/reconciliation?date=${DATE}`)).body.expected;
 const commission = async () =>
   (await request<{ rows: LedgerRow[] }>("GET", `/api/v1/reports/payouts?date=${DATE}`)).body.rows.find((r) => r.barberId === BARBER)?.commissionTotal;
@@ -131,6 +143,7 @@ async function main() {
   ownerCookie = unlock.headers.get("set-cookie")?.split(";")[0] ?? "";
   if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
 
+  device = await devices.approve();
   await prisma.barber.create({ data: { id: BARBER, fullName: `Test Barber GW ${RUN}`, commissionRate: 0.5 } });
 
   console.log("\nG1 the client cannot sync a QRPH sale as PAID");
@@ -215,7 +228,12 @@ async function main() {
 
   console.log("\nG8 a QRPH sale refused while QR Ph was off: Retry after it is back on");
   // The phone as it was left: the sale saved, refused with GATEWAY_DISABLED, not on the server.
-  const store = new Map<string, string>();
+  // It is an approved phone (slice 15): its key and secret are in its localStorage.
+  const phoneKey = await devices.approve();
+  const store = new Map<string, string>([
+    ["ruzzco_device_key", phoneKey],
+    ["ruzzco_device_secret", devices.secretOf(phoneKey) ?? ""],
+  ]);
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
     value: {
@@ -254,6 +272,8 @@ async function main() {
 }
 
 async function cleanup() {
+  // First and on its own, so the approved test phones are removed even if a later step fails.
+  await devices.cleanup(prisma).catch((e) => console.error("Device cleanup failed:", e));
   await prisma.gatewayWebhookEvent.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.gatewayPayment.deleteMany({ where: { transactionId: { in: txIds } } });
   await prisma.dailyPayoutLedger.deleteMany({ where: { OR: [{ businessDate: new Date(`${DATE}T00:00:00.000Z`) }, { barberId: BARBER }] } });

@@ -4,18 +4,21 @@
  *
  * Calls the REAL routes (POST /api/v1/transactions/sync, GET/POST /api/v1/reports/reconciliation,
  * GET/POST /api/v1/reports/payouts) on a running dev server and checks stored rows with Prisma.
+ * Sync goes through an approved scratch phone, and the reconciliation GET needs the owner
+ * cookie too (slice 15).
  *
  *   npm run dev                      (in another terminal)
  *   npm run test:reconciliation      (TEST_BASE_URL overrides http://localhost:3000)
  *
- * Needs OWNER_PIN in web/.env (read, never printed). Uses throwaway barbers and fixed past
- * business dates (2000-01-10..12, no real data); its sales, ledger rows and reconciliation
- * revisions on those dates, and its barbers, are deleted at the end.
+ * Needs OWNER_PIN in web/.env (read, never printed). Uses throwaway barbers, a scratch phone and
+ * fixed past business dates (2000-01-10..12, no real data); its sales, ledger rows and
+ * reconciliation revisions on those dates, its barbers and its phone are deleted at the end.
  */
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
 import { manilaToday, parseBusinessDate } from "../src/lib/business-date";
+import { createTestDevices } from "./lib/test-devices";
 
 loadEnvConfig(process.cwd());
 
@@ -35,6 +38,8 @@ const BARBERS = {
   B: { id: `test-rec-B-${RUN}`, rate: 0.5 }, // only has a payout row
 };
 
+const devices = createTestDevices(BASE);
+let deviceKey = ""; // the scratch phone every sale is synced from (its sales carry no deviceKey)
 const txIds: string[] = [];
 let ownerCookie = "";
 let passed = 0;
@@ -52,10 +57,10 @@ function check(name: string, ok: boolean, detail = "") {
 
 // ── HTTP helpers ─────────────────────────────────────────────────────────────
 
-async function request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; body: T }> {
+async function request<T>(method: "GET" | "POST", path: string, body?: unknown, extraHeaders: Record<string, string> = {}): Promise<{ status: number; body: T }> {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", ...(ownerCookie ? { Cookie: ownerCookie } : {}) },
+    headers: { "Content-Type": "application/json", ...(ownerCookie ? { Cookie: ownerCookie } : {}), ...extraHeaders },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   return { status: res.status, body: (await res.json()) as T };
@@ -74,7 +79,8 @@ type Staleness = { stale: boolean; staleReasons: string[]; lateSyncedCount: numb
 type Recon = { success: boolean; date: string; expected: Expected; saved: Saved | null; staleness: Staleness | null; error?: string };
 type LedgerRow = { barberId: string; commissionTotal: string };
 
-const sync = (items: unknown[]) => request<SyncResponse>("POST", "/api/v1/transactions/sync", { transactions: items });
+// Sync needs an approved phone (slice 15): the scratch device's key and secret ride along.
+const sync = (items: unknown[]) => request<SyncResponse>("POST", "/api/v1/transactions/sync", { transactions: items }, devices.headers(deviceKey));
 const recon = (date: string) => request<Recon>("GET", `/api/v1/reports/reconciliation?date=${date}`);
 const reconcile = (date: string, countedCash: number, pettyCashAmount = 0) =>
   request<Recon>("POST", "/api/v1/reports/reconciliation", { date, countedCash, pettyCashAmount });
@@ -152,6 +158,7 @@ async function main() {
   for (const [key, b] of Object.entries(BARBERS)) {
     await prisma.barber.create({ data: { id: b.id, fullName: `Test Recon ${key} ${RUN}`, commissionRate: b.rate } });
   }
+  deviceKey = await devices.approve();
 
   console.log("\nB1-B4 one sale, one business date, at the Manila midnight edges");
   const atNextMidnight = sale({ date: NEXT, time: "00:00:00.000", amount: 100 }); // B1
@@ -167,6 +174,13 @@ async function main() {
   check("B4: D 00:00:00.000 is not in D-1", prev.body.expected.transactionCount === 0 && prev.body.expected.cashTotal === "0.00", JSON.stringify(prev.body.expected));
   check("B1/B2/B4: D holds 23:59:59.999 and 00:00:00.000 of D only (200 + 800)", cur.body.expected.cashTotal === "1000.00" && cur.body.expected.transactionCount === 2, JSON.stringify(cur.body.expected));
   check("B1/B3: D+1 holds 00:00:00.000 and 00:00:00.001 of D+1 (100 + 400)", next.body.expected.cashTotal === "500.00" && next.body.expected.transactionCount === 2, JSON.stringify(next.body.expected));
+
+  console.log("\nA the reconciliation GET is owner-only (slice 15, finding #5)");
+  const anonymous = await fetch(`${BASE}/api/v1/reports/reconciliation?date=${D}`);
+  const anonymousBody = (await anonymous.json().catch(() => null)) as Record<string, unknown> | null;
+  check("A: GET without the owner cookie → 401 Owner PIN required", anonymous.status === 401 && anonymousBody?.success === false && anonymousBody.error === "Owner PIN required", `${anonymous.status} ${JSON.stringify(anonymousBody)}`);
+  check("A: …and its body carries no expected figures", !!anonymousBody && !("expected" in anonymousBody) && !("saved" in anonymousBody), JSON.stringify(anonymousBody));
+  check("A: the same GET with the owner cookie → 200, success", cur.status === 200 && cur.body.success === true, `${cur.status} ${JSON.stringify(cur.body).slice(0, 200)}`);
 
   console.log("\nB5 reconciliation and payouts select the same sales");
   let rowsD = await ledger(D);
@@ -294,12 +308,16 @@ async function cleanupDates() {
 
 async function cleanup() {
   const barberIds = Object.values(BARBERS).map((b) => b.id);
-  await cleanupDates();
-  await prisma.dailyPayoutLedger.deleteMany({ where: { barberId: { in: barberIds } } });
-  await prisma.syncMismatchLog.deleteMany({ where: { transactionId: { in: txIds } } });
-  // Items and commission logs cascade with the transaction.
-  await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: { in: barberIds } }] } });
-  await prisma.barber.deleteMany({ where: { id: { in: barberIds } } });
+  try {
+    await cleanupDates();
+    await prisma.dailyPayoutLedger.deleteMany({ where: { barberId: { in: barberIds } } });
+    await prisma.syncMismatchLog.deleteMany({ where: { transactionId: { in: txIds } } });
+    // Items and commission logs cascade with the transaction.
+    await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: { in: barberIds } }] } });
+    await prisma.barber.deleteMany({ where: { id: { in: barberIds } } });
+  } finally {
+    await devices.cleanup(prisma); // even when a delete above fails
+  }
 }
 
 main()
