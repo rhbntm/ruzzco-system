@@ -65,7 +65,7 @@ def test_forecast_defaults_to_today_in_manila_and_seven_days(client):
     assert body["days"][0]["date"] == today.isoformat()
 
 
-@pytest.mark.parametrize("params", [{"days": 0}, {"days": 15}, {"start": "2026-13-01"}, {"start": "next week"}])
+@pytest.mark.parametrize("params", [{"days": 0}, {"days": 31}, {"start": "2026-13-01"}, {"start": "next week"}])
 def test_forecast_rejects_bad_input(client, params):
     assert client.get("/forecast", params=params).status_code == 422
 
@@ -74,6 +74,15 @@ def test_forecast_fourteen_days(client):
     body = client.get("/forecast", params={"start": "2026-10-12", "days": 14}).json()
     assert len(body["days"]) == 14
     assert pd.Timestamp(body["days"][-1]["date"]) == pd.Timestamp("2026-10-25")
+
+
+def test_forecast_thirty_days(client):
+    """Slice 14: the home panel's longest view; 30 consecutive dates from start."""
+    body = client.get("/forecast", params={"start": "2026-10-12", "days": 30}).json()
+    assert len(body["days"]) == 30
+    assert [d["date"] for d in body["days"]] == [
+        (dt.date(2026, 10, 12) + dt.timedelta(days=i)).isoformat() for i in range(30)
+    ]
 
 
 def test_forecast_includes_the_saved_comparison(client):

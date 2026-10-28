@@ -41,7 +41,7 @@ def create_app(artifacts_dir=ARTIFACTS_DIR):
         }
 
     @app.get("/forecast")
-    def forecast(start: dt.date | None = None, days: int = Query(7, ge=1, le=14)):
+    def forecast(start: dt.date | None = None, days: int = Query(7, ge=1, le=30)):
         """Expected customers and revenue for `days` dates from `start` (default: today in Manila)."""
         if model is None:
             raise HTTPException(status_code=503, detail="No model loaded. Run train.py, then restart the service.")

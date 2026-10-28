@@ -138,17 +138,18 @@ export async function saveForecast(forecast: ForecastResponse) {
   });
 }
 
-// The latest run and the saved days from today (Manila) for 7 days. Database only.
-export async function latestForecast(today = manilaToday()) {
+// The latest run and the saved days from today (Manila) for `days` days (default 7). Database only.
+// Slice 14: the home panel reads MAX_FORECAST_DAYS and slices them; every other caller keeps 7.
+export async function latestForecast(today = manilaToday(), days = 7) {
   const run = await prisma.forecastRun.findFirst({ orderBy: { createdAt: "desc" } });
-  const days = await prisma.dailyRevenueForecast.findMany({
+  const rows = await prisma.dailyRevenueForecast.findMany({
     where: {
-      forecastDate: { gte: parseBusinessDate(today)!.dateValue, lt: parseBusinessDate(addDays(today, 7))!.dateValue },
+      forecastDate: { gte: parseBusinessDate(today)!.dateValue, lt: parseBusinessDate(addDays(today, days))!.dateValue },
       runId: { not: null },
     },
     orderBy: { forecastDate: "asc" },
   });
-  return { run, days };
+  return { run, days: rows };
 }
 
 export function parseSavedComparison(value: unknown): Comparison | null {

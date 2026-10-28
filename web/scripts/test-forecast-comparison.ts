@@ -136,9 +136,22 @@ check(
   chart.summary
 );
 check("no emphasised column", chart.columns.every((c) => !("emphasis" in c)));
+check("seven days: every weekday labelled", chart.labelEvery === 1);
 const allNull = forecastChart(week.map((d) => ({ ...d, customers: null })));
 check("all days null: no busiest day, still seven columns", allNull.columns.length === 7 && !allNull.summary.includes("Busiest"));
 check("no days gives no columns", forecastChart([]).columns.length === 0);
+
+// Slice 14: 14 and 30-day views label the day of the month, thinned so the axis stays readable.
+const span = (n: number) =>
+  Array.from({ length: n }, (_, i) => {
+    const date = new Date(Date.UTC(2026, 9, 27 + i)).toISOString().slice(0, 10);
+    return { date, customers: 10 + (i % 5), revenue: "2000.00" };
+  });
+const fortnight = forecastChart(span(14));
+check("14 days: 14 columns, day-of-month labels, every 2nd", fortnight.columns.length === 14 && fortnight.columns[0].axisLabel === "27" && fortnight.columns[5].axisLabel === "1" && fortnight.labelEvery === 2);
+check("14 days: tooltip label keeps the weekday", fortnight.columns[5].label === "Sun, Nov 1");
+const month = forecastChart(span(30));
+check("30 days: 30 columns, every 5th label", month.columns.length === 30 && month.labelEvery === 5 && month.columns[29].key === "2026-11-25");
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

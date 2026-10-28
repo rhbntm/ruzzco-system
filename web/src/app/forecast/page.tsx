@@ -52,7 +52,7 @@ export default async function ForecastPage() {
 
       <div className="rz-page max-w-4xl mx-auto p-4 sm:p-6 space-y-5">
         {!isOwner ? (
-          <ForecastLocked />
+          <ForecastLocked description="Expected customers and revenue for the next 7 days, and how the forecast compares with other methods. Owner only." />
         ) : !forecast ? (
           <p className="rz-notice rz-notice-danger">
             <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0" />

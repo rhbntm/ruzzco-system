@@ -14,6 +14,7 @@ import { countsOnDay } from "@/lib/time-review";
 import { gatewayConfig } from "@/lib/gateway";
 import { OWNER_COOKIE, isOwnerCookie } from "@/lib/owner-access";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
+import { MAX_FORECAST_DAYS } from "@/lib/forecast-chart";
 import { OwnerDrawer } from "@/components/OwnerDrawer";
 import { RuzzcoLogoBanner, MustacheIcon } from "@/components/RuzzcoBrand";
 import { MirrorGlass } from "@/components/StationMirror";
@@ -48,9 +49,10 @@ async function loadSnapshot() {
 type Snapshot = Awaited<ReturnType<typeof loadSnapshot>>;
 
 // Forecast numbers are loaded only for the owner; everyone else sees the locked drawer.
+// Slice 14: 30 saved days, so the panel can switch between 7, 14 and 30 without a request.
 async function loadForecast(): Promise<SerializedForecast | null> {
   try {
-    const { run, days } = await latestForecast();
+    const { run, days } = await latestForecast(manilaToday(), MAX_FORECAST_DAYS);
     return serializeForecast(run, days);
   } catch (error) {
     console.error("[home] forecast query failed:", error instanceof Error ? error.message : String(error));

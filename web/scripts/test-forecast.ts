@@ -1,19 +1,21 @@
 /**
  * Integration test for the owner forecast routes (slice 7): owner-only access, refresh saves
- * one run and 7 days, a second refresh the same day overwrites those dates, GET reads them back.
+ * one run and 30 days (slice 14: the home panel's longest view), a second refresh the same day
+ * overwrites those dates, GET still reads back 7.
  *
  * Needs, in other terminals:
  *   docker compose up -d ml-service   (trained: python train.py has written the artifacts)
  *   npm run dev                       (OWNER_PIN in web/.env)
  *   npm run test:forecast             (TEST_BASE_URL overrides http://localhost:3000)
  *
- * Refresh writes the real forecast for today and the next 6 days, exactly as the dashboard's
+ * Refresh writes the real forecast for today and the next 29 days, exactly as the dashboard's
  * button does, and those rows are kept.
  */
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
 import { manilaToday, parseBusinessDate } from "../src/lib/business-date";
 import { addDays, type SerializedForecast } from "../src/lib/forecast";
+import { MAX_FORECAST_DAYS } from "../src/lib/forecast-chart";
 
 loadEnvConfig(process.cwd());
 
@@ -55,7 +57,7 @@ async function main() {
   if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
 
   const today = manilaToday();
-  const range = { gte: parseBusinessDate(today)!.dateValue, lt: parseBusinessDate(addDays(today, 7))!.dateValue };
+  const range = { gte: parseBusinessDate(today)!.dateValue, lt: parseBusinessDate(addDays(today, MAX_FORECAST_DAYS))!.dateValue };
   const rowsInRange = () => prisma.dailyRevenueForecast.findMany({ where: { forecastDate: range } });
 
   console.log("\nOwner only");
@@ -70,9 +72,9 @@ async function main() {
   check("refresh answers 200", first.status === 200, `got ${first.status}`);
   const firstRun = first.body?.success ? first.body.run : null;
   check("saved exactly one new run", (await prisma.forecastRun.count()) === runsBefore + 1);
-  check("returns 7 days from today", first.body?.success === true && first.body.days.length === 7 && first.body.days[0].date === today);
+  check("returns 30 days from today", first.body?.success === true && first.body.days.length === 30 && first.body.days[0].date === today && first.body.days[29].date === addDays(today, 29));
   const afterFirst = await rowsInRange();
-  check("7 stored days point at the run", afterFirst.length === 7 && afterFirst.every((r) => r.runId === firstRun?.id));
+  check("30 stored days point at the run", afterFirst.length === 30 && afterFirst.every((r) => r.runId === firstRun?.id));
   check("confidence bounds stay null", afterFirst.every((r) => r.confidenceLowerBound === null && r.confidenceUpperBound === null));
   check("headcount is the customers rounded", afterFirst.every((r) => r.predictedCustomers !== null && r.predictedHeadcount === Math.round(Number(r.predictedCustomers))));
   check(
@@ -91,7 +93,7 @@ async function main() {
   const secondRun = second.body?.success ? second.body.run : null;
   check("second refresh answers 200", second.status === 200, `got ${second.status}`);
   const afterSecond = await rowsInRange();
-  check("still 7 rows for those dates, not 14", afterSecond.length === 7, `got ${afterSecond.length}`);
+  check("still 30 rows for those dates, not 60", afterSecond.length === 30, `got ${afterSecond.length}`);
   check("rows now point at the second run", Boolean(secondRun) && secondRun?.id !== firstRun?.id && afterSecond.every((r) => r.runId === secondRun?.id));
 
   console.log("\nGET");

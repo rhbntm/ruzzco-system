@@ -1,14 +1,15 @@
 "use client";
 
-// Owner-only 7-day forecast (slice 7). Rendered only when the home page found the owner cookie;
+// Owner-only forecast (slice 7). Rendered only when the home page found the owner cookie;
 // starts from the forecast saved in MySQL and tries one refresh when that run is not from today.
+// Slice 14: the owner switches between 7, 14 and 30 days; all three come from the same saved run.
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LineChart, LockKeyhole, RefreshCw, WifiOff } from "lucide-react";
 import { ColumnChart } from "@/components/ColumnChart";
 import type { SerializedForecast } from "@/lib/forecast";
-import { forecastChart } from "@/lib/forecast-chart";
+import { FORECAST_HORIZONS, MAX_FORECAST_DAYS, forecastChart, type ForecastHorizon } from "@/lib/forecast-chart";
 
 const peso = (value: number) => `₱${Math.round(value).toLocaleString("en-PH")}`;
 
@@ -53,7 +54,9 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
   }, [stale, refresh]);
 
   const { run } = forecast;
-  const days = forecast.days.filter((day) => day.date >= today);
+  const [horizon, setHorizon] = useState<ForecastHorizon>(7);
+  const saved = forecast.days.filter((day) => day.date >= today);
+  const days = saved.slice(0, horizon);
   const totalCustomers = days.reduce((sum, day) => sum + (day.customers ?? 0), 0);
   const totalRevenue = days.reduce((sum, day) => sum + Number(day.revenue), 0);
 
@@ -64,17 +67,33 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
           <span aria-hidden="true" className="w-9 h-9 rounded-lg bg-brass/10 ring-1 ring-brass/40 text-brass-bright flex items-center justify-center shrink-0">
             <LineChart className="w-4.5 h-4.5" />
           </span>
-          <h3 className="rz-title text-xl whitespace-nowrap">Next 7 days</h3>
+          <h3 className="rz-title text-xl whitespace-nowrap">Next {horizon} days</h3>
         </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={busy}
-          className="rz-btn rz-btn-secondary min-h-9 px-3 text-xs whitespace-nowrap pointer-coarse:min-h-11"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin" : ""}`} />
-          {busy ? "Refreshing…" : "Refresh forecast"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Slice 14: switching only slices the saved days; it never calls the server. */}
+          <div role="group" aria-label="Forecast length" className="rz-seg">
+            {FORECAST_HORIZONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={horizon === option}
+                onClick={() => setHorizon(option)}
+                className="rz-seg-item min-h-7 px-3 text-xs whitespace-nowrap pointer-coarse:min-h-11"
+              >
+                {option} days
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={busy}
+            className="rz-btn rz-btn-secondary min-h-9 px-3 text-xs whitespace-nowrap pointer-coarse:min-h-11"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${busy ? "animate-spin" : ""}`} />
+            {busy ? "Refreshing…" : "Refresh forecast"}
+          </button>
+        </div>
       </div>
 
       {offline && (
@@ -121,10 +140,16 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
           </table>
 
           <div className="space-y-2 text-xs text-dust leading-relaxed max-w-prose">
+            {days.length < horizon && (
+              <p className="text-bone-2">
+                The saved forecast covers {days.length} days. Press Refresh forecast for the full {MAX_FORECAST_DAYS}.
+              </p>
+            )}
             <p>
               On the last {run.weeksTested} weeks of logbook records, this forecast was off by about{" "}
               {Number(run.typicalErrorCustomers)} customers (about {peso(Number(run.typicalErrorCustomers) * Number(run.avgTicket))})
               a day.
+              {horizon > 7 && " Accuracy was measured on 7-day test weeks; 14- and 30-day forecasts have not been tested yet."}
             </p>
             <p>
               Based on the logbook from {formatDate(run.dataFrom, { month: "short", day: "numeric", year: "numeric" })} to{" "}
@@ -162,7 +187,7 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
 // /insights reuses it with its own wording.
 export function ForecastLocked({
   title = "Forecast",
-  description = "Expected customers and revenue for the next 7 days. Owner only.",
+  description = "Expected customers and revenue for the next 7, 14 or 30 days. Owner only.",
   submitLabel = "Show forecast",
 }: { title?: string; description?: string; submitLabel?: string } = {}) {
   const router = useRouter();

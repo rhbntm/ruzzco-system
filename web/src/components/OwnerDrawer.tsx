@@ -3,7 +3,7 @@
 // The owner's drawer: the counter's own drawer, under the day's tools. It starts shut: the front
 // carries a brass nameplate, the lock and the pull, and the whole front is its handle. Out slides a
 // tray with the owner's tools: Barber Ledger, Detailed Forecast, Insights and Payment QR (each page
-// still asks for the PIN itself) and the 7-day forecast, which shows its numbers only once the
+// still asks for the PIN itself) and the 7/14/30-day forecast, which shows its numbers only once the
 // owner PIN has been entered on this device. Until then no figure reaches the page.
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
