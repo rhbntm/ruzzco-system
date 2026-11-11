@@ -65,8 +65,10 @@ import {
   registerPendingAssignment,
   retryRejected,
   summarizeSync,
+  switchBarber,
   syncNow,
   verifyCurrentAssignment,
+  type RegisterResult,
 } from "@/lib/sync";
 import { REQUEST_TIMEOUT_MS, fetchWithTimeout } from "@/lib/fetch-timeout";
 import { checkQrphAvailable } from "@/lib/qrph-client";
@@ -74,6 +76,7 @@ import { refreshPaymentQrs } from "@/lib/payment-qr-cache";
 import { qrCacheId } from "@/lib/payment-qr-plan";
 import { RejectedSales } from "@/components/RejectedSales";
 import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
+import { OwnerPinDialog } from "@/components/OwnerPinDialog";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { ConnectionBadge, ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
 import { createSubmitLock } from "@/lib/submit-lock";
@@ -131,6 +134,12 @@ export default function MobilePOSPage() {
   const [showBindModal, setShowBindModal] = useState(false);
   const [isBinding, setIsBinding] = useState(false);
   const [loadTimeout, setLoadTimeout] = useState(false);
+  // Moving a bound phone to another barber needs the owner PIN, checked by the server.
+  const [switchTarget, setSwitchTarget] = useState<CachedBarber | null>(null);
+  // A barber change queued before that rule (or after the binding was dropped) that the server
+  // refused without the owner PIN: its sales are held on this phone until Mart enters it.
+  const [pendingNeedsPin, setPendingNeedsPin] = useState(false);
+  const [showPendingPin, setShowPendingPin] = useState(false);
 
   // Digital payment reference modal state
   const [digitalMethod, setDigitalMethod] = useState<"GCASH" | "MAYA" | null>(null);
@@ -226,6 +235,14 @@ export default function MobilePOSPage() {
     setShowBindModal(true);
   }, []);
 
+  // After every bind attempt: show or clear the "needs the owner PIN" notice. Retry and
+  // waiting say nothing new, so the notice stays as it was.
+  const noteBindResult = useCallback((result: RegisterResult) => {
+    if (result.status === "pin_required") setPendingNeedsPin(true);
+    else if (result.status === "registered" || result.status === "none" || result.status === "rejected") setPendingNeedsPin(false);
+    if (result.bindingCleared) requireRebind();
+  }, [requireRebind]);
+
   // Register the pending assignment, then sync queued sales (see lib/sync.ts).
   // quiet: the background retry; it only speaks up when something actually synced.
   const triggerSync = useCallback(async (options: { quiet?: boolean } = {}) => {
@@ -234,7 +251,7 @@ export default function MobilePOSPage() {
     try {
       if (!quiet) setIsSyncing(true);
       const outcome = await syncNow();
-      if (outcome.bind.bindingCleared) requireRebind();
+      noteBindResult(outcome.bind);
       if (quiet && outcome.status !== "synced") return;
       setSyncFeedback(outcome.status === "failed" ? "Sync failed. Queued locally." : summarizeSync(outcome));
       setTimeout(() => setSyncFeedback(null), 3000);
@@ -246,7 +263,7 @@ export default function MobilePOSPage() {
     } finally {
       if (!quiet) setIsSyncing(false);
     }
-  }, [requireRebind]);
+  }, [noteBindResult]);
 
   // Explicit retry of a rejected sale: re-queue it unchanged, then run the normal sync. A QRPH
   // sale that now reached the server goes straight to its QR payment (one charge per sale).
@@ -255,7 +272,7 @@ export default function MobilePOSPage() {
     setIsSyncing(true);
     try {
       const { outcome, qrCharge } = await retryRejected(id);
-      if (outcome.bind.bindingCleared) requireRebind();
+      noteBindResult(outcome.bind);
       setSyncFeedback(outcome.status === "failed" ? "Sync failed. Queued locally." : summarizeSync(outcome));
       setTimeout(() => setSyncFeedback(null), 3000);
       if (qrCharge) setQrSale(qrCharge);
@@ -266,7 +283,7 @@ export default function MobilePOSPage() {
     } finally {
       setIsSyncing(false);
     }
-  }, [requireRebind]);
+  }, [noteBindResult]);
 
   // Full lifecycle for load and reconnect: register, sync, then recheck the binding.
   const reconcileWithServer = useCallback(async () => {
@@ -396,18 +413,22 @@ export default function MobilePOSPage() {
   // ── Device bind action ──────────────────────────────────────────────────────
 
   const handleBindDevice = async (barber: CachedBarber) => {
+    // A bound phone moving to a different barber: owner PIN first, checked online (switchBarber).
+    if (binding && barber.id !== binding.barberId) {
+      setSwitchTarget(barber);
+      return;
+    }
     setIsBinding(true);
     try {
-      // New assignment id generated on the phone; persisted locally first so the POS is
-      // usable offline. Sales already queued keep the assignment they were made under.
+      // First bind (or the same barber again): new assignment id generated on the phone, persisted
+      // locally first so the POS is usable offline. Queued sales keep their own assignment.
       const newBinding = await createLocalAssignment(barber);
       setBinding(newBinding);
       setShowBindModal(false);
 
       // Make it active on the server now if online; otherwise the next sync registers it.
       if (navigator.onLine) {
-        const result = await registerPendingAssignment();
-        if (result.bindingCleared) requireRebind();
+        noteBindResult(await registerPendingAssignment());
         void refreshPaymentQrs();
       }
     } catch (e) {
@@ -416,6 +437,35 @@ export default function MobilePOSPage() {
       setIsBinding(false);
     }
   };
+
+  // The owner PIN for a switch: the phone changes barber only once the server accepts it.
+  const handleSwitchWithPin = useCallback(async (pin: string) => {
+    if (!switchTarget) return null;
+    const result = await switchBarber(switchTarget, pin);
+    if (!result.ok) return result.error;
+    setBinding(result.binding);
+    setSwitchTarget(null);
+    setShowBindModal(false);
+    setPendingNeedsPin(false);
+    void refreshPaymentQrs();
+    void triggerSync();
+    return null;
+  }, [switchTarget, triggerSync]);
+
+  // The owner PIN for a barber change already queued on this phone (edge case: queued offline).
+  const handlePendingPin = useCallback(async (pin: string) => {
+    const result = await registerPendingAssignment(pin);
+    if (result.status === "pin_required") return result.error ?? "Wrong PIN.";
+    if (result.status === "retry") return "Can't reach the shop PC. Changing the barber needs the shop Wi-Fi.";
+    if (result.status === "waiting") return "This phone isn't approved yet. Approve it first.";
+    noteBindResult(result);
+    setShowPendingPin(false);
+    void triggerSync();
+    return null;
+  }, [noteBindResult, triggerSync]);
+
+  const cancelSwitch = useCallback(() => setSwitchTarget(null), []);
+  const cancelPendingPin = useCallback(() => setShowPendingPin(false), []);
 
   // ── Transaction recording ───────────────────────────────────────────────────
 
@@ -688,12 +738,41 @@ export default function MobilePOSPage() {
             </div>
           </div>
 
+          {binding && (
+            <button
+              type="button"
+              onClick={() => setShowBindModal(false)}
+              disabled={isBinding}
+              className="rz-btn rz-btn-secondary w-full min-h-12"
+            >
+              Keep {binding.barberName}
+            </button>
+          )}
+
           {(!isOnline || pcDown) && (
             <p className="animate-rise text-center text-sm text-dust">
-              Station is offline — barber assignment will sync upon reconnection.
+              {binding
+                ? "Station is offline. Changing to another barber needs the shop Wi-Fi and the owner PIN."
+                : "Station is offline — barber assignment will sync upon reconnection."}
+            </p>
+          )}
+          {binding && isOnline && !pcDown && (
+            <p className="text-center text-xs text-dust">
+              Changing to another barber needs the owner PIN.
             </p>
           )}
         </div>
+
+        {switchTarget && binding && (
+          <OwnerPinDialog
+            title="Change barber"
+            description={`Move this phone from ${binding.barberName} to ${switchTarget.fullName}. Mart types the owner PIN here. Sales already recorded stay with the barber they were made under.`}
+            submitLabel="Change barber"
+            offline={!isOnline}
+            onSubmit={handleSwitchWithPin}
+            onCancel={cancelSwitch}
+          />
+        )}
       </div>
     );
   }
@@ -702,6 +781,17 @@ export default function MobilePOSPage() {
 
   return (
     <div className="flex-1">
+      {showPendingPin && binding && (
+        <OwnerPinDialog
+          title="Confirm barber change"
+          description={`This phone was changed to ${binding.barberName} while it couldn't check the PIN. Mart types the owner PIN here to confirm it; the sales made since then are then sent under ${binding.barberName}.`}
+          submitLabel="Confirm"
+          offline={!isOnline}
+          onSubmit={handlePendingPin}
+          onCancel={cancelPendingPin}
+        />
+      )}
+
       {/* Digital payment reference modal */}
       {qrSale && (
         <QrPhCheckout
@@ -951,6 +1041,21 @@ export default function MobilePOSPage() {
         {/* Feedback toasts. A polite live region, so screen readers announce a saved sale or a sync result. */}
         <div aria-live="polite" className="px-4 pt-3 space-y-2">
           <DeviceApprovalBanner onApproved={() => void reconcileWithServer()} />
+          {pendingNeedsPin && binding && (
+            <div role="status" className="animate-drop rz-notice rz-notice-warn text-sm flex-wrap">
+              <TriangleAlert className="w-4.5 h-4.5 text-warn shrink-0 mt-px" />
+              <span className="flex-1 min-w-48">
+                Changing this phone to {binding.barberName} needs the owner PIN. Sales made since the change are kept on this phone until Mart enters it.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPendingPin(true)}
+                className="rz-btn rz-btn-secondary text-sm pointer-coarse:min-h-11"
+              >
+                Enter owner PIN
+              </button>
+            </div>
+          )}
           {syncFeedback && (
             <div className="animate-drop rz-notice py-2.5 text-sm">
               <Sparkles className="w-4 h-4 text-brass shrink-0 mt-0.5" />

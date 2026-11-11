@@ -189,6 +189,59 @@ export async function createLocalAssignment(barber: { id: string; fullName: stri
   return binding;
 }
 
+export type SwitchResult = { ok: true; binding: LocalDeviceBinding } | { ok: false; error: string };
+
+/**
+ * Moves this bound phone to a different barber. Unlike a first bind, this goes to the server
+ * first, with the owner PIN, and the phone only switches once the server has accepted it. So it
+ * needs the shop PC, and a refused or failed switch leaves the phone on its old barber, and new
+ * sales keep going to that barber. The PIN is sent once and never stored.
+ */
+export async function switchBarber(barber: { id: string; fullName: string }, pin: string): Promise<SwitchResult> {
+  const secret = getDeviceSecret();
+  if (!secret || storageGet(NOT_APPROVED_KEY) === "1") {
+    return { ok: false, error: "This phone isn't approved yet. Approve it first, then change the barber." };
+  }
+  const deviceKey = getOrCreateDeviceKey();
+  const assignmentId = generateUUID();
+  try {
+    const res = await fetchWithTimeout("/api/v1/devices/bind", {
+      method: "POST",
+      headers: deviceHeaders(secret),
+      body: JSON.stringify({ deviceKey, barberId: barber.id, assignmentId, pin }),
+    }, REQUEST_TIMEOUT_MS.bind);
+    if (res.ok) {
+      markAccepted();
+      const binding: LocalDeviceBinding = {
+        deviceKey,
+        barberId: barber.id,
+        barberName: barber.fullName,
+        assignedAt: new Date().toISOString(),
+        assignmentId,
+      };
+      await db.deviceBindings.put(binding);
+      // The server already holds this assignment as active. An older pending bind (queued
+      // before switching needed the PIN) is replaced; its sales sync under their own assignment.
+      try {
+        localStorage.removeItem(PENDING_KEY);
+      } catch {
+        // ignore
+      }
+      return { ok: true, binding };
+    }
+    if (await isNotApproved(res)) {
+      markNotApproved();
+      return { ok: false, error: "This phone isn't approved yet. Approve it first, then change the barber." };
+    }
+    const pinError = await pinRefusal(res);
+    if (pinError) return { ok: false, error: pinError };
+    const body = await res.json().catch(() => null);
+    return { ok: false, error: body?.error ?? `Couldn't change the barber (HTTP ${res.status}).` };
+  } catch {
+    return { ok: false, error: "Can't reach the shop PC. Changing the barber needs the shop Wi-Fi." };
+  }
+}
+
 /**
  * Bindings saved before assignment ids existed get one, registered like a fresh bind,
  * so every new sale is assignment-backed. Same barber, so attribution is unchanged.
@@ -202,14 +255,31 @@ export async function ensureAssignmentId(binding: LocalDeviceBinding): Promise<L
 }
 
 export type RegisterResult = {
-  /** waiting: this phone isn't approved yet; the pending bind is kept for after approval. */
-  status: "none" | "registered" | "rejected" | "retry" | "waiting";
+  /**
+   * waiting: this phone isn't approved yet; the pending bind is kept for after approval.
+   * pin_required: the server holds this phone under another barber, and the change needs the
+   * owner PIN. The pending bind and its sales are kept (held) until the PIN is entered.
+   */
+  status: "none" | "registered" | "rejected" | "retry" | "waiting" | "pin_required";
   /** The local binding was dropped; the POS must ask for a barber again. */
   bindingCleared: boolean;
+  /** The server's message, for pin_required (wrong PIN, too many tries). */
+  error?: string;
 };
 
-/** Step A: make the pending (current) assignment active on the server. */
-export async function registerPendingAssignment(): Promise<RegisterResult> {
+/** Barber changes refused for the PIN (403) or a PIN lockout (429): keep everything, ask again. */
+async function pinRefusal(res: Response): Promise<string | null> {
+  if (res.status !== 403 && res.status !== 429) return null;
+  const body = await res.clone().json().catch(() => null);
+  if (res.status === 403 && body?.code !== "PIN_REQUIRED" && body?.code !== "WRONG_PIN") return null;
+  return typeof body?.error === "string" ? body.error : "The owner PIN is needed to change the barber.";
+}
+
+/**
+ * Step A: make the pending (current) assignment active on the server. `pin` (the owner PIN,
+ * typed by Mart) is sent only when the POS asks for it after a pin_required answer.
+ */
+export async function registerPendingAssignment(pin?: string): Promise<RegisterResult> {
   const pending = readPendingBind();
   if (!pending) return { status: "none", bindingCleared: false };
   const secret = getDeviceSecret();
@@ -218,7 +288,7 @@ export async function registerPendingAssignment(): Promise<RegisterResult> {
     const res = await fetchWithTimeout("/api/v1/devices/bind", {
       method: "POST",
       headers: deviceHeaders(secret),
-      body: JSON.stringify(pending),
+      body: JSON.stringify(pin ? { ...pending, pin } : pending),
     }, REQUEST_TIMEOUT_MS.bind);
     if (res.ok) {
       markAccepted();
@@ -230,6 +300,8 @@ export async function registerPendingAssignment(): Promise<RegisterResult> {
       markNotApproved();
       return { status: "waiting", bindingCleared: false };
     }
+    const pinError = await pinRefusal(res);
+    if (pinError) return { status: "pin_required", bindingCleared: false, error: pinError };
     if (res.status >= 400 && res.status < 500) {
       // 409 ASSIGNMENT_REVOKED / ASSIGNMENT_CONFLICT / BARBER_INACTIVE, 404 unknown barber,
       // 400 malformed: this assignment can never become active. Sales already made under

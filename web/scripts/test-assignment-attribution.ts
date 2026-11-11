@@ -70,8 +70,12 @@ async function post(path: string, body: unknown, deviceKey: string) {
   return { status: res.status, body: await res.json() };
 }
 
-const bind = (deviceKey: string, barber: Key, assignmentId?: string) =>
-  post("/api/v1/devices/bind", { deviceKey, barberId: BARBERS[barber].id, ...(assignmentId ? { assignmentId } : {}) }, deviceKey);
+const bind = (deviceKey: string, barber: Key, assignmentId?: string, pin?: string) =>
+  post("/api/v1/devices/bind", { deviceKey, barberId: BARBERS[barber].id, ...(assignmentId ? { assignmentId } : {}), ...(pin ? { pin } : {}) }, deviceKey);
+
+/** Moving a bound phone to a different barber needs the owner PIN (read from web/.env, never printed). */
+const OWNER_PIN = process.env.OWNER_PIN ?? "";
+const rebind = (deviceKey: string, barber: Key, assignmentId?: string) => bind(deviceKey, barber, assignmentId, OWNER_PIN);
 
 type SaleOpts = { barber: Key; assignmentId?: string; deviceKey?: string; id?: string };
 function sale({ barber, assignmentId, deviceKey, id }: SaleOpts) {
@@ -150,6 +154,7 @@ const activeFor = (deviceKey: string) => prisma.deviceAssignment.findMany({ wher
 
 async function main() {
   console.log(`Attribution integration test against ${BASE} (run ${RUN})`);
+  if (!OWNER_PIN) throw new Error("OWNER_PIN is not set in web/.env");
   const health = await fetch(`${BASE}/api/v1/health`).catch(() => null);
   if (!health?.ok) throw new Error(`Dev server not reachable at ${BASE}. Start it with \`npm run dev\`.`);
 
@@ -181,7 +186,7 @@ async function main() {
   check("T3: A unchanged and active", (await assignment(idA))?.revokedAt === null);
 
   console.log("\nT4 rebind A → B");
-  const t4 = await bind(dev1, "B", idB);
+  const t4 = await rebind(dev1, "B", idB);
   check("T4: 200", t4.status === 200, JSON.stringify(t4.body));
   check("T4: A revoked", (await assignment(idA))?.revokedAt !== null);
   const active4 = await activeFor(dev1);
@@ -205,7 +210,7 @@ async function main() {
   await expectAttributed("T6 #3", b3.id, "A", idA);
 
   console.log("\nT7 resend an already-synced sale after another rebind");
-  check("T7: rebind to C 200", (await bind(dev1, "C", idC)).status === 200);
+  check("T7: rebind to C 200", (await rebind(dev1, "C", idC)).status === 200);
   const t7 = await sync([s1]);
   check("T7: counted as duplicate, not reprocessed", t7.body.duplicatesSkipped === 1 && t7.body.processedCount === 0 && t7.body.syncedIds.includes(s1.id), JSON.stringify(t7.body));
   await expectAttributed("T7", s1.id, "A", idA);
@@ -291,7 +296,7 @@ async function main() {
   const idE = randomUUID();
   await bind(dev3, "A", idE);
   const idD1 = randomUUID();
-  const t12 = await bind(dev3, "D", idD1);
+  const t12 = await rebind(dev3, "D", idD1);
   check("T12: bind new assignment for inactive barber → 409 BARBER_INACTIVE", t12.status === 409 && t12.body.code === "BARBER_INACTIVE", JSON.stringify(t12.body));
   check("T12: assignment recorded already revoked", (await assignment(idD1))?.revokedAt !== null);
   const active12 = await activeFor(dev3);
@@ -303,12 +308,12 @@ async function main() {
   const d2 = sale({ barber: "D", assignmentId: idD2, deviceKey: dev3 });
   await sync([d2]);
   await expectAttributed("T12 sync-registered inactive-barber sale", d2.id, "D", idD2);
-  check("T12: legacy bind (no id) for inactive barber → 404", (await bind(dev3, "D")).status === 404);
+  check("T12: legacy bind (no id) for inactive barber → 404", (await rebind(dev3, "D")).status === 404);
 
   console.log("\nT13 legacy sale (no assignmentId) synced after a rebind");
   const dev4 = await newDevice();
   await bind(dev4, "A", randomUUID());
-  await bind(dev4, "B", randomUUID());
+  await rebind(dev4, "B", randomUUID());
   const l1 = sale({ barber: "A", deviceKey: dev4 });
   await sync([l1]);
   await expectAttributed("T13", l1.id, "A", null);
@@ -361,10 +366,43 @@ async function main() {
 
     const dev7 = await newDevice();
     const [idJ, idK] = [randomUUID(), randomUUID()];
-    const racing = await Promise.all([bind(dev7, "A", idJ), bind(dev7, "B", idK)]);
+    // With the owner PIN: whichever lands second is a barber change.
+    const racing = await Promise.all([rebind(dev7, "A", idJ), rebind(dev7, "B", idK)]);
     check(`T16.bind.${round}: two different concurrent binds both 200`, racing.every((r) => r.status === 200), racing.map((r) => r.status).join(","));
     check(`T16.bind.${round}: exactly one active assignment afterwards`, (await activeFor(dev7)).length === 1);
   }
+
+  console.log("\nT18 moving a bound phone to another barber needs the owner PIN");
+  const dev8 = await newDevice();
+  const [idA1, idA2, idB1, idD3, idB2] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  check("T18: first bind needs no PIN → 200", (await bind(dev8, "A", idA1)).status === 200);
+  check("T18: same barber, new assignment, no PIN → 200", (await bind(dev8, "A", idA2)).status === 200);
+  const t18a = await bind(dev8, "B", idB1);
+  check("T18: other barber without PIN → 403 PIN_REQUIRED", t18a.status === 403 && t18a.body.code === "PIN_REQUIRED", JSON.stringify(t18a.body));
+  check("T18: refused change wrote no assignment", (await assignment(idB1)) === null);
+  const approvalPin = process.env.DEVICE_APPROVAL_PIN ?? "";
+  if (approvalPin && approvalPin !== OWNER_PIN) {
+    const t18b = await bind(dev8, "B", idB1, approvalPin);
+    check("T18: approval PIN does not count → 403 WRONG_PIN", t18b.status === 403 && t18b.body.code === "WRONG_PIN", JSON.stringify(t18b.body));
+  } else {
+    console.log("  - approval-PIN case skipped (DEVICE_APPROVAL_PIN unset or equal to OWNER_PIN)");
+  }
+  const t18c = await bind(dev8, "B", idB1, `${OWNER_PIN}9`);
+  check("T18: wrong PIN → 403 WRONG_PIN", t18c.status === 403 && t18c.body.code === "WRONG_PIN", JSON.stringify(t18c.body));
+  const t18d = await bind(dev8, "D", idD3);
+  check("T18: inactive barber without PIN → 403, no historical row recorded", t18d.status === 403 && (await assignment(idD3)) === null, JSON.stringify(t18d.body));
+  const t18e = await post("/api/v1/devices/bind", { deviceKey: dev8, barberId: BARBERS.B.id }, dev8);
+  check("T18: legacy bind (no id) to another barber without PIN → 403", t18e.status === 403, JSON.stringify(t18e.body));
+  const active18a = await activeFor(dev8);
+  check("T18: after the refusals A2 is still the only active binding", active18a.length === 1 && active18a[0].id === idA2);
+  check("T18: with the owner PIN → 200", (await rebind(dev8, "B", idB1)).status === 200);
+  const active18b = await activeFor(dev8);
+  check("T18: B1 now the only active binding", active18b.length === 1 && active18b[0].id === idB1);
+  check("T18: retry of the accepted change without PIN → 200 (no-op)", (await bind(dev8, "B", idB1)).status === 200);
+  const a2sale = sale({ barber: "A", assignmentId: idA2, deviceKey: dev8 });
+  await sync([a2sale]);
+  await expectAttributed("T18 sale made before the change", a2sale.id, "A", idA2);
+  check("T18: B again, new assignment, no PIN → 200", (await bind(dev8, "B", idB2)).status === 200);
 
   console.log("\nInvariant: cashierId for every transaction this run inserted");
   const all = await prisma.transaction.findMany({ where: { id: { in: txIds } } });

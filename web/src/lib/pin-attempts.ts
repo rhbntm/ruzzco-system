@@ -1,5 +1,6 @@
 // Limits wrong PIN attempts on POST /api/v1/owner/unlock and POST /api/v1/devices/approve
-// (one limiter each, separate counters).
+// (one limiter each, separate counters). POST /api/v1/devices/bind, which takes only the owner
+// PIN (to move a phone to another barber), shares the owner-unlock limiter.
 //
 // Two limits, both counted over the last 15 minutes:
 // - per client: 5 wrong PINs lock that client for 15 minutes.

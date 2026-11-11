@@ -5,6 +5,8 @@ export const deviceBindSchema = z.object({
   barberId: z.string().min(1, "Barber ID is required"),
   // Generated on the phone at bind time. Optional so older clients still bind.
   assignmentId: z.string().uuid("Invalid assignment UUID").optional(),
+  // The owner PIN, needed only to move a bound phone to a different barber. Never stored.
+  pin: z.string().max(64).optional(),
 });
 
 // Largest value a Decimal(10,2) column holds; anything above is invalid sale data.

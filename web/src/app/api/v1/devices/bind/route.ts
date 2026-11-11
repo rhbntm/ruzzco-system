@@ -5,6 +5,8 @@ import { deviceBindSchema } from "@/lib/schemas";
 import { readJson, serverError } from "@/lib/api";
 import { isUniqueViolation, isWriteConflict } from "@/lib/prisma-errors";
 import { authenticateDevice, deviceNotApprovedResponse } from "@/lib/device-auth";
+import { validOwnerPin } from "@/lib/owner-access";
+import { ownerPinLimiter, pinClientKey, tooManyPinsResponse } from "@/lib/pin-attempts";
 
 type AssignmentRow = { id: string; deviceKey: string; barberId: string; assignedAt: Date; revokedAt: Date | null };
 type BarberRow = { id: string; fullName: string; commissionRate: Prisma.Decimal; isActive: boolean };
@@ -31,6 +33,37 @@ function success(assignment: AssignmentRow, barber: BarberRow) {
 
 function conflict(code: "ASSIGNMENT_REVOKED" | "ASSIGNMENT_CONFLICT" | "BARBER_INACTIVE", error: string) {
   return NextResponse.json({ success: false, code, error }, { status: 409 });
+}
+
+function pinRefused(code: "PIN_REQUIRED" | "WRONG_PIN", error: string) {
+  return NextResponse.json({ success: false, code, error }, { status: 403 });
+}
+
+/**
+ * Moving a bound phone to a different barber needs the owner PIN (the approval PIN does not
+ * count): the person who approves it must not be one whose commission depends on it. A phone
+ * with no active binding, or a new assignment for the same barber, needs none. Wrong PINs count
+ * on the owner-unlock limiter, so this route is not a separate way to guess the owner PIN.
+ * Returns a response to send when the bind must stop here, or null to go on.
+ */
+async function checkBarberChange(request: NextRequest, deviceKey: string, barberId: string, pin: string | undefined) {
+  const active = await prisma.deviceAssignment.findFirst({
+    where: { deviceKey, revokedAt: null },
+    select: { barberId: true },
+  });
+  if (!active || active.barberId === barberId) return null;
+
+  if (!pin) return pinRefused("PIN_REQUIRED", "Changing this phone's barber needs the owner PIN.");
+  const client = pinClientKey(request.headers);
+  const waitMs = ownerPinLimiter.retryAfter(client);
+  if (waitMs > 0) return tooManyPinsResponse(waitMs);
+  if (!validOwnerPin(pin)) {
+    ownerPinLimiter.recordFailure(client);
+    return pinRefused("WRONG_PIN", "Wrong PIN. Only the owner PIN can change this phone's barber.");
+  }
+  ownerPinLimiter.recordSuccess(client);
+  console.log(`[devices] ${deviceKey} moved to another barber with the owner PIN`);
+  return null;
 }
 
 /**
@@ -75,7 +108,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { deviceKey, barberId, assignmentId } = parsed.data;
+    const { deviceKey, barberId, assignmentId, pin } = parsed.data;
     if (deviceKey !== authenticatedKey) return deviceNotApprovedResponse();
 
     const barber = await prisma.barber.findUnique({ where: { id: barberId }, select: barberSelect });
@@ -90,6 +123,10 @@ export async function POST(request: NextRequest) {
       const existing = await prisma.deviceAssignment.findUnique({ where: { id: assignmentId }, select: assignmentSelect });
       if (existing) return respondToExisting(existing, deviceKey, barber);
     }
+
+    // Before anything is written, including the historical row for an inactive barber.
+    const refused = await checkBarberChange(request, deviceKey, barberId, pin);
+    if (refused) return refused;
 
     if (!barber.isActive) {
       if (!assignmentId) {
