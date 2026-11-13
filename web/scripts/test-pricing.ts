@@ -13,6 +13,7 @@ import {
   type PriceSaleInput,
   type PricedSale,
 } from "../src/lib/pricing";
+import { cashQuickAmounts, cashTender } from "../src/lib/charge";
 import { HAIRCUT_ID, SERVICE_CATALOG, sortServices } from "../src/lib/catalog";
 import { DEFAULT_SERVICES } from "../src/lib/db";
 
@@ -127,6 +128,30 @@ console.log("\nInvariants (the sync route stores these as sent)");
     return Math.abs(sale.listPrice - sale.discountAmount - sale.amountPaid) < 0.005 && sale.amountPaid >= 0 && sale.tipAmount >= 0;
   });
   check("listPrice − discountAmount = amountPaid, never negative", ok);
+}
+
+console.log("\nCash received and change due (slice 17, never stored)");
+{
+  const same = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+  check("₱250: exact, then ₱300, ₱500, ₱1,000", same(cashQuickAmounts(250), [250, 300, 500, 1000]), cashQuickAmounts(250).join(","));
+  check("₱270: exact, then ₱300, ₱500, ₱1,000", same(cashQuickAmounts(270), [270, 300, 500, 1000]));
+  check("₱850: exact, then ₱900, ₱1,000 (no repeats)", same(cashQuickAmounts(850), [850, 900, 1000]));
+  check("₱1,000: exact only", same(cashQuickAmounts(1000), [1000]));
+  check("₱125: exact, then ₱200, ₱500, ₱1,000", same(cashQuickAmounts(125), [125, 200, 500, 1000]));
+
+  const tender = (total: number, input: string) => cashTender(total, input);
+  const exact = tender(270, "");
+  check("blank received means exact: change ₱0", exact.status === "ok" && exact.received === 270 && exact.change === 0);
+  const more = tender(850, "1000");
+  check("₱1,000 for ₱850: change ₱150", more.status === "ok" && more.change === 150);
+  const short = tender(270, "200");
+  check("₱200 for ₱270: short by ₱70", short.status === "short" && short.short === 70);
+  check("not a number is invalid", tender(270, "abc").status === "invalid");
+  check("a negative amount is invalid", tender(270, "-5").status === "invalid");
+  const centavos = tender(0.3, "0.5");
+  check("centavos don't drift: ₱0.50 for ₱0.30 is ₱0.20", centavos.status === "ok" && centavos.change === 0.2, centavos.status === "ok" ? String(centavos.change) : centavos.status);
+  const padded = tender(250, "  300 ");
+  check("spaces around the amount are ignored", padded.status === "ok" && padded.change === 50);
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
