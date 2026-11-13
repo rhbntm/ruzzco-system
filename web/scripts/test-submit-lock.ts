@@ -5,13 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { createSubmitLock } from "../src/lib/submit-lock";
-import {
-  CONFIRM_SETTING_KEY,
-  firstCheckoutStep,
-  readAskBeforeRecording,
-  writeAskBeforeRecording,
-  type CheckoutStep,
-} from "../src/lib/confirm-setting";
+import { tenderStep, type TenderStep } from "../src/lib/charge";
 
 let passed = 0;
 const failures: string[] = [];
@@ -122,54 +116,39 @@ async function main() {
     check("only one of CASH/GCASH/MAYA records", results.filter((r) => r.status === "done").length === 1 && sale.written.length === 1);
   }
 
-  // Slice 13: "Ask before recording a sale". Mirrors /pos: a payment tap either records at once
-  // or opens a step; only "Record sale" (or the GCash/Maya confirm) records, through the same lock.
-  console.log("\nAsk before recording a sale (slice 13)");
+  // Slice 17: the charge sheet. Mirrors /pos: Charge opens the sheet and records nothing; only
+  // Record (cash) or the QR dialog's Confirm (GCash/Maya) records, through the same lock.
+  console.log("\nCharge sheet (slice 17)");
   {
-    function fakePos(askBeforeRecording: boolean) {
+    function fakePos() {
       const lock = createSubmitLock({ holdAfterSuccessMs: 50 });
       const sale = fakeSaleWriter(10);
-      let open: CheckoutStep | null = null;
+      let sheetOpen = false;
+      let step: TenderStep | null = null;
       return {
         sale,
-        get open() { return open; },
-        async tap(method: "CASH" | "GCASH" | "MAYA" | "QRPH") {
-          const step = firstCheckoutStep(method, askBeforeRecording);
-          if (step === "record") await lock.run(sale.write);
-          else open = step;
-        },
-        cancel() { open = null; },
-        recordSale() { return lock.run(sale.write).then((result) => { if (result.status !== "busy") open = null; return result; }); },
+        get sheetOpen() { return sheetOpen; },
+        get step() { return step; },
+        charge() { sheetOpen = true; step = null; },
+        back() { sheetOpen = false; step = null; },
+        tender(method: "CASH" | "GCASH" | "MAYA" | "QRPH") { step = tenderStep(method); if (step !== "cash") sheetOpen = false; },
+        record() { return lock.run(sale.write).then((result) => { if (result.status !== "busy") { sheetOpen = false; step = null; } return result; }); },
       };
     }
 
-    const off = fakePos(false);
-    await off.tap("CASH");
-    check("setting off: Cash records on one tap (today's behaviour)", off.sale.written.length === 1 && off.open === null);
+    const pos = fakePos();
+    pos.charge();
+    check("Charge opens the sheet and records nothing", pos.sheetOpen && pos.sale.written.length === 0);
+    pos.back();
+    check("Back records nothing", !pos.sheetOpen && pos.sale.written.length === 0);
+    pos.charge();
+    pos.tender("CASH");
+    check("choosing cash records nothing", pos.step === "cash" && pos.sale.written.length === 0);
+    const taps = await Promise.all([pos.record(), pos.record()]);
+    check("a double tap on Record records one sale", pos.sale.written.length === 1 && taps.filter((t) => t.status === "done").length === 1, `wrote ${pos.sale.written.length}`);
 
-    const on = fakePos(true);
-    await on.tap("CASH");
-    check("setting on: a Cash tap records nothing and opens the confirmation", on.sale.written.length === 0 && on.open === "confirm");
-    on.cancel();
-    check("Cancel records nothing", on.sale.written.length === 0 && on.open === null);
-    await on.tap("CASH");
-    const taps = await Promise.all([on.recordSale(), on.recordSale()]);
-    check("a double tap on Record sale records one sale", on.sale.written.length === 1 && taps.filter((t) => t.status === "done").length === 1, `wrote ${on.sale.written.length}`);
-
-    check("GCash and Maya open their reference step either way (one confirmation, not two)",
-      firstCheckoutStep("GCASH", true) === "reference" && firstCheckoutStep("MAYA", false) === "reference");
-    check("QR Ph keeps its own checkout", firstCheckoutStep("QRPH", true) === "qrph" && firstCheckoutStep("QRPH", false) === "qrph");
-
-    // The setting lives in the phone's storage; anything wrong with storage means off.
-    const memory = new Map<string, string>();
-    const store = { getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => void memory.set(k, v) };
-    check("off by default", readAskBeforeRecording(store) === false);
-    check("saved on and read back", writeAskBeforeRecording(true, store) && readAskBeforeRecording(store) === true && memory.get(CONFIRM_SETTING_KEY) === "on");
-    check("saved off and read back", writeAskBeforeRecording(false, store) && readAskBeforeRecording(store) === false);
-    const broken = { getItem: () => { throw new Error("SecurityError"); }, setItem: () => { throw new Error("QuotaExceededError"); } };
-    check("storage that throws on read is off", readAskBeforeRecording(broken) === false);
-    check("storage that throws on write reports not saved", writeAskBeforeRecording(true, broken) === false);
-    check("no storage at all is off and not saved", readAskBeforeRecording(null) === false && writeAskBeforeRecording(true, null) === false);
+    check("GCash and Maya go to their QR reference step", tenderStep("GCASH") === "reference" && tenderStep("MAYA") === "reference");
+    check("QR Ph keeps its own checkout", tenderStep("QRPH") === "qrph");
   }
 }
 

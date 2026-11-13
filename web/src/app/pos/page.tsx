@@ -9,7 +9,6 @@ import {
 } from "react";
 import Link from "next/link";
 import {
-  Scissors,
   RefreshCw,
   CheckCircle2,
   Clock,
@@ -26,6 +25,9 @@ import {
   QrCode,
   BadgePercent,
   Repeat,
+  Receipt,
+  ChevronDown,
+  ChevronLeft,
 } from "lucide-react";
 import {
   CUSTOM_NOTE_MAX,
@@ -37,12 +39,7 @@ import {
   type TipChoice,
 } from "@/lib/pricing";
 import { LOYALTY_PERCENT, LOYALTY_SERVICE_ID, sortServices } from "@/lib/catalog";
-import {
-  firstCheckoutStep,
-  readAskBeforeRecording,
-  subscribeAskBeforeRecording,
-  writeAskBeforeRecording,
-} from "@/lib/confirm-setting";
+import { cashQuickAmounts, cashTender } from "@/lib/charge";
 import {
   db,
   initializeLocalCatalog,
@@ -122,11 +119,15 @@ export default function MobilePOSPage() {
   const [loyalty, setLoyalty] = useState(false);
   const [customNote, setCustomNote] = useState("");
 
-  // "Ask before recording a sale": per phone, off when storage is unavailable.
-  const askBeforeRecording = useSyncExternalStore(subscribeAskBeforeRecording, () => readAskBeforeRecording(), () => false);
+  // "+ Custom amount / loyalty" on the ticket: open while either is in use.
+  const [showAdjust, setShowAdjust] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [settingNotSaved, setSettingNotSaved] = useState(false);
-  const [confirmingCash, setConfirmingCash] = useState(false);
+
+  // Slice 17: Charge opens the sheet; cash received there is never stored ("" = exact amount).
+  const [charging, setCharging] = useState(false);
+  const [cashReceivedInput, setCashReceivedInput] = useState("");
+  // The done screen after a cash, GCash or Maya sale. New sale closes it.
+  const [doneSale, setDoneSale] = useState<DoneSale | null>(null);
 
   // Device binding state
   const [binding, setBinding] = useState<LocalDeviceBinding | null>(null);
@@ -469,9 +470,20 @@ export default function MobilePOSPage() {
 
   // ── Transaction recording ───────────────────────────────────────────────────
 
+  // A blank ticket: no tip, no custom amount or note, no loyalty card. The service stays selected.
+  const resetSaleForm = useCallback(() => {
+    setTipChoice("NONE");
+    setCustomTipInput("");
+    setCustomAmountInput("");
+    setCustomNote("");
+    setLoyalty(false);
+    setShowAdjust(false);
+    setCashReceivedInput("");
+  }, []);
+
   // Writes one sale to Dexie and returns it. Call only through recordTransaction, which holds the checkout lock.
   const createSale = useCallback(
-    async (method: PaymentMethod, reference?: string): Promise<{ id: string; amount: number } | null> => {
+    async (method: PaymentMethod, reference?: string, cashReceived?: number): Promise<{ id: string; amount: number } | null> => {
       if (!binding) return null;
       const service = services.find((s) => s.id === selectedServiceId) || services[0];
       if (!service) return null;
@@ -513,16 +525,25 @@ export default function MobilePOSPage() {
       };
 
       await db.transactions.add(newTransaction);
-      // The loyalty card is per customer: the next sale starts without it.
-      if (isLoyalty) setLoyalty(false);
+      // Every input belongs to this customer: the next sale starts from a blank ticket.
+      resetSaleForm();
 
-      const methodLabel = method === "GCASH" ? "GCash" : method === "MAYA" ? "Maya" : method === "QRPH" ? "QR Ph (pending)" : "Cash";
-      setLastActionToast({
-        // While the shop PC can't record it, say where the sale is.
-        message: `₱${amountPaid.toFixed(2)} ${methodLabel}${isLoyalty ? ` (Loyalty ${LOYALTY_PERCENT}%)` : ""}${tipAmount ? ` + ₱${tipAmount.toFixed(2)} tip` : ""} — ${binding.barberName}${pcDown || !navigator.onLine ? " · saved on this phone" : ""}`,
-        type: "success",
-      });
-      setTimeout(() => setLastActionToast(null), 3000);
+      // QR Ph has its own checkout screen; every other sale ends on the done screen.
+      if (method !== "QRPH") {
+        const total = amountPaid + tipAmount;
+        setDoneSale({
+          total,
+          amountPaid,
+          tipAmount,
+          methodLabel: method === "GCASH" ? "GCash" : method === "MAYA" ? "Maya" : "Cash",
+          serviceName: service.name,
+          isLoyalty,
+          barberName: binding.barberName,
+          cash: method === "CASH" && cashReceived !== undefined ? { received: cashReceived, change: Math.round((cashReceived - total) * 100) / 100 } : null,
+          // While the shop PC can't record it, say where the sale is.
+          onPhoneOnly: pcDown || !navigator.onLine,
+        });
+      }
 
       // A QRPH sale is synced by the QR checkout, which waits for the sync before charging.
       if (navigator.onLine && method !== "QRPH") {
@@ -530,14 +551,14 @@ export default function MobilePOSPage() {
       }
       return { id: newTransaction.id, amount: amountPaid };
     },
-    [binding, services, selectedServiceId, customAmountInput, tipChoice, customTipInput, loyalty, customNote, triggerSync, pcDown]
+    [binding, services, selectedServiceId, customAmountInput, tipChoice, customTipInput, loyalty, customNote, triggerSync, pcDown, resetSaleForm]
   );
 
   // Every payment method records through here. The lock is checked synchronously before
   // any await, so a second tap cannot generate a second transaction id (see lib/submit-lock.ts).
   const recordTransaction = useCallback(
-    async (method: PaymentMethod, reference?: string): Promise<{ outcome: "saved" | "skipped" | "busy" | "failed"; sale?: { id: string; amount: number } }> => {
-      const result = await checkoutLock.run(() => createSale(method, reference));
+    async (method: PaymentMethod, reference?: string, cashReceived?: number): Promise<{ outcome: "saved" | "skipped" | "busy" | "failed"; sale?: { id: string; amount: number } }> => {
+      const result = await checkoutLock.run(() => createSale(method, reference, cashReceived));
       if (result.status === "busy") return { outcome: "busy" };
       if (result.status === "failed") {
         console.error("Error recording sale:", result.error);
@@ -550,21 +571,36 @@ export default function MobilePOSPage() {
     [checkoutLock, createSale]
   );
 
-  // Cash records on one tap, or asks first when the phone's setting is on (slice 13).
-  const handleCashCheckout = () => {
-    if (firstCheckoutStep("CASH", askBeforeRecording) === "confirm") setConfirmingCash(true);
-    else void recordTransaction("CASH");
+  // Slice 17: Charge opens the sheet and records nothing. Cash received starts at the exact amount.
+  const handleCharge = () => {
+    setCashReceivedInput("");
+    setCharging(true);
   };
 
-  const handleConfirmCash = async () => {
-    const { outcome } = await recordTransaction("CASH");
-    // Same rule as the GCash/Maya step: a duplicate tap leaves the dialog to the tap that owns the sale.
-    if (outcome === "saved" || outcome === "skipped") setConfirmingCash(false);
+  // Records the cash sale shown in the sheet, with what the customer handed over (not stored).
+  const handleRecordCash = async () => {
+    const tender = cashTender(saleTotal, cashReceivedInput);
+    if (tender.status !== "ok") return;
+    const { outcome } = await recordTransaction("CASH", undefined, tender.received);
+    // Same rule as the GCash/Maya step: a duplicate tap leaves the sheet to the tap that owns the sale.
+    if (outcome === "saved" || outcome === "skipped") setCharging(false);
   };
 
-  // Picking another service turns the loyalty card off; picking the same one keeps it.
+  // GCash and Maya leave the sheet for their QR dialog, whose Confirm records the sale.
+  const handleDigitalTender = (method: "GCASH" | "MAYA") => {
+    setCharging(false);
+    setDigitalRef("");
+    setDigitalMethod(method);
+  };
+
+  // Picking another service turns the loyalty card off and clears a custom amount and its note,
+  // which were for the other service; picking the same one keeps them.
   const handleSelectService = (id: string) => {
-    if (id !== selectedServiceId) setLoyalty(false);
+    if (id !== selectedServiceId) {
+      setLoyalty(false);
+      setCustomAmountInput("");
+      setCustomNote("");
+    }
     setSelectedServiceId(id);
   };
 
@@ -572,10 +608,6 @@ export default function MobilePOSPage() {
   const handleCustomAmountChange = (value: string) => {
     setCustomAmountInput(value);
     if (!loyaltyApplies(LOYALTY_SERVICE_ID, value)) setLoyalty(false);
-  };
-
-  const handleAskBeforeRecording = (on: boolean) => {
-    setSettingNotSaved(!writeAskBeforeRecording(on));
   };
 
   const handleDigitalConfirm = async () => {
@@ -623,17 +655,18 @@ export default function MobilePOSPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [digitalMethod]);
 
-  // Escape closes the cash confirmation (records nothing) and the settings sheet.
+  // Escape closes the charge sheet (records nothing), the done screen (New sale) and the settings sheet.
   useEffect(() => {
-    if (!confirmingCash && !showSettings) return;
+    if (!charging && !doneSale && !showSettings) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      setConfirmingCash(false);
+      setCharging(false);
+      setDoneSale(null);
       setShowSettings(false);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [confirmingCash, showSettings]);
+  }, [charging, doneSale, showSettings]);
 
   // ── Derived values ──────────────────────────────────────────────────────────
 
@@ -651,10 +684,15 @@ export default function MobilePOSPage() {
   const { amountPaid: previewAmount, tipAmount: previewTip } = preview;
   const loyaltyOffered = selectedService?.id === LOYALTY_SERVICE_ID;
   const noteError = preview.isCustomAmount ? customNoteError(customNote) : null;
-  // A payment button records (or opens a step that records) only when the sale can be saved as shown.
+  // Charge (and every step after it) works only when the sale can be saved as shown.
   const payDisabled = !binding || isRecording || Boolean(noteError);
-  // What the customer sends by GCash/Maya: the amount paid plus any tip entered before payment.
-  const digitalTotal = previewAmount + previewTip;
+  // The one total shown everywhere (slice 17): the amount paid plus the tip, which the customer
+  // hands over or sends together. The sale still records them separately.
+  const saleTotal = Math.round((previewAmount + previewTip) * 100) / 100;
+  const cashState = cashTender(saleTotal, cashReceivedInput);
+  const quickCash = cashQuickAmounts(saleTotal);
+  // Folded away by default; the ticket lines show a custom amount or loyalty card either way.
+  const adjustOpen = showAdjust;
   const digitalLabel = digitalMethod === "MAYA" ? "Maya" : "GCash";
   const digitalColor = digitalMethod === "MAYA" ? "emerald" : "blue";
 
@@ -841,7 +879,7 @@ export default function MobilePOSPage() {
                 </div>
               ) : null}
               <div className={`rz-figure text-4xl text-center pt-3 ${digitalColor === "emerald" ? "text-maya-ink" : "text-gcash-ink"}`}>
-                ₱{digitalTotal.toFixed(2)}
+                ₱{saleTotal.toFixed(2)}
               </div>
               {previewTip > 0 && (
                 <p className="text-xs text-dust text-center mt-1">
@@ -850,7 +888,7 @@ export default function MobilePOSPage() {
               )}
               <p className="text-sm text-dust text-center mt-2 mb-3 leading-relaxed">
                 {modalQr ? "Have the customer scan the QR and send " : "Have the customer send "}
-                <strong className="text-bone">₱{digitalTotal.toFixed(2)}</strong> by {digitalLabel}. If you have the{" "}
+                <strong className="text-bone">₱{saleTotal.toFixed(2)}</strong> by {digitalLabel}. If you have the{" "}
                 {digitalLabel} reference number, enter it below.
               </p>
               <input
@@ -866,17 +904,13 @@ export default function MobilePOSPage() {
               />
             </div>
 
-            {/* With "Ask before recording a sale" on, this step is the confirmation: one per sale. */}
-            {askBeforeRecording && selectedService && (
-              <SaleSummary serviceName={selectedService.name} sale={preview} note={customNote} method={digitalLabel} />
-            )}
-
             <div className="flex gap-2">
+              {/* Back returns to the charge sheet with the ticket as it was; nothing is recorded. */}
               <button
-                onClick={() => { setDigitalMethod(null); setDigitalRef(""); }}
+                onClick={() => { setDigitalMethod(null); setDigitalRef(""); setCharging(true); }}
                 className="rz-btn rz-btn-secondary flex-1 min-h-12"
               >
-                Cancel
+                <ChevronLeft className="w-4 h-4" /> Back
               </button>
               <button
                 onClick={handleDigitalConfirm}
@@ -886,7 +920,7 @@ export default function MobilePOSPage() {
                 {isRecording ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
-                  <><Smartphone className="w-4 h-4" /> {askBeforeRecording ? "Record sale" : `Confirm ${digitalLabel}`}</>
+                  <><Smartphone className="w-4 h-4" /> Record {digitalLabel}</>
                 )}
               </button>
             </div>
@@ -894,30 +928,155 @@ export default function MobilePOSPage() {
         </div>
       )}
 
-      {/* Cash confirmation: only with "Ask before recording a sale" on. Cancel records nothing and keeps the inputs. */}
-      {confirmingCash && selectedService && (
-        <div className="rz-overlay items-end sm:items-center">
-          <div role="dialog" aria-modal="true" aria-labelledby="confirm-sale-title" className="rz-dialog rz-dialog-sheet p-5 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <span className="w-9 h-9 rounded-full flex items-center justify-center bg-crimson/15 text-crimson-ink">
-                <Banknote className="w-4.5 h-4.5" />
-              </span>
-              <h2 id="confirm-sale-title" className="rz-title text-xl">Record this sale?</h2>
+      {/* Charge sheet (slice 17): the ticket once more, then how the customer pays. Nothing is
+          recorded until Record (cash) or the GCash/Maya dialog's Record; Back keeps the ticket. */}
+      {charging && selectedService && (
+        <div className="rz-overlay items-end sm:items-center" onClick={(event) => { if (event.target === event.currentTarget) setCharging(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="charge-title" className="rz-dialog rz-dialog-sheet p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setCharging(false)}
+                className="rz-btn rz-btn-ghost -ml-2 px-2 pointer-coarse:min-h-11 text-dust"
+              >
+                <ChevronLeft className="w-4 h-4" /> Back
+              </button>
+              <h2 id="charge-title" className="rz-title text-xl">
+                Charge <span className="tabular-nums">₱{saleTotal.toFixed(2)}</span>
+              </h2>
             </div>
-            <SaleSummary serviceName={selectedService.name} sale={preview} note={customNote} method="Cash" />
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setConfirmingCash(false)} className="rz-btn rz-btn-secondary flex-1 min-h-12">
-                Cancel
+
+            <TicketLines serviceName={selectedService.name} sale={preview} note={customNote} />
+
+            {/* Cash: what the customer hands over, and the change. Worked out here only, never stored. */}
+            <div className="space-y-2.5">
+              <div id="cash-received-label" className="rz-label">Cash received</div>
+              <div role="group" aria-labelledby="cash-received-label" className="rz-seg">
+                {quickCash.map((amount, index) => {
+                  const isExact = index === 0;
+                  const blank = cashReceivedInput.trim() === "";
+                  const pressed = isExact ? blank : !blank && cashState.status !== "invalid" && cashState.received === amount;
+                  return (
+                    <button
+                      key={amount}
+                      type="button"
+                      aria-pressed={pressed}
+                      onClick={() => setCashReceivedInput(isExact ? "" : String(amount))}
+                      className="rz-seg-item flex-1 px-1 text-xs tabular-nums pointer-coarse:min-h-11"
+                    >
+                      {isExact ? "Exact" : `₱${amount.toLocaleString("en-PH")}`}
+                    </button>
+                  );
+                })}
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                placeholder="Other amount"
+                aria-label="Cash received (₱). Blank means the exact amount."
+                value={cashReceivedInput}
+                onChange={(e) => setCashReceivedInput(e.target.value)}
+                className="rz-field sm:text-sm pointer-coarse:min-h-11"
+              />
+              <div aria-live="polite" className="flex items-baseline justify-between gap-3">
+                {cashState.status === "short" ? (
+                  <>
+                    <span className="text-sm text-warn-ink">Short by</span>
+                    <span className="rz-figure text-3xl text-warn-ink tabular-nums">₱{cashState.short.toFixed(2)}</span>
+                  </>
+                ) : cashState.status === "invalid" ? (
+                  <span className="text-sm text-warn-ink">Enter the cash received in pesos.</span>
+                ) : (
+                  <>
+                    <span className="text-sm text-dust">Change due</span>
+                    <span className="rz-figure text-3xl text-bone tabular-nums">₱{cashState.change.toFixed(2)}</span>
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleRecordCash()}
+                disabled={payDisabled || cashState.status !== "ok"}
+                className="rz-btn rz-btn-primary w-full min-h-14 text-base"
+              >
+                {isRecording ? <RefreshCw className="w-4 h-4 animate-spin" /> : <><Banknote className="w-5 h-5" /> Record ₱{saleTotal.toFixed(2)} cash</>}
               </button>
-              <button type="button" onClick={() => void handleConfirmCash()} disabled={payDisabled} className="rz-btn rz-btn-primary flex-1 min-h-12">
-                {isRecording ? <RefreshCw className="w-4 h-4 animate-spin" /> : <><Banknote className="w-4 h-4" /> Record sale</>}
-              </button>
+            </div>
+
+            {/* Digital: each opens its own step, which records. */}
+            <div className="space-y-2">
+              <div className="rz-label">Or the customer pays by</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => handleDigitalTender("GCASH")} disabled={payDisabled} className="rz-btn rz-pay rz-pay-gcash min-h-12 gap-2">
+                  <Smartphone className="w-4.5 h-4.5 shrink-0" /> GCash
+                </button>
+                <button type="button" onClick={() => handleDigitalTender("MAYA")} disabled={payDisabled} className="rz-btn rz-pay rz-pay-maya min-h-12 gap-2">
+                  <Smartphone className="w-4.5 h-4.5 shrink-0" /> Maya
+                </button>
+                {gatewayEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => { setCharging(false); void handleQrphCheckout(); }}
+                    disabled={payDisabled || !isOnline || pcDown}
+                    className="col-span-2 rz-btn rz-pay rz-pay-qrph min-h-12 gap-2"
+                  >
+                    <QrCode className="w-4.5 h-4.5 shrink-0" /> QR Ph (test)
+                  </button>
+                )}
+              </div>
+              {gatewayEnabled && (!isOnline || pcDown) && (
+                <p className="text-center text-xs text-warn-ink">
+                  {!isOnline ? "QR Ph needs internet. Use cash, GCash or Maya." : "QR Ph needs the shop PC. Use cash, GCash or Maya."}
+                </p>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Phone settings, from the header's gear: the confirmation switch and changing the barber. */}
+      {/* Done screen (slice 17): the sale is saved; New sale goes back to the cleared ticket. */}
+      {doneSale && (
+        <div className="rz-overlay items-end sm:items-center">
+          <div role="dialog" aria-modal="true" aria-labelledby="done-title" aria-describedby="done-detail" className="rz-dialog rz-dialog-sheet p-6 space-y-4 text-center">
+            <CheckCircle2 aria-hidden="true" className="w-12 h-12 mx-auto text-ok" />
+            <h2 id="done-title" className="rz-title text-2xl">Sale saved</h2>
+            <div id="done-detail" className="space-y-1">
+              <div className="rz-figure text-4xl text-bone tabular-nums">₱{doneSale.total.toFixed(2)}</div>
+              <p className="text-sm text-dust">
+                {doneSale.methodLabel} · {doneSale.serviceName}{doneSale.isLoyalty && ` (Loyalty ${LOYALTY_PERCENT}%)`} · {doneSale.barberName}
+              </p>
+              {doneSale.tipAmount > 0 && (
+                <p className="text-xs text-dust tabular-nums">₱{doneSale.amountPaid.toFixed(2)} + ₱{doneSale.tipAmount.toFixed(2)} tip</p>
+              )}
+            </div>
+            {doneSale.cash && (
+              <dl className="rz-panel divide-y divide-seam text-sm text-left">
+                <div className="px-3.5 py-2.5 flex items-baseline justify-between gap-3">
+                  <dt className="text-dust">Cash received</dt>
+                  <dd className="font-semibold text-bone tabular-nums">₱{doneSale.cash.received.toFixed(2)}</dd>
+                </div>
+                <div className="px-3.5 py-2.5 flex items-baseline justify-between gap-3">
+                  <dt className="text-dust">Change due</dt>
+                  <dd className="rz-figure text-2xl text-bone tabular-nums">₱{doneSale.cash.change.toFixed(2)}</dd>
+                </div>
+              </dl>
+            )}
+            {doneSale.onPhoneOnly && (
+              <p className="rz-notice rz-notice-warn text-sm text-left">
+                <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0" />
+                Saved on this phone. It goes to the shop PC when they reconnect.
+              </p>
+            )}
+            <button type="button" autoFocus onClick={() => setDoneSale(null)} className="rz-btn rz-btn-primary w-full min-h-14 text-base">
+              New sale
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Phone settings, from the header's gear: changing the barber. */}
       {showSettings && (
         <div className="rz-overlay items-end sm:items-center" onClick={(event) => { if (event.target === event.currentTarget) setShowSettings(false); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="phone-settings-title" className="rz-dialog rz-dialog-sheet p-5 space-y-4">
@@ -932,26 +1091,6 @@ export default function MobilePOSPage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="rz-panel p-3.5 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div id="ask-before-label" className="font-semibold text-bone">Ask before recording a sale</div>
-                <p id="ask-before-help" className="text-xs text-dust leading-relaxed">
-                  Shows the service, amount, tip and payment, with Record sale and Cancel. Saved on this phone only.
-                </p>
-              </div>
-              <Switch
-                checked={askBeforeRecording}
-                onChange={handleAskBeforeRecording}
-                labelledBy="ask-before-label"
-                describedBy="ask-before-help"
-              />
-            </div>
-            {settingNotSaved && (
-              <p className="rz-notice rz-notice-warn text-sm">
-                <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0" />
-                This phone can&apos;t save settings (private browsing or blocked site data), so it records without asking.
-              </p>
-            )}
             <button
               type="button"
               onClick={() => { setShowSettings(false); setShowBindModal(true); }}
@@ -1014,9 +1153,9 @@ export default function MobilePOSPage() {
               )}
             </button>
 
-            {/* Phone settings: "Ask before recording a sale" and changing the barber ("Not you?"). */}
+            {/* Phone settings: changing the barber ("Not you?"). */}
             <button
-              onClick={() => { setSettingNotSaved(false); setShowSettings(true); }}
+              onClick={() => setShowSettings(true)}
               title="Phone settings"
               aria-label="Phone settings and change barber"
               className="rz-btn rz-btn-secondary rz-btn-icon pointer-coarse:min-h-11 pointer-coarse:min-w-11 text-dust"
@@ -1029,7 +1168,7 @@ export default function MobilePOSPage() {
 
       {/* ── Layout: 1-col mobile → 2-col tablet → 3-col desktop ── */}
       {/* On phones, room at the end of the page for the payment bar fixed to the bottom. */}
-      <div className="rz-page relative max-w-6xl mx-auto max-sm:pb-48">
+      <div className="rz-page relative max-w-6xl mx-auto max-sm:pb-28">
 
         {/* While the shop PC can't record sales: they stay on this phone until it can. */}
         {(!isOnline || pcDown) && (
@@ -1077,16 +1216,16 @@ export default function MobilePOSPage() {
         </div>
 
         {/* Main grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-6 px-4 py-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 px-4 py-4">
 
-          {/* ── Col 1: Service Selection ── */}
-          <section className="space-y-3 sm:col-span-1">
-            <h2 className="rz-heading">
+          {/* ── Col 1: Services, as tiles (slice 17) ── */}
+          <section aria-labelledby="services-title" className="space-y-3 sm:col-span-1">
+            <h2 id="services-title" className="rz-heading">
               <Layers className="w-4 h-4 text-crimson-ink" />
-              Select Service
+              Services
             </h2>
 
-            <div className="space-y-2.5 rz-stagger">
+            <div className="grid grid-cols-2 gap-2.5">
               {services.map((service) => {
                 const isSelected = service.id === selectedServiceId;
                 return (
@@ -1095,34 +1234,17 @@ export default function MobilePOSPage() {
                     onClick={() => handleSelectService(service.id)}
                     type="button"
                     aria-pressed={isSelected}
-                    className={`rz-press relative overflow-hidden w-full min-h-16 p-3.5 pr-4 rounded-xl border text-left flex items-center justify-between gap-3 transition-[background-color,border-color,box-shadow,transform] duration-200 ${
+                    className={`rz-press relative overflow-hidden min-h-22 p-3 pt-3.5 rounded-xl border text-left flex flex-col justify-between gap-2 transition-[background-color,border-color,box-shadow,transform] duration-200 ${
                       isSelected
-                        ? "pl-5 bg-panel-2 border-chrome text-bone shadow-[inset_0_1px_0_rgb(214_228_250/0.14),0_14px_26px_-18px_rgb(0_0_0/0.95)]"
+                        ? "bg-panel-2 border-chrome text-bone shadow-[inset_0_1px_0_rgb(214_228_250/0.14),0_14px_26px_-18px_rgb(0_0_0/0.95)]"
                         : "bg-panel border-seam text-bone-2 shadow-[inset_0_1px_0_rgb(214_228_250/0.08)] hover:bg-panel-2 hover:border-seam-strong"
                     }`}
                   >
-                    {/* The chosen service is edged by the barber pole, which turns once as it is picked. */}
-                    {isSelected && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1.5 rz-stripes rz-pole-once" />}
-                    <span className="flex items-center gap-3 min-w-0">
-                      {/* The chosen service lights its pole; the others show the scissors. */}
-                      <span
-                        className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-200 ${
-                          isSelected ? "bg-black/45 ring-1 ring-white/10" : "bg-panel-2 ring-1 ring-seam text-dust"
-                        }`}
-                      >
-                        {isSelected ? <BarberPoleIcon className="w-3.5 h-8" turnOnce /> : <Scissors className="w-4 h-4" />}
-                      </span>
-                      <span className="min-w-0">
-                        {/* Two lines on a narrow phone rather than "Shave / Facial / Ma…". */}
-                        <span className="block font-semibold text-[0.9375rem] leading-snug text-bone line-clamp-2 break-words">{service.name}</span>
-                        <span className="block text-xs text-dust">Standard Service</span>
-                      </span>
-                    </span>
-                    <span
-                      className={`rz-figure text-xl shrink-0 transition-colors duration-200 ${
-                        isSelected ? "text-bone" : "text-bone-2"
-                      }`}
-                    >
+                    {/* The chosen tile is edged along the top by the barber pole. */}
+                    {isSelected && <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1.5 rz-stripes" />}
+                    {/* Two lines on a narrow phone rather than "Shave / Facial / Ma…". */}
+                    <span className="block font-semibold text-[0.9375rem] leading-snug text-bone line-clamp-2 break-words">{service.name}</span>
+                    <span className={`rz-figure text-xl ${isSelected ? "text-bone" : "text-bone-2"}`}>
                       ₱{service.standardPrice.toFixed(2)}
                     </span>
                   </button>
@@ -1131,33 +1253,17 @@ export default function MobilePOSPage() {
             </div>
           </section>
 
-          {/* ── Col 2: Checkout ── */}
-          <section className="space-y-3 sm:col-span-1">
-            <h2 className="rz-heading">
-              <Banknote className="w-4 h-4 text-crimson-ink" />
-              {/* Keyed by the amount, so a new total lights up brass for a moment. */}
-              Checkout — <span key={previewAmount} className="animate-value text-bone">₱{previewAmount.toFixed(2)}</span>
+          {/* ── Col 2: The ticket (slice 17): what this sale is, its total, and Charge ── */}
+          <section aria-labelledby="ticket-title" className="space-y-3 sm:col-span-1">
+            <h2 id="ticket-title" className="rz-heading">
+              <Receipt className="w-4 h-4 text-crimson-ink" />
+              Ticket
+              {binding && <span className="ml-auto normal-case tracking-normal text-xs font-normal text-dust truncate">for {binding.barberName}</span>}
             </h2>
 
-            {/* Barber attribution display */}
-            {binding && (
-              <div className="rz-panel p-3.5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-11 h-11 rounded-full bg-crimson/15 ring-1 ring-crimson-bright/45 text-crimson-ink flex items-center justify-center font-display font-semibold text-lg shrink-0">
-                    {binding.barberName.charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-[0.9375rem] text-bone truncate">{binding.barberName}</div>
-                    <div className="text-xs text-dust">Attributed Barber for this station</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="rz-panel p-3.5 space-y-3">
-              <div id="adjust-total-label" className="rz-label">Adjust total</div>
               {/* aria-pressed tells screen readers which tip is chosen; sighted users see the raised fill. */}
-              <div role="group" aria-labelledby="adjust-total-label" className="rz-seg">
+              <div role="group" aria-label="Tip" className="rz-seg">
                 {(["NONE", "20", "50"] as const).map((choice) => (
                   <button key={choice} type="button" aria-pressed={tipChoice === choice} onClick={() => setTipChoice(choice)} className="rz-seg-item flex-1 px-1.5 text-xs pointer-coarse:min-h-11">{choice === "NONE" ? "No tip" : `+₱${choice} tip`}</button>
                 ))}
@@ -1165,113 +1271,97 @@ export default function MobilePOSPage() {
               </div>
               {/* 16px text on phones so iOS does not zoom in on focus. */}
               {tipChoice === "CUSTOM" && <input type="number" min="0" step="0.01" inputMode="decimal" placeholder="Tip amount" aria-label="Custom tip amount (₱)" value={customTipInput} onChange={(e) => setCustomTipInput(e.target.value)} className="rz-field animate-rise sm:text-sm pointer-coarse:min-h-11" />}
-              <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ₱${previewListPrice.toFixed(2)})`} aria-label={`Custom amount (₱), optional. Default ₱${previewListPrice.toFixed(2)}`} value={customAmountInput} onChange={(e) => handleCustomAmountChange(e.target.value)} className="rz-field sm:text-sm pointer-coarse:min-h-11" />
-              {/* A note on a custom amount, e.g. "Request barber" or "VIP". No maxLength: a pasted
-                  note is never cut silently; the counter says when it is too long. */}
-              {preview.isCustomAmount && (
-                <div className="animate-rise space-y-1">
-                  <input
-                    type="text"
-                    placeholder="Note (optional), e.g. Request barber"
-                    aria-label="Note for this custom amount (optional)"
-                    aria-describedby="custom-note-help"
-                    aria-invalid={Boolean(noteError)}
-                    value={customNote}
-                    onChange={(e) => setCustomNote(e.target.value)}
-                    className={`rz-field sm:text-sm pointer-coarse:min-h-11 ${noteError ? "border-warn" : ""}`}
-                  />
-                  <p id="custom-note-help" className={`text-xs ${noteError ? "text-warn-ink" : "text-dust"}`}>
-                    {noteError ?? `${customNote.trim().length} of ${CUSTOM_NOTE_MAX} characters`}
-                  </p>
-                </div>
-              )}
-              {/* The paper card is checked by the barber; the POS only applies the discount. */}
-              {loyaltyOffered && (
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div id="loyalty-label" className="text-sm font-semibold text-bone flex items-center gap-1.5">
-                      <BadgePercent className="w-4 h-4 text-brass shrink-0" />
-                      Loyalty card: {LOYALTY_PERCENT}% off
+
+              {/* Custom amount and the loyalty card are less common: folded away until needed. */}
+              <button
+                type="button"
+                aria-expanded={adjustOpen}
+                aria-controls="ticket-adjust"
+                onClick={() => setShowAdjust(!adjustOpen)}
+                className="w-full flex items-center justify-between gap-2 text-sm font-semibold text-bone-2 hover:text-bone pointer-coarse:min-h-11"
+              >
+                <span className="flex items-center gap-1.5">
+                  <BadgePercent className="w-4 h-4 text-brass shrink-0" />
+                  {loyaltyOffered ? "Custom amount or loyalty card" : "Custom amount"}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-dust transition-transform duration-200 ${adjustOpen ? "rotate-180" : ""}`} />
+              </button>
+              {adjustOpen && (
+                <div id="ticket-adjust" className="animate-rise space-y-3">
+                  <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ₱${previewListPrice.toFixed(2)})`} aria-label={`Custom amount (₱), optional. Default ₱${previewListPrice.toFixed(2)}`} value={customAmountInput} onChange={(e) => handleCustomAmountChange(e.target.value)} className="rz-field sm:text-sm pointer-coarse:min-h-11" />
+                  {/* A note on a custom amount, e.g. "Request barber" or "VIP". No maxLength: a pasted
+                      note is never cut silently; the counter says when it is too long. */}
+                  {preview.isCustomAmount && (
+                    <div className="animate-rise space-y-1">
+                      <input
+                        type="text"
+                        placeholder="Note (optional), e.g. Request barber"
+                        aria-label="Note for this custom amount (optional)"
+                        aria-describedby="custom-note-help"
+                        aria-invalid={Boolean(noteError)}
+                        value={customNote}
+                        onChange={(e) => setCustomNote(e.target.value)}
+                        className={`rz-field sm:text-sm pointer-coarse:min-h-11 ${noteError ? "border-warn" : ""}`}
+                      />
+                      <p id="custom-note-help" className={`text-xs ${noteError ? "text-warn-ink" : "text-dust"}`}>
+                        {noteError ?? `${customNote.trim().length} of ${CUSTOM_NOTE_MAX} characters`}
+                      </p>
                     </div>
-                    {preview.isCustomAmount && (
-                      <p id="loyalty-help" className="text-xs text-dust">Not with a custom amount.</p>
-                    )}
-                  </div>
-                  <Switch
-                    checked={preview.isLoyalty}
-                    onChange={setLoyalty}
-                    labelledBy="loyalty-label"
-                    describedBy={preview.isCustomAmount ? "loyalty-help" : undefined}
-                    disabled={preview.isCustomAmount}
-                  />
+                  )}
+                  {/* The paper card is checked by the barber; the POS only applies the discount. */}
+                  {loyaltyOffered && (
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div id="loyalty-label" className="text-sm font-semibold text-bone">
+                          Loyalty card: {LOYALTY_PERCENT}% off
+                        </div>
+                        {preview.isCustomAmount && (
+                          <p id="loyalty-help" className="text-xs text-dust">Not with a custom amount.</p>
+                        )}
+                      </div>
+                      <Switch
+                        checked={preview.isLoyalty}
+                        onChange={setLoyalty}
+                        labelledBy="loyalty-label"
+                        describedBy={preview.isCustomAmount ? "loyalty-help" : undefined}
+                        disabled={preview.isCustomAmount}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
-              <div className="flex justify-between gap-3 text-xs text-dust tabular-nums">
-                <span>List ₱{preview.listPrice.toFixed(2)}{preview.isLoyalty && ` · loyalty −₱${preview.discountAmount.toFixed(2)}`}</span>
-                <span className="text-bone-2">Paid ₱{previewAmount.toFixed(2)} · tip ₱{previewTip.toFixed(2)}</span>
-              </div>
+
+              {selectedService && <TicketLines serviceName={selectedService.name} sale={preview} note={customNote} />}
+
+              {/* From tablet width Charge is the foot of the ticket; phones have the bar below. */}
+              <button
+                type="button"
+                onClick={handleCharge}
+                disabled={payDisabled}
+                className="max-sm:hidden rz-btn rz-btn-primary rz-pay w-full gap-2.5"
+              >
+                <Banknote className="w-5 h-5 stroke-[2.5] shrink-0" />
+                Charge <span className="tabular-nums">₱{saleTotal.toFixed(2)}</span>
+              </button>
             </div>
 
-            {/* Payment buttons (slice 13). On phones they sit in a bar fixed to the bottom of the
-                screen, two by two with the method over the amount, so every one is in reach without
-                scrolling; from tablet width they are the stacked column beside the services. */}
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t border-seam-strong bg-wall/95 backdrop-blur px-4 pt-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] shadow-[0_-14px_30px_-18px_rgb(0_0_0/0.95)] sm:static sm:z-auto sm:border-0 sm:bg-transparent sm:backdrop-blur-none sm:p-0 sm:shadow-none">
-              <p className="sm:hidden mb-1.5 flex justify-between gap-3 text-xs text-dust tabular-nums">
-                <span className="truncate">{selectedService?.name}{preview.isLoyalty && ` · Loyalty ${LOYALTY_PERCENT}%`}</span>
-                <span className="text-bone-2 shrink-0">Paid ₱{previewAmount.toFixed(2)}{previewTip > 0 && ` + ₱${previewTip.toFixed(2)} tip`}</span>
-              </p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-1 sm:gap-3">
-                <button
-                  onClick={handleCashCheckout}
-                  disabled={payDisabled}
-                  type="button"
-                  className="rz-btn rz-btn-primary rz-pay max-sm:min-h-14 max-sm:px-2 max-sm:py-1.5 gap-2.5 max-sm:gap-2"
-                >
-                  <Banknote className="w-5 h-5 stroke-[2.5] shrink-0" />
-                  <PayLabel method="Cash" amount={previewAmount} />
-                </button>
-
-                <button
-                  onClick={() => { setDigitalRef(""); setDigitalMethod("GCASH"); }}
-                  disabled={payDisabled}
-                  type="button"
-                  className="rz-btn rz-pay rz-pay-gcash max-sm:min-h-14 max-sm:px-2 max-sm:py-1.5 gap-2.5 max-sm:gap-2"
-                >
-                  <Smartphone className="w-5 h-5 stroke-[2.5] shrink-0" />
-                  <PayLabel method="GCash" amount={previewAmount} />
-                </button>
-
-                <button
-                  onClick={() => { setDigitalRef(""); setDigitalMethod("MAYA"); }}
-                  disabled={payDisabled}
-                  type="button"
-                  className={`rz-btn rz-pay rz-pay-maya max-sm:min-h-14 max-sm:px-2 max-sm:py-1.5 gap-2.5 max-sm:gap-2 ${gatewayEnabled ? "" : "max-sm:col-span-2"}`}
-                >
-                  <Smartphone className="w-5 h-5 stroke-[2.5] shrink-0" />
-                  <PayLabel method="Maya" amount={previewAmount} />
-                </button>
-
-                {gatewayEnabled && (
-                  <button
-                    onClick={() => { void handleQrphCheckout(); }}
-                    disabled={payDisabled || !isOnline || pcDown}
-                    type="button"
-                    className="animate-rise rz-btn rz-pay rz-pay-qrph max-sm:min-h-14 max-sm:px-2 max-sm:py-1.5 gap-2.5 max-sm:gap-2"
-                  >
-                    <QrCode className="w-5 h-5 stroke-[2.5] shrink-0" />
-                    <PayLabel method="QR Ph (test)" shortMethod="QR Ph" amount={previewAmount} />
-                  </button>
-                )}
-              </div>
-              {gatewayEnabled && (!isOnline || pcDown) && (
-                <p className="mt-1.5 text-center text-xs text-warn-ink">
-                  {!isOnline ? "QR Ph needs internet. Use cash, GCash or Maya." : "QR Ph needs the shop PC. Use cash, GCash or Maya."}
-                </p>
-              )}
-              {noteError && <p className="sm:hidden mt-1.5 text-center text-xs text-warn-ink">Note too long: shorten it to record the sale.</p>}
+            {/* Phones: the total and Charge in a bar fixed to the bottom, always in reach. */}
+            <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 border-t border-seam-strong bg-wall/95 backdrop-blur px-4 pt-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] shadow-[0_-14px_30px_-18px_rgb(0_0_0/0.95)]">
+              <button
+                type="button"
+                onClick={handleCharge}
+                disabled={payDisabled}
+                className="rz-btn rz-btn-primary rz-pay w-full min-h-14 justify-between px-4"
+              >
+                <span className="truncate text-sm font-semibold normal-case tracking-normal">
+                  {selectedService?.name}{preview.isLoyalty && ` · ${LOYALTY_PERCENT}% off`}{previewTip > 0 && " + tip"}
+                </span>
+                <span className="shrink-0 tabular-nums">Charge ₱{saleTotal.toFixed(2)}</span>
+              </button>
+              {noteError && <p className="mt-1.5 text-center text-xs text-warn-ink">Note too long: shorten it to record the sale.</p>}
             </div>
 
-            {/* Under the buttons the reminder at the top has usually scrolled away, so repeat it here. */}
+            {/* Under the ticket the reminder at the top has usually scrolled away, so repeat it here. */}
             {!isOnline || pcDown ? (
               <p className="text-center text-xs text-warn-ink">
                 {(pendingCount ?? 0) > 0
@@ -1311,7 +1401,7 @@ export default function MobilePOSPage() {
             <div className="rz-panel overflow-hidden">
               {(!recentTransactions || recentTransactions.length === 0) ? (
                 <div className="p-6 text-center text-sm text-dust">
-                  <p>No cuts logged yet today.</p>
+                  <p>No cuts on this phone yet.</p>
                 </div>
               ) : (
                 <ul className="rz-rows rz-stagger">
@@ -1381,19 +1471,6 @@ export default function MobilePOSPage() {
   );
 }
 
-// ─── Payment button label (slice 13) ─────────────────────────────────────────
-
-/** "Cash — ₱250.00" on one line from tablet width; on phones the method sits over the amount. */
-function PayLabel({ method, shortMethod = method, amount }: { method: string; shortMethod?: string; amount: number }) {
-  return (
-    <span className="flex flex-col items-start leading-tight sm:flex-row sm:items-baseline sm:gap-1.5 min-w-0">
-      <span className="sm:hidden truncate max-w-full">{shortMethod}</span>
-      <span className="hidden sm:inline">{method} —</span>
-      <span className="max-sm:text-[0.9375rem] tabular-nums">₱{amount.toFixed(2)}</span>
-    </span>
-  );
-}
-
 // ─── Switch (slice 13) ───────────────────────────────────────────────────────
 
 /** An on/off switch: a button with role="switch", at least 44 px tall to tap. */
@@ -1425,32 +1502,50 @@ function Switch({ checked, onChange, labelledBy, describedBy, disabled = false }
   );
 }
 
-// ─── Sale summary (slice 13) ─────────────────────────────────────────────────
+// ─── Ticket (slice 17) ───────────────────────────────────────────────────────
 
-/** What "Ask before recording a sale" shows: the sale exactly as it will be recorded. */
-function SaleSummary({ serviceName, sale, note, method }: { serviceName: string; sale: PricedSale; note: string; method: string }) {
-  const amountDetail = sale.isLoyalty
-    ? `Loyalty ${LOYALTY_PERCENT}%, list ₱${sale.listPrice.toFixed(2)}`
-    : sale.isCustomAmount
-      ? `Custom amount${note.trim() ? `: ${note.trim()}` : ""}`
-      : null;
-  const rows: [string, string, string | null][] = [
-    ["Service", serviceName, null],
-    ["Amount", `₱${sale.amountPaid.toFixed(2)}`, amountDetail],
-    ["Tip", sale.tipAmount > 0 ? `₱${sale.tipAmount.toFixed(2)}` : "No tip", null],
-    ["Payment", method, null],
+/** What the done screen shows about the sale just saved. Nothing here is stored beyond the sale. */
+interface DoneSale {
+  total: number;
+  amountPaid: number;
+  tipAmount: number;
+  methodLabel: string;
+  serviceName: string;
+  isLoyalty: boolean;
+  barberName: string;
+  /** Cash only: what the customer handed over and the change, worked out on the phone. */
+  cash: { received: number; change: number } | null;
+  /** The shop PC couldn't be reached: the sale is on this phone until it syncs. */
+  onPhoneOnly: boolean;
+}
+
+/** The ticket's lines and total: the sale exactly as it will be recorded, plus the tip. */
+function TicketLines({ serviceName, sale, note }: { serviceName: string; sale: PricedSale; note: string }) {
+  const rows: { label: string; detail?: string; amount: string }[] = [
+    {
+      label: serviceName,
+      detail: sale.isCustomAmount ? `Custom amount${note.trim() ? `: ${note.trim()}` : ""}` : undefined,
+      amount: `₱${sale.listPrice.toFixed(2)}`,
+    },
   ];
+  if (sale.isLoyalty) rows.push({ label: `Loyalty card ${LOYALTY_PERCENT}%`, amount: `−₱${sale.discountAmount.toFixed(2)}` });
+  if (sale.tipAmount > 0) rows.push({ label: "Tip", detail: "All to the barber", amount: `₱${sale.tipAmount.toFixed(2)}` });
+  const total = sale.amountPaid + sale.tipAmount;
   return (
-    <dl className="rz-panel divide-y divide-seam text-sm">
-      {rows.map(([label, value, detail]) => (
-        <div key={label} className="px-3.5 py-2.5 flex items-baseline justify-between gap-3">
-          <dt className="text-dust shrink-0">{label}</dt>
-          <dd className="text-right min-w-0">
-            <span className="font-semibold text-bone break-words">{value}</span>
-            {detail && <span className="block text-xs text-dust break-words">{detail}</span>}
-          </dd>
+    <dl className="rounded-lg border border-seam divide-y divide-seam text-sm">
+      {rows.map((row) => (
+        <div key={row.label} className="px-3 py-2 flex items-baseline justify-between gap-3">
+          <dt className="min-w-0">
+            <span className="text-bone-2 break-words">{row.label}</span>
+            {row.detail && <span className="block text-xs text-dust break-words">{row.detail}</span>}
+          </dt>
+          <dd className="text-bone tabular-nums shrink-0">{row.amount}</dd>
         </div>
       ))}
+      <div className="px-3 py-2.5 flex items-baseline justify-between gap-3">
+        <dt className="font-semibold text-bone uppercase tracking-wide text-xs">Total</dt>
+        <dd className="rz-figure text-2xl text-bone tabular-nums">₱{total.toFixed(2)}</dd>
+      </div>
     </dl>
   );
 }
