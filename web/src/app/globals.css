@@ -1656,6 +1656,21 @@ body {
   }
 }
 
+/* The POS (slice 17, ShopAmbience): the system cursor and a plain wall, without the grain. */
+@media (pointer: fine) {
+  html.rz-plain {
+    cursor: auto;
+  }
+
+  html.rz-plain :is(a[href], button:not(:disabled), [role="button"]:not([aria-disabled="true"]), label, summary, select) {
+    cursor: pointer;
+  }
+}
+
+html.rz-plain body {
+  background-image: none;
+}
+
 /* With motion allowed, ShopCursor draws the shears itself so they can move: the native cursor is
    hidden everywhere except where text is typed. */
 html.rz-cursor-live,
