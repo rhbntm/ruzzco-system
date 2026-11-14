@@ -39,7 +39,10 @@ import {
   type TipChoice,
 } from "@/lib/pricing";
 import { LOYALTY_PERCENT, LOYALTY_SERVICE_ID, sortServices } from "@/lib/catalog";
-import { cashQuickAmounts, cashTender } from "@/lib/charge";
+import { cashQuickAmounts, cashTender, collectedTotal } from "@/lib/charge";
+import { peso } from "@/lib/peso";
+import { openSheets, type SheetId } from "@/lib/sheet-stack";
+import { useSheetBack } from "@/lib/use-sheet-back";
 import {
   db,
   initializeLocalCatalog,
@@ -586,9 +589,8 @@ export default function MobilePOSPage() {
     if (outcome === "saved" || outcome === "skipped") setCharging(false);
   };
 
-  // GCash and Maya leave the sheet for their QR dialog, whose Confirm records the sale.
+  // GCash and Maya open their QR dialog on top of the charge sheet (slice 17b); its Record saves the sale.
   const handleDigitalTender = (method: "GCASH" | "MAYA") => {
-    setCharging(false);
     setDigitalRef("");
     setDigitalMethod(method);
   };
@@ -618,6 +620,7 @@ export default function MobilePOSPage() {
     if (outcome === "saved" || outcome === "skipped") {
       setDigitalMethod(null);
       setDigitalRef("");
+      setCharging(false);
     }
   };
 
@@ -642,31 +645,36 @@ export default function MobilePOSPage() {
     return (await db.transactions.get(qrSaleId))?.synced === 1;
   }, [qrSaleId, triggerSync]);
 
-  // Escape closes the GCash/Maya dialog, like its Cancel button: nothing is recorded.
-  useEffect(() => {
-    if (!digitalMethod) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setDigitalMethod(null);
-        setDigitalRef("");
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [digitalMethod]);
+  // ── Sheets and Back (slice 17b) ─────────────────────────────────────────────
 
-  // Escape closes the charge sheet (records nothing), the done screen (New sale) and the settings sheet.
+  // Closing a sheet records nothing. The GCash/Maya dialog closes onto the charge sheet under it;
+  // the done screen closes onto the cleared ticket (New sale).
+  const closeSheet = useCallback((id: SheetId) => {
+    if (id === "settings") setShowSettings(false);
+    else if (id === "charge") setCharging(false);
+    else if (id === "digital") {
+      setDigitalMethod(null);
+      setDigitalRef("");
+    } else setDoneSale(null);
+  }, []);
+
+  // Bottom to top. The phone's Back closes the one on top instead of leaving the POS.
+  const sheets = openSheets({ settings: showSettings, charging, digital: digitalMethod !== null, done: doneSale !== null });
+  const closeTopSheets = (count: number) => {
+    if (count > 0) sheets.slice(-count).forEach(closeSheet);
+  };
+  useSheetBack(sheets.length, closeTopSheets);
+
+  // Escape does what Back does: it closes the sheet on top.
+  const topSheet: SheetId | undefined = sheets[sheets.length - 1];
   useEffect(() => {
-    if (!charging && !doneSale && !showSettings) return;
+    if (!topSheet) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setCharging(false);
-      setDoneSale(null);
-      setShowSettings(false);
+      if (event.key === "Escape") closeSheet(topSheet);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [charging, doneSale, showSettings]);
+  }, [topSheet, closeSheet]);
 
   // ── Derived values ──────────────────────────────────────────────────────────
 
@@ -848,22 +856,24 @@ export default function MobilePOSPage() {
             aria-labelledby="digital-payment-title"
             className="rz-dialog rz-dialog-sheet p-5 space-y-4"
           >
+            {/* One way out (slice 17b): Back, where the charge sheet has it. It returns to the charge
+                sheet with the ticket and the cash received as they were; nothing is recorded. */}
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className={`w-9 h-9 rounded-full flex items-center justify-center ${digitalColor === "emerald" ? "bg-maya/15 text-maya-ink" : "bg-gcash/15 text-gcash-ink"}`}>
+              <button
+                type="button"
+                onClick={() => closeSheet("digital")}
+                className="rz-btn rz-btn-ghost -ml-2 px-2 pointer-coarse:min-h-11 text-dust"
+              >
+                <ChevronLeft className="w-4 h-4" /> Back
+              </button>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${digitalColor === "emerald" ? "bg-maya/15 text-maya-ink" : "bg-gcash/15 text-gcash-ink"}`}>
                   <Smartphone className="w-4.5 h-4.5" />
                 </span>
-                <h2 id="digital-payment-title" className="rz-title text-xl">
+                <h2 id="digital-payment-title" className="rz-title text-xl truncate">
                   {digitalLabel} Payment
                 </h2>
               </div>
-              <button
-                onClick={() => { setDigitalMethod(null); setDigitalRef(""); }}
-                aria-label="Close"
-                className="rz-btn rz-btn-ghost rz-btn-icon pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
 
             <div>
@@ -879,16 +889,16 @@ export default function MobilePOSPage() {
                 </div>
               ) : null}
               <div className={`rz-figure text-4xl text-center pt-3 ${digitalColor === "emerald" ? "text-maya-ink" : "text-gcash-ink"}`}>
-                ₱{saleTotal.toFixed(2)}
+                {peso(saleTotal)}
               </div>
               {previewTip > 0 && (
                 <p className="text-xs text-dust text-center mt-1">
-                  ₱{previewAmount.toFixed(2)} + ₱{previewTip.toFixed(2)} tip
+                  {peso(previewAmount)} + {peso(previewTip)} tip
                 </p>
               )}
               <p className="text-sm text-dust text-center mt-2 mb-3 leading-relaxed">
                 {modalQr ? "Have the customer scan the QR and send " : "Have the customer send "}
-                <strong className="text-bone">₱{saleTotal.toFixed(2)}</strong> by {digitalLabel}. If you have the{" "}
+                <strong className="text-bone">{peso(saleTotal)}</strong> by {digitalLabel}. If you have the{" "}
                 {digitalLabel} reference number, enter it below.
               </p>
               <input
@@ -904,18 +914,12 @@ export default function MobilePOSPage() {
               />
             </div>
 
-            <div className="flex gap-2">
-              {/* Back returns to the charge sheet with the ticket as it was; nothing is recorded. */}
+            <div>
               <button
-                onClick={() => { setDigitalMethod(null); setDigitalRef(""); setCharging(true); }}
-                className="rz-btn rz-btn-secondary flex-1 min-h-12"
-              >
-                <ChevronLeft className="w-4 h-4" /> Back
-              </button>
-              <button
+                type="button"
                 onClick={handleDigitalConfirm}
                 disabled={isRecording}
-                className={`rz-btn flex-1 min-h-12 text-white border-white/10 shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_22px_-12px_rgb(0_0_0/0.9)] ${digitalColor === "emerald" ? "bg-[#0d7f4a] hover:bg-[#0f8d52]" : "bg-[#1f66d9] hover:bg-[#2a72e6]"}`}
+                className={`rz-btn w-full min-h-14 text-base text-white border-white/10 shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_22px_-12px_rgb(0_0_0/0.9)] ${digitalColor === "emerald" ? "bg-[#0d7f4a] hover:bg-[#0f8d52]" : "bg-[#1f66d9] hover:bg-[#2a72e6]"}`}
               >
                 {isRecording ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -929,8 +933,9 @@ export default function MobilePOSPage() {
       )}
 
       {/* Charge sheet (slice 17): the ticket once more, then how the customer pays. Nothing is
-          recorded until Record (cash) or the GCash/Maya dialog's Record; Back keeps the ticket. */}
-      {charging && selectedService && (
+          recorded until Record (cash) or the GCash/Maya dialog's Record; Back keeps the ticket.
+          While the GCash/Maya dialog is open the sheet waits underneath, out of sight. */}
+      {charging && !digitalMethod && selectedService && (
         <div className="rz-overlay items-end sm:items-center" onClick={(event) => { if (event.target === event.currentTarget) setCharging(false); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="charge-title" className="rz-dialog rz-dialog-sheet p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
@@ -942,7 +947,7 @@ export default function MobilePOSPage() {
                 <ChevronLeft className="w-4 h-4" /> Back
               </button>
               <h2 id="charge-title" className="rz-title text-xl">
-                Charge <span className="tabular-nums">₱{saleTotal.toFixed(2)}</span>
+                Charge <span className="tabular-nums">{peso(saleTotal)}</span>
               </h2>
             </div>
 
@@ -984,14 +989,14 @@ export default function MobilePOSPage() {
                 {cashState.status === "short" ? (
                   <>
                     <span className="text-sm text-warn-ink">Short by</span>
-                    <span className="rz-figure text-3xl text-warn-ink tabular-nums">₱{cashState.short.toFixed(2)}</span>
+                    <span className="rz-figure text-3xl text-warn-ink tabular-nums">{peso(cashState.short)}</span>
                   </>
                 ) : cashState.status === "invalid" ? (
                   <span className="text-sm text-warn-ink">Enter the cash received in pesos.</span>
                 ) : (
                   <>
                     <span className="text-sm text-dust">Change due</span>
-                    <span className="rz-figure text-3xl text-bone tabular-nums">₱{cashState.change.toFixed(2)}</span>
+                    <span className="rz-figure text-3xl text-bone tabular-nums">{peso(cashState.change)}</span>
                   </>
                 )}
               </div>
@@ -1001,7 +1006,7 @@ export default function MobilePOSPage() {
                 disabled={payDisabled || cashState.status !== "ok"}
                 className="rz-btn rz-btn-primary w-full min-h-14 text-base"
               >
-                {isRecording ? <RefreshCw className="w-4 h-4 animate-spin" /> : <><Banknote className="w-5 h-5" /> Record ₱{saleTotal.toFixed(2)} cash</>}
+                {isRecording ? <RefreshCw className="w-4 h-4 animate-spin" /> : <><Banknote className="w-5 h-5" /> Record {peso(saleTotal)} cash</>}
               </button>
             </div>
 
@@ -1043,23 +1048,23 @@ export default function MobilePOSPage() {
             <CheckCircle2 aria-hidden="true" className="w-12 h-12 mx-auto text-ok" />
             <h2 id="done-title" className="rz-title text-2xl">Sale saved</h2>
             <div id="done-detail" className="space-y-1">
-              <div className="rz-figure text-4xl text-bone tabular-nums">₱{doneSale.total.toFixed(2)}</div>
+              <div className="rz-figure text-4xl text-bone tabular-nums">{peso(doneSale.total)}</div>
               <p className="text-sm text-dust">
                 {doneSale.methodLabel} · {doneSale.serviceName}{doneSale.isLoyalty && ` (Loyalty ${LOYALTY_PERCENT}%)`} · {doneSale.barberName}
               </p>
               {doneSale.tipAmount > 0 && (
-                <p className="text-xs text-dust tabular-nums">₱{doneSale.amountPaid.toFixed(2)} + ₱{doneSale.tipAmount.toFixed(2)} tip</p>
+                <p className="text-xs text-dust tabular-nums">{peso(doneSale.amountPaid)} + {peso(doneSale.tipAmount)} tip</p>
               )}
             </div>
             {doneSale.cash && (
               <dl className="rz-panel divide-y divide-seam text-sm text-left">
                 <div className="px-3.5 py-2.5 flex items-baseline justify-between gap-3">
                   <dt className="text-dust">Cash received</dt>
-                  <dd className="font-semibold text-bone tabular-nums">₱{doneSale.cash.received.toFixed(2)}</dd>
+                  <dd className="font-semibold text-bone tabular-nums">{peso(doneSale.cash.received)}</dd>
                 </div>
                 <div className="px-3.5 py-2.5 flex items-baseline justify-between gap-3">
                   <dt className="text-dust">Change due</dt>
-                  <dd className="rz-figure text-2xl text-bone tabular-nums">₱{doneSale.cash.change.toFixed(2)}</dd>
+                  <dd className="rz-figure text-2xl text-bone tabular-nums">{peso(doneSale.cash.change)}</dd>
                 </div>
               </dl>
             )}
@@ -1245,7 +1250,7 @@ export default function MobilePOSPage() {
                     {/* Two lines on a narrow phone rather than "Shave / Facial / Ma…". */}
                     <span className="block font-semibold text-[0.9375rem] leading-snug text-bone line-clamp-2 break-words">{service.name}</span>
                     <span className={`rz-figure text-xl ${isSelected ? "text-bone" : "text-bone-2"}`}>
-                      ₱{service.standardPrice.toFixed(2)}
+                      {peso(service.standardPrice)}
                     </span>
                   </button>
                 );
@@ -1288,7 +1293,7 @@ export default function MobilePOSPage() {
               </button>
               {adjustOpen && (
                 <div id="ticket-adjust" className="animate-rise space-y-3">
-                  <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ₱${previewListPrice.toFixed(2)})`} aria-label={`Custom amount (₱), optional. Default ₱${previewListPrice.toFixed(2)}`} value={customAmountInput} onChange={(e) => handleCustomAmountChange(e.target.value)} className="rz-field sm:text-sm pointer-coarse:min-h-11" />
+                  <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ${peso(previewListPrice)})`} aria-label={`Custom amount (₱), optional. Default ${peso(previewListPrice)}`} value={customAmountInput} onChange={(e) => handleCustomAmountChange(e.target.value)} className="rz-field sm:text-sm pointer-coarse:min-h-11" />
                   {/* A note on a custom amount, e.g. "Request barber" or "VIP". No maxLength: a pasted
                       note is never cut silently; the counter says when it is too long. */}
                   {preview.isCustomAmount && (
@@ -1341,7 +1346,7 @@ export default function MobilePOSPage() {
                 className="max-sm:hidden rz-btn rz-btn-primary rz-pay w-full gap-2.5"
               >
                 <Banknote className="w-5 h-5 stroke-[2.5] shrink-0" />
-                Charge <span className="tabular-nums">₱{saleTotal.toFixed(2)}</span>
+                Charge <span className="tabular-nums">{peso(saleTotal)}</span>
               </button>
             </div>
 
@@ -1356,7 +1361,7 @@ export default function MobilePOSPage() {
                 <span className="truncate text-sm font-semibold normal-case tracking-normal">
                   {selectedService?.name}{preview.isLoyalty && ` · ${LOYALTY_PERCENT}% off`}{previewTip > 0 && " + tip"}
                 </span>
-                <span className="shrink-0 tabular-nums">Charge ₱{saleTotal.toFixed(2)}</span>
+                <span className="shrink-0 tabular-nums">Charge {peso(saleTotal)}</span>
               </button>
               {noteError && <p className="mt-1.5 text-center text-xs text-warn-ink">Note too long: shorten it to record the sale.</p>}
             </div>
@@ -1405,7 +1410,10 @@ export default function MobilePOSPage() {
                 </div>
               ) : (
                 <ul className="rz-rows rz-stagger">
-                  {recentTransactions.map((tx) => (
+                  {recentTransactions.map((tx) => {
+                    // The same total as the done screen: what was collected, tip included.
+                    const collected = collectedTotal(tx);
+                    return (
                     <li
                       key={tx.id}
                       className="px-3.5 py-3 flex items-center justify-between gap-2 text-sm"
@@ -1429,7 +1437,10 @@ export default function MobilePOSPage() {
                             <Banknote className="w-3 h-3" />
                           </span>
                         )}
-                        <span className="rz-figure text-base text-bone">₱{Number(tx.totalAmount).toFixed(2)}</span>
+                        <span className="text-right">
+                          <span className="block rz-figure text-base text-bone">{peso(collected.total)}</span>
+                          {collected.tip > 0 && <span className="block text-xs text-dust tabular-nums">incl. {peso(collected.tip)} tip</span>}
+                        </span>
                         {tx.synced === 1 ? (
                           <span role="img" aria-label="Synced" title="Synced"><CheckCircle2 className="w-4 h-4 text-ok" /></span>
                         ) : isRejected(tx) ? (
@@ -1439,7 +1450,8 @@ export default function MobilePOSPage() {
                         )}
                       </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -1525,11 +1537,11 @@ function TicketLines({ serviceName, sale, note }: { serviceName: string; sale: P
     {
       label: serviceName,
       detail: sale.isCustomAmount ? `Custom amount${note.trim() ? `: ${note.trim()}` : ""}` : undefined,
-      amount: `₱${sale.listPrice.toFixed(2)}`,
+      amount: peso(sale.listPrice),
     },
   ];
-  if (sale.isLoyalty) rows.push({ label: `Loyalty card ${LOYALTY_PERCENT}%`, amount: `−₱${sale.discountAmount.toFixed(2)}` });
-  if (sale.tipAmount > 0) rows.push({ label: "Tip", detail: "All to the barber", amount: `₱${sale.tipAmount.toFixed(2)}` });
+  if (sale.isLoyalty) rows.push({ label: `Loyalty card ${LOYALTY_PERCENT}%`, amount: `−${peso(sale.discountAmount)}` });
+  if (sale.tipAmount > 0) rows.push({ label: "Tip", detail: "All to the barber", amount: peso(sale.tipAmount) });
   const total = sale.amountPaid + sale.tipAmount;
   return (
     <dl className="rounded-lg border border-seam divide-y divide-seam text-sm">
@@ -1544,7 +1556,7 @@ function TicketLines({ serviceName, sale, note }: { serviceName: string; sale: P
       ))}
       <div className="px-3 py-2.5 flex items-baseline justify-between gap-3">
         <dt className="font-semibold text-bone uppercase tracking-wide text-xs">Total</dt>
-        <dd className="rz-figure text-2xl text-bone tabular-nums">₱{total.toFixed(2)}</dd>
+        <dd className="rz-figure text-2xl text-bone tabular-nums">{peso(total)}</dd>
       </div>
     </dl>
   );

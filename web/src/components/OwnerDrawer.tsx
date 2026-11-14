@@ -18,7 +18,7 @@ type OwnerPage = { href: string; title: string; body: string; icon: LucideIcon }
 // In the order Mart reaches for them at closing.
 const ownerPages: OwnerPage[] = [
   { href: "/ledger", title: "Barber Ledger", body: "View and record each barber's daily payout.", icon: Wallet },
-  { href: "/forecast", title: "Detailed Forecast", body: "How the 7-day forecast compares with simpler guesses and other models.", icon: LineChart },
+  { href: "/forecast", title: "Detailed Forecast", body: "How the forecast compares with simpler guesses and other models.", icon: LineChart },
   { href: "/insights", title: "Insights", body: "Dashboards, trends and calculations from the shop's own numbers.", icon: LayoutDashboard },
   { href: "/payment-qr", title: "Payment QR", body: "Add or change the GCash and Maya QR shown for each barber.", icon: QrCode },
   { href: "/devices", title: "Phones", body: "See the approved phones and revoke a lost or replaced one.", icon: Smartphone },

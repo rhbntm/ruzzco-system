@@ -3,6 +3,8 @@
 import { RotateCw, TriangleAlert } from "lucide-react";
 import type { LocalTransaction } from "@/lib/db";
 import { rejectHint, rejectLabel } from "@/lib/sync";
+import { collectedTotal } from "@/lib/charge";
+import { peso } from "@/lib/peso";
 
 const METHOD_LABELS: Record<LocalTransaction["paymentMethod"], string> = {
   CASH: "Cash",
@@ -38,7 +40,10 @@ export function RejectedSales({
       </p>
 
       <ul className="rounded-lg bg-black/30 border border-warn/20 overflow-hidden divide-y divide-warn/15 rz-stagger">
-        {sales.map((tx) => (
+        {sales.map((tx) => {
+          // Slice 17b: the same total as every other row on the phone, tip included.
+          const collected = collectedTotal(tx);
+          return (
           <li key={tx.id} className="p-3 text-xs space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold text-bone truncate">
@@ -51,7 +56,7 @@ export function RejectedSales({
                 <span className="text-dust font-normal"> • {tx.barberName}</span>
               </span>
               <span className="rz-figure text-sm text-bone shrink-0">
-                ₱{Number(tx.totalAmount).toFixed(2)} · {METHOD_LABELS[tx.paymentMethod] ?? tx.paymentMethod}
+                {peso(collected.total)} · {METHOD_LABELS[tx.paymentMethod] ?? tx.paymentMethod}
               </span>
             </div>
             <div className="flex items-center justify-between gap-3">
@@ -60,6 +65,7 @@ export function RejectedSales({
                 {rejectHint(tx.syncError) && (
                   <div className="text-xs text-bone-2">{rejectHint(tx.syncError)}</div>
                 )}
+                {collected.tip > 0 && <div className="text-xs text-dust tabular-nums">incl. {peso(collected.tip)} tip</div>}
                 <div className="text-xs text-dust font-mono">{tx.id.slice(0, 8)}…</div>
               </div>
               <button
@@ -73,7 +79,8 @@ export function RejectedSales({
               </button>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </section>
   );

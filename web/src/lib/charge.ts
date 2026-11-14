@@ -52,3 +52,14 @@ export function cashTender(total: number, receivedInput: string): CashTender {
   if (receivedC < totalC) return { status: "short", received: receivedC / 100, short: (totalC - receivedC) / 100 };
   return { status: "ok", received: receivedC / 100, change: (receivedC - totalC) / 100 };
 }
+
+/**
+ * What was collected for a saved sale: the amount paid plus the tip, the one total the phone shows
+ * (slice 17, Decision 4; slice 17b, Decision 5). Display only: the sale keeps its own fields.
+ * A sale saved before tips were recorded has no tip, and its amount paid is `totalAmount`.
+ */
+export function collectedTotal(sale: { totalAmount: number; amountPaid?: number | null; tipAmount?: number | null }): { paid: number; tip: number; total: number } {
+  const paidC = toCentavos(Number(sale.amountPaid ?? sale.totalAmount) || 0);
+  const tipC = Math.max(0, toCentavos(Number(sale.tipAmount ?? 0) || 0));
+  return { paid: paidC / 100, tip: tipC / 100, total: (paidC + tipC) / 100 };
+}

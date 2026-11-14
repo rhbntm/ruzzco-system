@@ -38,7 +38,7 @@ export default async function AboutPage() {
     "50/50 commission saved with each sale, never recomputed",
     "Daily payout ledger behind an owner PIN",
     "End-of-day drawer reconciliation with petty cash",
-    "7-day customer and revenue forecast for the owner, from the paper logbook",
+    "Customer and revenue forecast for the owner (7, 14 or 30 days), from the paper logbook",
   ];
 
   const exampleName = example?.name ?? "Cut";

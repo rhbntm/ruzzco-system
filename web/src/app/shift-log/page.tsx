@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { db, type LocalTransaction } from "@/lib/db";
 import { DEFAULT_CUSTOM_NOTE, discountLabel } from "@/lib/pricing";
+import { collectedTotal } from "@/lib/charge";
+import { peso } from "@/lib/peso";
 import { paginate } from "@/lib/paginate";
 import { countPending, isRejected, listRejected, retryRejected, summarizeSync, syncNow } from "@/lib/sync";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -240,8 +242,8 @@ export default function ShiftLogPage() {
 
         {/* Today's Summary Cards: this phone's own records, provisional */}
         <p className="text-sm text-dust leading-relaxed">
-          Totals below are from this phone only and are provisional: they include sales not yet synced, and sales the
-          server holds for a date review. End-of-Day Cash has the shop&apos;s official figures.
+          Totals below are from this phone only, leave out tips, and are provisional: they include sales not yet synced,
+          and sales the server holds for a date review. End-of-Day Cash has the shop&apos;s official figures.
         </p>
         <section className="rz-strip grid-cols-2 sm:grid-cols-5 rz-stagger">
           {[
@@ -253,26 +255,26 @@ export default function ShiftLogPage() {
             },
             {
               label: "Total Revenue",
-              value: `₱${(cashTotal + gcashTotal + mayaTotal).toFixed(2)}`,
+              value: peso(cashTotal + gcashTotal + mayaTotal),
               accent: "text-brass-bright",
               sub: "this phone (provisional)",
             },
             {
               // Bone, not red: in figures, red means "cash short".
               label: "Cash",
-              value: `₱${cashTotal.toFixed(2)}`,
+              value: peso(cashTotal),
               accent: "text-bone",
               sub: "this phone, cash",
             },
             {
               label: "GCash",
-              value: `₱${gcashTotal.toFixed(2)}`,
+              value: peso(gcashTotal),
               accent: "text-gcash-ink",
               sub: "digital",
             },
             {
               label: "Maya",
-              value: `₱${mayaTotal.toFixed(2)}`,
+              value: peso(mayaTotal),
               accent: "text-maya-ink",
               sub: "digital",
             },
@@ -313,6 +315,8 @@ export default function ShiftLogPage() {
               {shown.items.map((tx) => {
                 const discount = discountLabel(tx);
                 const note = tx.customAmount && tx.customAmountNote && tx.customAmountNote !== DEFAULT_CUSTOM_NOTE ? tx.customAmountNote : null;
+                // Slice 17b: the row shows what was collected, tip included, like the POS done screen.
+                const collected = collectedTotal(tx);
                 return (
                 <li
                   key={tx.id}
@@ -321,7 +325,8 @@ export default function ShiftLogPage() {
                   <div className="space-y-0.5 truncate min-w-0">
                     <div className="font-semibold text-bone truncate flex items-center gap-1.5">
                       <span className="truncate">{tx.serviceName}</span>
-                      <span className="text-xs font-normal text-dust shrink-0">• {tx.barberName}</span>
+                      {/* On a narrow phone the barber's name gives way first, so the service stays readable. */}
+                      <span className="text-xs font-normal text-dust min-w-0 truncate shrink-[9999]">• {tx.barberName}</span>
                     </div>
                     <div className="text-xs text-dust flex items-center gap-2">
                       <span>
@@ -382,8 +387,9 @@ export default function ShiftLogPage() {
                       </span>
                     )}
 
-                    <span className="rz-figure text-base text-bone">
-                      ₱{Number(tx.totalAmount).toFixed(2)}
+                    <span className="text-right">
+                      <span className="block rz-figure text-base text-bone">{peso(collected.total)}</span>
+                      {collected.tip > 0 && <span className="block text-xs text-dust tabular-nums">incl. {peso(collected.tip)} tip</span>}
                     </span>
 
                     {/* Sync status dot */}

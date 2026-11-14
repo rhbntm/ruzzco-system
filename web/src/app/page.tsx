@@ -115,7 +115,7 @@ export default async function HomePage() {
                   </h1>
                   <p className="hidden sm:block max-w-[36ch] lg:max-w-[50ch] sm:text-lg lg:text-[1.0625rem] leading-relaxed text-[#f3dcd8]">
                     The shop&apos;s point of sale and end-of-day books. Every sale is saved on the phone first and synced when
-                    the Wi-Fi is back, and the owner gets a 7-day customer forecast.
+                    the Wi-Fi is back, and the owner gets a customer forecast.
                   </p>
                 </div>
               </div>
@@ -141,7 +141,7 @@ export default async function HomePage() {
                       Open the POS
                     </span>
                     <span className="block text-sm font-medium leading-relaxed max-w-[34ch]">
-                      Ring up a cut in two taps. Works even when the shop Wi-Fi drops.
+                      Ring up a cut and its payment. Works even when the shop Wi-Fi drops.
                     </span>
                     <span className="mt-auto pt-2 flex items-end justify-between gap-4">
                       <span className="text-xs font-semibold uppercase tracking-[0.08em]">

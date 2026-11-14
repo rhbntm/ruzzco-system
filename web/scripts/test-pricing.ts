@@ -13,7 +13,8 @@ import {
   type PriceSaleInput,
   type PricedSale,
 } from "../src/lib/pricing";
-import { cashQuickAmounts, cashTender } from "../src/lib/charge";
+import { cashQuickAmounts, cashTender, collectedTotal } from "../src/lib/charge";
+import { peso } from "../src/lib/peso";
 import { HAIRCUT_ID, SERVICE_CATALOG, sortServices } from "../src/lib/catalog";
 import { DEFAULT_SERVICES } from "../src/lib/db";
 
@@ -152,6 +153,32 @@ console.log("\nCash received and change due (slice 17, never stored)");
   check("centavos don't drift: ₱0.50 for ₱0.30 is ₱0.20", centavos.status === "ok" && centavos.change === 0.2, centavos.status === "ok" ? String(centavos.change) : centavos.status);
   const padded = tender(250, "  300 ");
   check("spaces around the amount are ignored", padded.status === "ok" && padded.change === 50);
+}
+
+console.log("\nOne total on the phone, and how pesos are written (slice 17b, display only)");
+{
+  check("₱250.00", peso(250) === "₱250.00", peso(250));
+  check("₱1,000.00 has a thousands separator", peso(1000) === "₱1,000.00", peso(1000));
+  check("₱1,234,567.89", peso(1234567.89) === "₱1,234,567.89", peso(1234567.89));
+  check("₱999.99 has none", peso(999.99) === "₱999.99", peso(999.99));
+  check("centavos are rounded, not cut: ₱0.30", peso(0.1 + 0.2) === "₱0.30", peso(0.1 + 0.2));
+  check("rounding carries into the thousands: ₱1,000.00", peso(999.999) === "₱1,000.00", peso(999.999));
+  check("₱0.00", peso(0) === "₱0.00" && peso(-0.001) === "₱0.00", `${peso(0)} ${peso(-0.001)}`);
+  check("a negative amount keeps its sign", peso(-1250.5) === "-₱1,250.50", peso(-1250.5));
+
+  const tipped = collectedTotal({ totalAmount: 250, amountPaid: 250, tipAmount: 20 });
+  check("₱250 paid + ₱20 tip is ₱270 collected", tipped.total === 270 && tipped.paid === 250 && tipped.tip === 20);
+  const plain = collectedTotal({ totalAmount: 300, amountPaid: 300, tipAmount: 0 });
+  check("no tip: collected is the amount paid", plain.total === 300 && plain.tip === 0);
+  const loyalty = collectedTotal({ totalAmount: 125, amountPaid: 125, tipAmount: 50 });
+  check("loyalty ₱125 + ₱50 tip is ₱175", loyalty.total === 175);
+  const old = collectedTotal({ totalAmount: 200 });
+  check("a sale saved before tips: its total amount, no tip", old.total === 200 && old.paid === 200 && old.tip === 0);
+  const cents = collectedTotal({ totalAmount: 0.1, amountPaid: 0.1, tipAmount: 0.2 });
+  check("centavos don't drift: ₱0.10 + ₱0.20 is ₱0.30", cents.total === 0.3, String(cents.total));
+  // Same sum as the POS ticket and done screen (amountPaid + tipAmount from priceSale).
+  const sale = priceSale({ ...base, ...haircut, tipChoice: "20" });
+  check("matches the ticket total for the same sale", collectedTotal({ totalAmount: sale.amountPaid, amountPaid: sale.amountPaid, tipAmount: sale.tipAmount }).total === sale.amountPaid + sale.tipAmount);
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
