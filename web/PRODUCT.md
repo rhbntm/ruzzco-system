@@ -8,7 +8,7 @@ web
 
 ## Users
 
-- **Barbers** (the roster is data, never hardcoded; today two are active) ring up each cut on their own phone or a shared device, between customers, standing at the chair.
+- **Barbers** (the roster is data, never hardcoded; today two are active) ring up each cut on their own phone or a shared device [Outdated 2026-11-14 (Brent): each barber uses their own phone; a shared device is not supported], between customers, standing at the chair.
 - **Mart, the owner**, closes out the drawer at night, records each barber's daily payout, manages the barbers' GCash/Maya QR codes, and reads the forecast and its detailed report behind an owner PIN. Mart doesn't cut hair.
 
 ## Product Purpose

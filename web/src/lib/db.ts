@@ -61,7 +61,8 @@ export interface LocalDeviceBinding {
 /**
  * A barber's GCash or Maya QR, cached so the payment modal shows it with no internet
  * (slice 6). Display only: never part of a sale. Kept for every active barber, so an
- * offline rebind on a shared phone still has the right QR. Filled by refreshPaymentQrs().
+ * offline rebind on a shared phone still has the right QR [shared phone: outdated 2026-11-14,
+ * each barber uses their own phone]. Filled by refreshPaymentQrs().
  */
 export interface LocalPaymentQr {
   id: string; // `${barberId}:${method}`

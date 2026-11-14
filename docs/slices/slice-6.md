@@ -60,7 +60,7 @@ PIN unlock using the `/ledger` pattern. One row per active barber, a GCash and a
 ## 7. Device cache
 
 - Dexie version 3 adds a `paymentQrs` table keyed `"barberId:method"` with `{ sha256, contentType, dataUrl }`. The new table brings a new primary index, which is what justifies the version bump under CLAUDE.md.
-- Holds QRs for all active barbers, so an offline rebind on a shared phone still shows the right QR.
+- Holds QRs for all active barbers, so an offline rebind on a shared phone still shows the right QR. [Outdated 2026-11-14 (Brent): each barber uses their own phone; a shared device is not supported]
 - Refreshed on POS load while online, after a bind, and on reconnect. Only images whose sha256 changed are downloaded; removed ones are deleted locally.
 - Why IndexedDB: the Cache API needs a secure context, and the phones use LAN HTTP. localStorage is about 5 MB and strings only. IndexedDB already works over HTTP and holds the catalog. Limit: with no service worker, offline still means the page was loaded online and kept open.
 
