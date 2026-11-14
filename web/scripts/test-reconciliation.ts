@@ -35,7 +35,7 @@ const AT = (date: string, time: string) => new Date(`${date}T${time}+08:00`).toI
 
 const BARBERS = {
   A: { id: `test-rec-A-${RUN}`, rate: 0.5 }, // makes every sale
-  B: { id: `test-rec-B-${RUN}`, rate: 0.5 }, // only has a payout row
+  B: { id: `test-rec-B-${RUN}`, rate: 0.5 }, // no sales: owed nothing, so a payout to B is refused
 };
 
 const devices = createTestDevices(BASE);
@@ -86,9 +86,10 @@ const reconcile = (date: string, countedCash: number, pettyCashAmount = 0) =>
   request<Recon>("POST", "/api/v1/reports/reconciliation", { date, countedCash, pettyCashAmount });
 const ledger = (date: string) =>
   request<{ success: boolean; rows: LedgerRow[] }>("GET", `/api/v1/reports/payouts?date=${date}&commissionBase=LIST_PRICE`);
-const pay = (barberId: string, cashPaid: number, gcashPaid: number, paid: boolean) =>
-  request<{ success: boolean }>("POST", "/api/v1/reports/payouts", {
-    date: D, barberId, commissionBase: "LIST_PRICE", cashPaid, gcashPaid, paid,
+// Slice 18: one payout entry per call.
+const pay = (barberId: string, method: "CASH" | "GCASH", amount: number) =>
+  request<{ success: boolean; code?: string }>("POST", "/api/v1/reports/payouts", {
+    id: randomUUID(), date: D, barberId, commissionBase: "LIST_PRICE", method, amount,
   });
 
 type SaleOpts = { date: string; time: string; amount: number; method?: "CASH" | "GCASH" | "MAYA"; tipAmount?: number };
@@ -225,12 +226,14 @@ async function main() {
   check("C1: expected drawer 1185.00 with no payouts or petty cash", e.expectedDrawerCash === "1185.00", e.expectedDrawerCash);
   check("no saved revision yet: saved and staleness are null", cur.body.saved === null && cur.body.staleness === null);
 
-  console.log("\nS6 only paid payouts leave the drawer; gcashPaid never does");
+  console.log("\nS6 every cash entry leaves the drawer; GCash never does (slice 18)");
   await ledger(D); // creates the rows for A and B
-  check("setup: A paid ₱120 cash + ₱70 GCash", (await pay(BARBERS.A.id, 120, 70, true)).status === 200);
-  check("setup: B ₱60 cash entered but not paid", (await pay(BARBERS.B.id, 60, 0, false)).status === 200);
+  check("setup: A paid ₱120 cash", (await pay(BARBERS.A.id, "CASH", 120)).status === 200);
+  check("setup: A paid ₱70 GCash", (await pay(BARBERS.A.id, "GCASH", 70)).status === 200);
+  const refused = await pay(BARBERS.B.id, "CASH", 60);
+  check("S6: ₱60 to B, who earned nothing, is refused (409 OVERPAYMENT)", refused.status === 409 && refused.body.code === "OVERPAYMENT", JSON.stringify(refused.body));
   e = (await recon(D)).body.expected;
-  check("S6: cash payouts 120.00 (unpaid 60 and GCash 70 excluded)", e.cashPayouts === "120.00", e.cashPayouts);
+  check("S6: cash payouts 120.00 (GCash 70 and the refused 60 excluded)", e.cashPayouts === "120.00", e.cashPayouts);
   check("C1: expected drawer 1065.00 = 1155 + 30 - 120", e.expectedDrawerCash === "1065.00", e.expectedDrawerCash);
 
   console.log("\nR1 first save is revision 1 and current");
@@ -279,14 +282,14 @@ async function main() {
   cur = await recon(D);
   check("S5: D still not stale", cur.body.staleness?.stale === false, JSON.stringify(cur.body.staleness));
 
-  console.log("\nS3 payout edits after the count");
-  await pay(BARBERS.A.id, 120, 90, true);
+  console.log("\nS3 payouts recorded after the count");
+  await pay(BARBERS.A.id, "GCASH", 20);
   cur = await recon(D);
-  check("S3: a GCash-only payout change does not stale D", cur.body.staleness?.stale === false, JSON.stringify(cur.body.staleness));
-  await pay(BARBERS.B.id, 60, 0, true);
+  check("S3: a GCash payout does not stale D", cur.body.staleness?.stale === false, JSON.stringify(cur.body.staleness));
+  await pay(BARBERS.A.id, "CASH", 60);
   cur = await recon(D);
   s = cur.body.staleness;
-  check("S3: marking B's ₱60 paid stales D with delta -60.00", s?.stale === true && s.staleReasons.join() === "EXPECTED_CASH_CHANGED" && s.expectedCashDelta === "-60.00" && s.lateSyncedCount === 0, JSON.stringify(s));
+  check("S3: a ₱60 cash payout stales D with delta -60.00", s?.stale === true && s.staleReasons.join() === "EXPECTED_CASH_CHANGED" && s.expectedCashDelta === "-60.00" && s.lateSyncedCount === 0, JSON.stringify(s));
   check("S3: live expected drawer 1030.00", cur.body.expected.expectedDrawerCash === "1030.00", cur.body.expected.expectedDrawerCash);
 
   console.log("\nR3 concurrent saves get distinct revisions");

@@ -19,6 +19,7 @@
     "test:gateway": "tsx scripts/test-gateway.ts",
     "test:insights-story": "tsx scripts/test-insights-story.ts",
     "test:ledger-summary": "tsx scripts/test-ledger-summary.ts",
+    "test:payout-entries": "tsx scripts/test-payout-entries.ts",
     "test:local-name": "node scripts/test-local-name.mjs",
     "test:owner-unlock": "tsx scripts/test-owner-unlock.ts",
     "test:payload-compat": "tsx scripts/test-payload-compat.ts",

@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma";
 import { manilaToday, parseBusinessDate, type BusinessDay } from "@/lib/business-date";
 import { computeExpected, computeStaleness, latestRevision, type ExpectedTotals, type Staleness } from "@/lib/reconciliation";
 import { totalsForDate } from "@/lib/payout-totals";
+import { isAdditionalOwed, lastEntry, remainingToPay } from "@/lib/payout-entries";
 import { countHeldForReview, countsOnDay } from "@/lib/time-review";
 import { gatewayConfig } from "@/lib/gateway";
 import { OWNER_COOKIE, isOwnerCookie } from "@/lib/owner-access";
@@ -69,7 +70,7 @@ async function loadDay(day: BusinessDay) {
   // revision's, exactly as End-of-Day Cash does.
   const saved = await latestRevision(day);
   const expected = await computeExpected(day, saved?.pettyCashAmount ?? 0);
-  const [staleness, totals, sales, ledgerRows, barbers, heldForReview] = await Promise.all([
+  const [staleness, totals, sales, ledgerRows, entries, barbers, heldForReview] = await Promise.all([
     saved ? computeStaleness(day, saved, expected) : Promise.resolve(null),
     totalsForDate(day.date, "LIST_PRICE"),
     prisma.transaction.findMany({
@@ -78,7 +79,13 @@ async function loadDay(day: BusinessDay) {
     }),
     prisma.dailyPayoutLedger.findMany({
       where: { businessDate: day.dateValue },
-      select: { barberId: true, cashPaid: true, gcashPaid: true, paidAt: true },
+      select: { barberId: true, cashPaid: true, gcashPaid: true },
+    }),
+    // Slice 18: the owed amount stored on each payout entry, for the additional-owed rule.
+    prisma.payoutEntry.findMany({
+      where: { businessDate: day.dateValue },
+      select: { barberId: true, owedAtEntry: true, recordedAt: true },
+      orderBy: { recordedAt: "asc" },
     }),
     prisma.barber.findMany({ select: { id: true, fullName: true, isActive: true }, orderBy: { fullName: "asc" } }),
     countHeldForReview(day),
@@ -116,9 +123,9 @@ async function loadDay(day: BusinessDay) {
         gcashPaid,
         paidOut,
         // As on the ledger page: left to pay, never below zero.
-        remaining: Prisma.Decimal.max(earned.sub(paidOut), ZERO),
-        // As on the ledger: marked paid, then more sales counted on this date.
-        additionalOwed: Boolean(ledger?.paidAt) && earned.gt(paidOut),
+        remaining: remainingToPay(earned, paidOut),
+        // As on the ledger: fully paid at the last entry, then more sales counted on this date.
+        additionalOwed: isAdditionalOwed(earned, paidOut, lastEntry(entries.filter((e) => e.barberId === barber.id))?.owedAtEntry ?? null),
       };
     });
 
@@ -657,7 +664,7 @@ function DrawerCalc({ data }: { data: DayData }) {
         lines={[
           { label: "Cash sales", value: peso(expected.cashSales) },
           { op: "+", label: "Tips on cash sales", value: peso(expected.cashTips) },
-          { op: "−", label: "Cash payouts marked paid", value: peso(expected.cashPayouts) },
+          { op: "−", label: "Cash payouts", value: peso(expected.cashPayouts) },
           { op: "−", label: "Petty cash", value: peso(expected.pettyCash) },
           { op: "=", label: "Expected drawer cash", value: peso(expected.expectedDrawerCash) },
         ]}
@@ -761,8 +768,8 @@ function EarningsCalc({ rows }: { rows: BarberRow[] }) {
               {row.paidOut.gt(row.earned) && <Note>Paid more than earned, so remaining to pay stays at ₱0.00.</Note>}
               {row.additionalOwed && (
                 <Warning>
-                  Additional owed: sales synced or confirmed onto this date after the payout was marked paid. The amount already paid
-                  is unchanged.
+                  Additional owed: sales synced or confirmed onto this date after the day was paid in full. The payouts already
+                  recorded are unchanged.
                 </Warning>
               )}
             </div>

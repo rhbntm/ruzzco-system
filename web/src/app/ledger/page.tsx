@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, LockKeyhole, RefreshCw, Save, Scissors, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Check, LockKeyhole, Plus, RefreshCw, Scissors, TriangleAlert, Undo2 } from "lucide-react";
 import { manilaToday } from "@/lib/business-date";
+import { generateUUID } from "@/lib/db";
+import { createSubmitLock } from "@/lib/submit-lock";
 import { BarberPoleIcon, MustacheIcon } from "@/components/RuzzcoBrand";
 
 type Base = "LIST_PRICE" | "AMOUNT_PAID";
@@ -19,7 +21,21 @@ type Summary = {
   days: { date: string; revenue: string; commissions: string }[];
   pettyCashMissingDays: number;
 };
-type LedgerRow = { barberId: string; barberName: string; commissionTotal: string; tipTotal: string; totalOwed: string; cashPaid: string; gcashPaid: string; paid: boolean; paidAt: string | null; additionalOwed: boolean };
+type Method = "CASH" | "GCASH";
+// Slice 18: one payout, never edited. A correction is stored negative and names the entry it undoes.
+type Entry = { id: string; method: Method; kind: "PAYOUT" | "CORRECTION" | "OPENING"; amount: string; correctsId: string | null; note: string | null; recordedAt: string; correctableLeft: string };
+type LedgerRow = {
+  barberId: string; barberName: string; commissionTotal: string; tipTotal: string; totalOwed: string;
+  cashPaid: string; gcashPaid: string; paidTotal: string; remaining: string; additionalOwed: boolean; entries: Entry[];
+};
+// The amount box for one barber. `id` is the entry's idempotency key: kept for a retry of the
+// same amount and method, replaced when either changes and after a save (edge case 2).
+type Draft = { id: string; amount: string; method: Method };
+type Correcting = { barberId: string; entry: Entry; id: string; amount: string; note: string };
+
+const newDraft = (method: Method = "CASH"): Draft => ({ id: generateUUID(), amount: "", method });
+// Repeated taps right after a save land on the lock instead of the button.
+const SAVE_REPEAT_GUARD_MS = 600;
 
 export default function LedgerPage() {
   const [date, setDate] = useState(manilaToday());
@@ -36,6 +52,13 @@ export default function LedgerPage() {
   const [busy, setBusy] = useState(false);
   const [savingBarberId, setSavingBarberId] = useState<string | null>(null);
   const [savedBarberId, setSavedBarberId] = useState<string | null>(null);
+  // Keyed by date and barber, so another day starts with empty boxes.
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [correcting, setCorrecting] = useState<Correcting | null>(null);
+  const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
+  const [saveLock] = useState(() => createSubmitLock({ holdAfterSuccessMs: SAVE_REPEAT_GUARD_MS }));
+  const draftKey = (barberId: string) => `${date}:${barberId}`;
+  const draftFor = (barberId: string) => drafts[draftKey(barberId)] ?? null;
 
   const load = useCallback(async () => {
     setBusy(true); setError(null); setSummaryError(null);
@@ -71,18 +94,54 @@ export default function LedgerPage() {
     finally { setBusy(false); }
   }
 
-  async function save(row: LedgerRow) {
-    setSavingBarberId(row.barberId); setSavedBarberId(null); setError(null);
-    try {
-      const response = await fetch("/api/v1/reports/payouts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, barberId: row.barberId, commissionBase: base, cashPaid: Number(row.cashPaid) || 0, gcashPaid: Number(row.gcashPaid) || 0, paid: row.paid }) });
+  // Posts one entry; on success the card shows the row the server sent back.
+  async function postEntry(barberId: string, body: Record<string, unknown>) {
+    setSavingBarberId(barberId); setSavedBarberId(null); setError(null);
+    setCardErrors((current) => ({ ...current, [barberId]: "" }));
+    const result = await saveLock.run(async () => {
+      const response = await fetch("/api/v1/reports/payouts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, barberId, commissionBase: base, ...body }) });
       const data = await response.json();
       if (response.status === 401) { setUnlocked(false); throw new Error("Owner PIN required."); }
       if (!response.ok || !data.success) throw new Error(data.error ?? "Could not save payout");
-      setRows((current) => current.map((item) => item.barberId === row.barberId ? data.row : item));
-      setSavedBarberId(row.barberId);
-      window.setTimeout(() => setSavedBarberId(null), 2200);
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not save payout"); }
-    finally { setSavingBarberId(null); }
+      return data.row as LedgerRow;
+    });
+    setSavingBarberId(null);
+    if (result.status === "busy") return false;
+    if (result.status === "failed") {
+      const message = result.error instanceof Error ? result.error.message : "Could not save payout";
+      setCardErrors((current) => ({ ...current, [barberId]: message }));
+      return false;
+    }
+    setRows((current) => current.map((item) => item.barberId === barberId ? result.value : item));
+    setSavedBarberId(barberId);
+    window.setTimeout(() => setSavedBarberId(null), 2200);
+    return true;
+  }
+
+  async function record(row: LedgerRow) {
+    const draft = draftFor(row.barberId);
+    const amount = Number(draft?.amount);
+    if (!draft || !(amount > 0)) return;
+    const saved = await postEntry(row.barberId, { id: draft.id, method: draft.method, amount });
+    // The box starts empty after each save; the method stays as it was.
+    if (saved) setDrafts((current) => ({ ...current, [draftKey(row.barberId)]: newDraft(draft.method) }));
+  }
+
+  async function saveCorrection() {
+    if (!correcting) return;
+    const amount = Number(correcting.amount);
+    if (!(amount > 0) || !correcting.note.trim()) return;
+    const saved = await postEntry(correcting.barberId, {
+      id: correcting.id, kind: "CORRECTION", correctsId: correcting.entry.id, method: correcting.entry.method, amount, note: correcting.note.trim(),
+    });
+    if (saved) setCorrecting(null);
+  }
+
+  function editDraft(barberId: string, change: Partial<Omit<Draft, "id">>) {
+    setDrafts((current) => {
+      const draft = current[draftKey(barberId)] ?? newDraft();
+      return { ...current, [draftKey(barberId)]: { ...draft, ...change, id: generateUUID() } };
+    });
   }
 
   if (!unlocked) {
@@ -178,9 +237,12 @@ export default function LedgerPage() {
 
         <div className="space-y-4 rz-stagger">
           {rows.map((row) => {
-            const remaining = Math.max(Number(row.totalOwed) - Number(row.cashPaid) - Number(row.gcashPaid), 0);
+            const remaining = Number(row.remaining);
             const saving = savingBarberId === row.barberId;
             const saved = savedBarberId === row.barberId;
+            const draft = draftFor(row.barberId) ?? { id: "", amount: "", method: "CASH" as Method };
+            const draftAmount = Number(draft.amount);
+            const cardError = cardErrors[row.barberId];
             return (
               <section key={row.barberId} className="rz-panel p-4 sm:p-5 space-y-4">
                 {/* Phones: the earned total on its own row under the name, so the name is never cut. */}
@@ -191,46 +253,74 @@ export default function LedgerPage() {
                     </span>
                     <div className="min-w-0">
                       <h2 className="rz-title text-xl truncate">{row.barberName}</h2>
-                      <p className="text-xs text-dust tabular-nums">Commission ₱{row.commissionTotal} · Tips ₱{row.tipTotal}</p>
+                      <p className="text-xs text-dust tabular-nums">Commission {peso(row.commissionTotal)} · Tips {peso(row.tipTotal)}</p>
                     </div>
                   </div>
                   <div className="flex items-baseline justify-between gap-3 pt-3 border-t border-seam sm:block sm:pt-0 sm:border-0 sm:text-right shrink-0">
-                    <div className="rz-label">Total earned today</div>
-                    <div className="rz-figure text-3xl text-brass-bright">₱{row.totalOwed}</div>
+                    <div className="rz-label">{date === manilaToday() ? "Total earned today" : `Total earned on ${shortDate(date)}`}</div>
+                    <div className="rz-figure text-3xl text-brass-bright">{peso(row.totalOwed)}</div>
                   </div>
                 </div>
                 {row.additionalOwed && (
                   <div className="rz-notice rz-notice-warn">
                     <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                    <p>Additional owed: cuts synced or confirmed onto this date after this payout was marked. The amount already paid is unchanged.</p>
+                    <p>Additional owed: cuts synced or confirmed onto this date after the day was paid in full. The payouts already recorded are unchanged.</p>
                   </div>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:items-end">
-                  <label className="block text-[0.8125rem] font-medium text-bone-2">
-                    Cash paid
-                    <input type="number" min="0" step="0.01" inputMode="decimal" value={row.cashPaid} onChange={(event) => setRows((current) => current.map((item) => item.barberId === row.barberId ? { ...item, cashPaid: event.target.value } : item))} className={`mt-1.5 w-full ${field}`} />
-                  </label>
-                  <label className="block text-[0.8125rem] font-medium text-bone-2">
-                    GCash paid
-                    <input type="number" min="0" step="0.01" inputMode="decimal" value={row.gcashPaid} onChange={(event) => setRows((current) => current.map((item) => item.barberId === row.barberId ? { ...item, gcashPaid: event.target.value } : item))} className={`mt-1.5 w-full ${field}`} />
-                  </label>
-                  <div className="text-[0.8125rem] font-medium text-bone-2">
+                <div className="grid grid-cols-2 gap-3 text-[0.8125rem] font-medium text-bone-2">
+                  <div>
+                    Paid so far
+                    <div className="mt-1.5 min-h-10 px-3 flex items-center rounded-[10px] bg-black/30 border border-seam rz-figure text-lg text-bone">{peso(row.paidTotal)}</div>
+                  </div>
+                  <div>
                     Remaining to pay
                     <div className={`mt-1.5 min-h-10 px-3 flex items-center rounded-[10px] bg-black/30 border border-seam rz-figure text-lg transition-colors duration-300 ${remaining > 0 ? "text-warn-ink" : "text-ok-ink"}`}>
-                      ₱{remaining.toFixed(2)}
+                      {peso(row.remaining)}
                     </div>
                   </div>
-                  <label className="flex items-center gap-2.5 min-h-10 text-sm text-bone-2 pointer-coarse:min-h-11">
-                    <input type="checkbox" checked={row.paid} onChange={(event) => setRows((current) => current.map((item) => item.barberId === row.barberId ? { ...item, paid: event.target.checked } : item))} className="size-4.5 accent-crimson" /> Paid confirmation
-                  </label>
                 </div>
-                <button
-                  onClick={() => void save(row)}
-                  disabled={saving}
-                  className={`rz-btn pointer-coarse:min-h-11 ${saved ? "rz-btn-secondary border-ok/45 text-ok-ink" : "rz-btn-primary"}`}
+                <form
+                  onSubmit={(event) => { event.preventDefault(); void record(row); }}
+                  className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 sm:items-end"
                 >
-                  {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}{saving ? "Saving…" : saved ? "Saved" : "Save payout"}
-                </button>
+                  <label className="block text-[0.8125rem] font-medium text-bone-2">
+                    Payout amount
+                    <input
+                      type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="0.00"
+                      value={draft.amount}
+                      onChange={(event) => editDraft(row.barberId, { amount: event.target.value, method: draft.method })}
+                      className={`mt-1.5 w-full ${field}`}
+                    />
+                  </label>
+                  <div role="radiogroup" aria-label="Paid by" className="grid grid-cols-2 gap-1 p-1 rounded-[10px] bg-black/30 border border-seam">
+                    {(["CASH", "GCASH"] as const).map((method) => (
+                      <button
+                        key={method} type="button" role="radio" aria-checked={draft.method === method}
+                        onClick={() => editDraft(row.barberId, { amount: draft.amount, method })}
+                        className={`min-h-9 pointer-coarse:min-h-10 px-3 rounded-lg text-sm transition-colors ${draft.method === method ? "bg-panel-2 text-bone ring-1 ring-seam-strong" : "text-dust hover:text-bone"}`}
+                      >
+                        {method === "CASH" ? "Cash" : "GCash"}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    disabled={saving || !(draftAmount > 0)}
+                    className={`rz-btn pointer-coarse:min-h-11 ${saved ? "rz-btn-secondary border-ok/45 text-ok-ink" : "rz-btn-primary"}`}
+                  >
+                    {saved ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}{saving ? "Saving…" : saved ? "Recorded" : "Record payout"}
+                  </button>
+                </form>
+                {cardError && <p role="alert" className="animate-rise rz-notice rz-notice-danger">{cardError}</p>}
+                <EntryList
+                  row={row}
+                  correcting={correcting?.barberId === row.barberId ? correcting : null}
+                  saving={saving}
+                  onCorrect={(entry) => setCorrecting({ barberId: row.barberId, entry, id: generateUUID(), amount: entry.correctableLeft, note: "" })}
+                  onChange={(change) => setCorrecting((current) => current && { ...current, ...change, id: generateUUID() })}
+                  onCancel={() => setCorrecting(null)}
+                  onSave={() => void saveCorrection()}
+                  field={field}
+                />
               </section>
             );
           })}
@@ -247,7 +337,7 @@ export default function LedgerPage() {
             <div className="rz-panel p-8 text-center text-dust">No active barbers found.</div>
           ))}
         </div>
-        <p className="text-xs text-dust flex items-start gap-1.5"><Scissors className="w-3.5 h-3.5 mt-px shrink-0" />Total earned stays as the daily record; Remaining to pay subtracts recorded cash and GCash payouts.</p>
+        <p className="text-xs text-dust flex items-start gap-1.5"><Scissors className="w-3.5 h-3.5 mt-px shrink-0" />Each payout is kept as its own entry and is never edited; a mistake is fixed with a correction beside it. Cash payouts come out of expected drawer cash when recorded.</p>
       </div>
     </main>
   );
@@ -346,5 +436,79 @@ function SummarySection({ summary }: { summary: Summary }) {
         )}
       </div>
     </section>
+  );
+}
+
+// Recorded times on the Manila clock, whatever the device's zone.
+const manilaTime = (iso: string) => new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" }).format(new Date(iso));
+const methodName = (method: Method) => method === "CASH" ? "Cash" : "GCash";
+
+// Slice 18: the day's payouts under the barber, oldest first. Entries are never edited; a
+// payout (or an opening entry) can be corrected by a new entry that stays beside it.
+function EntryList({ row, correcting, saving, onCorrect, onChange, onCancel, onSave, field }: {
+  row: LedgerRow;
+  correcting: Correcting | null;
+  saving: boolean;
+  onCorrect: (entry: Entry) => void;
+  onChange: (change: Partial<Pick<Correcting, "amount" | "note">>) => void;
+  onCancel: () => void;
+  onSave: () => void;
+  field: string;
+}) {
+  if (row.entries.length === 0) return <p className="text-sm text-dust">No payouts recorded for this day.</p>;
+  const byId = new Map(row.entries.map((entry) => [entry.id, entry]));
+  return (
+    <div>
+      <h3 className="rz-label mb-1">Payouts recorded</h3>
+      <ul className="divide-y divide-seam text-sm">
+        {row.entries.map((entry) => {
+          const corrected = entry.kind === "CORRECTION" ? 0 : Number(entry.amount) - Number(entry.correctableLeft);
+          const target = entry.correctsId ? byId.get(entry.correctsId) : undefined;
+          const open = correcting?.entry.id === entry.id;
+          return (
+            <li key={entry.id} className="py-2 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-bone-2">
+                    <span className="tabular-nums">{manilaTime(entry.recordedAt)}</span> · {methodName(entry.method)}
+                    {entry.kind === "OPENING" && <span className="text-dust"> · saved before entries</span>}
+                    {entry.kind === "CORRECTION" && <span className="text-dust"> · correction{target ? ` of the ${manilaTime(target.recordedAt)} payout` : ""}</span>}
+                  </p>
+                  {entry.note && <p className="text-xs text-dust break-words">{entry.note}</p>}
+                  {corrected > 0 && <p className="text-xs text-dust tabular-nums">{peso(String(corrected))} corrected</p>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`tabular-nums ${entry.kind === "CORRECTION" ? "text-dust" : "text-bone"}`}>{peso(entry.amount)}</span>
+                  {Number(entry.correctableLeft) > 0 && !open && (
+                    <button type="button" onClick={() => onCorrect(entry)} className="rz-btn rz-btn-ghost text-xs px-2 py-1 pointer-coarse:min-h-11" aria-label={`Correct the ${manilaTime(entry.recordedAt)} ${methodName(entry.method)} payout`}>
+                      <Undo2 className="w-3.5 h-3.5" />Correct
+                    </button>
+                  )}
+                </div>
+              </div>
+              {open && correcting && (
+                <form onSubmit={(event) => { event.preventDefault(); onSave(); }} className="rz-panel p-3 space-y-3">
+                  <p className="text-xs text-dust">Takes back part or all of this payout (up to {peso(entry.correctableLeft)}). Both entries stay on the record.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-[10rem_1fr] gap-3">
+                    <label className="block text-[0.8125rem] font-medium text-bone-2">
+                      Amount
+                      <input type="number" min="0.01" step="0.01" max={entry.correctableLeft} inputMode="decimal" value={correcting.amount} onChange={(event) => onChange({ amount: event.target.value })} className={`mt-1.5 w-full ${field}`} />
+                    </label>
+                    <label className="block text-[0.8125rem] font-medium text-bone-2">
+                      Reason
+                      <input type="text" maxLength={200} value={correcting.note} onChange={(event) => onChange({ note: event.target.value })} placeholder="e.g. typed 500 instead of 50" className={`mt-1.5 w-full ${field}`} />
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button disabled={saving || !(Number(correcting.amount) > 0) || !correcting.note.trim()} className="rz-btn rz-btn-primary pointer-coarse:min-h-11">{saving ? "Saving…" : "Save correction"}</button>
+                    <button type="button" onClick={onCancel} className="rz-btn rz-btn-ghost pointer-coarse:min-h-11">Cancel</button>
+                  </div>
+                </form>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

@@ -100,9 +100,10 @@ const ledger = async (base: "LIST_PRICE" | "AMOUNT_PAID" = "LIST_PRICE") => {
   if (res.status !== 200 || !res.body.success) throw new Error(`ledger GET failed with ${res.status}`);
   return res.body.rows;
 };
-const pay = (barberId: string, cashPaid: number) =>
+// Slice 18: one cash payout entry.
+const pay = (barberId: string, amount: number) =>
   request<{ success: boolean; row: LedgerRow }>("POST", "/api/v1/reports/payouts", {
-    date: DATE, barberId, commissionBase: "LIST_PRICE", cashPaid, gcashPaid: 0, paid: true,
+    id: randomUUID(), date: DATE, barberId, commissionBase: "LIST_PRICE", method: "CASH", amount,
   });
 const rowFor = (rows: LedgerRow[], barberId: string) => rows.find((r) => r.barberId === barberId);
 

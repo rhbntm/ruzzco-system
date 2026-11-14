@@ -267,7 +267,7 @@ check("stale count: count again", has(slideOf(stale, "todo"), "Count the drawer 
 
 console.log("\nPayouts and held sales");
 const extra = buildStory(make({ day: withDay({ barbers: [{ name: "Barber B", sales: 3, earned: 430, remaining: 100, additionalOwed: true }] }) }));
-check("additional owed", has(slideOf(extra, "todo"), "Pay Barber B the extra ₱100.00: sales were counted after the payout was marked paid."), show(texts(slideOf(extra, "todo"))));
+check("additional owed", has(slideOf(extra, "todo"), "Pay Barber B the extra ₱100.00: sales were counted after the day was paid in full."), show(texts(slideOf(extra, "todo"))));
 const paid = buildStory(make({ day: withDay({ barbers: [{ name: "Barber A", sales: 8, earned: 880, remaining: 0, additionalOwed: false }] }) }));
 check("all paid out", has(slideOf(paid, "day"), "Every barber's earnings for the day are paid out.") && has(slideOf(paid, "todo"), "Every barber's earnings are paid out."));
 const held = buildStory(make({ day: withDay({ heldForReview: 1, pendingQrph: 2 }), trends: trendsOf(period(), { heldForReview: 3 }) }));

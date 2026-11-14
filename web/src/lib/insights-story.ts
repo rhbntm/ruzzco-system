@@ -765,7 +765,7 @@ function todoSlide(ctx: Ctx): Built {
     }
 
     for (const barber of day.barbers.filter((b) => b.additionalOwed)) {
-      items.push({ text: `Pay ${barber.name} the extra ${em(peso(barber.remaining))}: sales were counted after the payout was marked paid.`, link: ledger });
+      items.push({ text: `Pay ${barber.name} the extra ${em(peso(barber.remaining))}: sales were counted after the day was paid in full.`, link: ledger });
     }
     const unpaid = day.barbers.filter((b) => b.remaining > 0 && !b.additionalOwed);
     if (unpaid.length > 0) {

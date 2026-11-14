@@ -231,7 +231,7 @@ Then run the test suites that match what you touched (all are `npm run test:<nam
 | You changed                 | Run                                                                                               |
 | --------------------------- | ------------------------------------------------------------------------------------------------- |
 | Sales, sync, offline queue  | `test:sync-rejections` (dev server), `test:sync-queue`, `test:payload-compat`, `test:submit-lock` |
-| Commission, payouts, ledger | `test:commission`, `test:ledger-summary` (dev server)                                             |
+| Commission, payouts, ledger | `test:commission`, `test:ledger-summary`, `test:payout-entries` (dev server)                      |
 | End-of-day cash             | `test:reconciliation` (dev server)                                                                |
 | Prices, discounts           | `test:pricing`                                                                                    |
 | POS sheets, the phone's Back | `test:sheet-stack`, `test:submit-lock`                                                           |

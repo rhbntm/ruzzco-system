@@ -45,9 +45,10 @@ export type Staleness = {
 const inWindow = (day: BusinessDay) => ({ transactionTime: { gte: day.start, lt: day.end } });
 
 // The one definition of expected drawer cash, used by GET and POST:
-//   cash sales + cash-sale tips - cash payouts marked paid - petty cash
-// GCash, Maya and QR Ph sales are digital and never enter the drawer; unpaid payout rows and
-// gcashPaid never leave it. Revenue is amountPaid (totalAmount for legacy sales), tips excluded.
+//   cash sales + cash-sale tips - cash payouts - petty cash
+// GCash, Maya and QR Ph sales are digital and never enter the drawer; gcashPaid never leaves it.
+// Cash payouts are the day rows' cashPaid, the sum of their cash entries (slice 18): every cash
+// entry counts as soon as it is saved, and a correction puts its amount back. Revenue is amountPaid (totalAmount for legacy sales), tips excluded.
 // Only PAID sales count; non-gateway sales are always PAID. Only sales that count on the day
 // (countsOnDay): a flagged sale waits for the owner's date review.
 export async function computeExpected(day: BusinessDay, pettyCash: Prisma.Decimal.Value): Promise<ExpectedTotals> {
@@ -67,7 +68,7 @@ export async function computeExpected(day: BusinessDay, pettyCash: Prisma.Decima
       orderBy: { transactionTime: "asc" },
     }),
     prisma.dailyPayoutLedger.aggregate({
-      where: { businessDate: day.dateValue, paidAt: { not: null } },
+      where: { businessDate: day.dateValue },
       _sum: { cashPaid: true },
     }),
   ]);
