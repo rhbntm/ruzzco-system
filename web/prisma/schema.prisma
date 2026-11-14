@@ -81,8 +81,20 @@ enum PayoutEntryKind {
 model User {
   id        String   @id @default(uuid())
   name      String
-  email     String   @unique
+  // Optional since slice 19: staff accounts sign in with a username, not an email.
+  email     String?  @unique
   role      Role     @default(BARBER)
+  // Staff login (slice 19). A row without a username and password can't sign in.
+  username          String?       @unique @db.VarChar(32) // lower-case
+  passwordHash      String?       @db.VarChar(255) @map("password_hash") // scrypt, src/lib/passwords.ts
+  // BARBER accounts only: exactly one barber record; a barber has at most one account.
+  barberId          String?       @unique @map("barber_id")
+  barber            Barber?       @relation(fields: [barberId], references: [id], onDelete: Restrict)
+  isActive          Boolean       @default(true) @map("is_active") // deactivated, never deleted
+  // Part of the session signature: changing the password ends every session of the account.
+  passwordChangedAt DateTime?     @map("password_changed_at")
+  lastSignInAt      DateTime?     @map("last_sign_in_at")
+  transactions      Transaction[]
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -100,6 +112,7 @@ model Barber {
   payoutEntries   PayoutEntry[]
   deviceAssignments DeviceAssignment[]
   paymentQrs      BarberPaymentQr[]
+  account         User?
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
 
@@ -154,6 +167,10 @@ model Transaction {
   timeReviewedAt           DateTime?         @map("time_reviewed_at")
   timeReviewChoice         TimeReviewChoice? @map("time_review_choice")
   timeReviewedBusinessDate DateTime?         @db.Date @map("time_reviewed_business_date")
+  // The account signed in on the phone when the sale was made (slice 19). Information only:
+  // never used for attribution, cashierId, commission or payouts. Null when unknown.
+  userId                 String?           @map("user_id")
+  user                   User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   items                  TransactionItem[]
   commissionLogs         CommissionLog[]
   createdAt              DateTime          @default(now()) @map("created_at")
@@ -162,6 +179,7 @@ model Transaction {
   @@index([transactionTime])
   @@index([assignmentId])
   @@index([timeFlag])
+  @@index([userId])
   @@map("transactions")
 }
 

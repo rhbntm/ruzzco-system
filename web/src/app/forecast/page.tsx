@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { ArrowLeft, TriangleAlert } from "lucide-react";
 import { ForecastLocked } from "@/components/ForecastPanel";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
 import { COMPARISON_ONLY, buildReportView, type ReportView } from "@/lib/forecast-comparison";
-import { OWNER_COOKIE, isOwnerCookie } from "@/lib/owner-access";
+import { ownerAccessFromCookies } from "@/lib/owner-access";
 
 // Slice 10: the detailed forecast. Owner only; reads the saved run from the database and never
 // calls the forecast service, so it still shows when the service is down.
@@ -29,7 +28,7 @@ async function load(): Promise<SerializedForecast | null> {
 }
 
 export default async function ForecastPage() {
-  const isOwner = isOwnerCookie((await cookies()).get(OWNER_COOKIE)?.value);
+  const isOwner = await ownerAccessFromCookies();
   const forecast = isOwner ? await load() : null;
   const run = forecast?.run ?? null;
   const view = run ? buildReportView(run.comparison, (iso) => formatDate(iso)) : null;

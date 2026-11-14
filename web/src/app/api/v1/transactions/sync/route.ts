@@ -111,6 +111,16 @@ export async function POST(request: NextRequest) {
         .map((a) => [a.id, a])
     );
 
+    // The signed-in account on each sale (slice 19, Decision 12) is stored only when it names an
+    // existing user, and otherwise dropped. It never decides attribution, cashierId, commission
+    // or payouts, and a userId whose barber differs from the assignment's is still stored as sent.
+    const claimedUserIds = [...new Set(pending.map((t) => t.userId).filter((id): id is string => !!id))];
+    const knownUserIds = new Set(
+      claimedUserIds.length === 0
+        ? []
+        : (await prisma.user.findMany({ where: { id: { in: claimedUserIds } }, select: { id: true } })).map((u) => u.id)
+    );
+
     // An assignment made offline and then superseded before it reached /bind is only
     // known through its sales. Record it as historical (already revoked): sync never
     // creates or disturbs the device's active binding. Only for this phone's own sales.
@@ -248,6 +258,7 @@ export async function POST(request: NextRequest) {
               barberId: resolvedBarberId,
               cashierId,
               assignmentId: item.assignmentId ?? null,
+              userId: item.userId && knownUserIds.has(item.userId) ? item.userId : null,
               totalAmount: item.totalAmount,
               listPrice,
               discountType: item.discountType,

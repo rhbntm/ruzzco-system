@@ -17,6 +17,7 @@
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestOwner, type TestOwner } from "./lib/test-owner";
 import { manilaToday, parseBusinessDate } from "../src/lib/business-date";
 import { createTestDevices } from "./lib/test-devices";
 
@@ -42,6 +43,7 @@ const devices = createTestDevices(BASE);
 let deviceKey = ""; // the scratch phone every sale is synced from (its sales carry no deviceKey)
 const txIds: string[] = [];
 let ownerCookie = "";
+let testOwner: TestOwner | null = null;
 let passed = 0;
 const failures: string[] = [];
 
@@ -141,15 +143,9 @@ async function main() {
 
   const health = await fetch(`${BASE}/api/v1/health`).catch(() => null);
   if (!health?.ok) throw new Error(`Dev server not reachable at ${BASE}. Start it with \`npm run dev\`.`);
-  if (!process.env.OWNER_PIN) throw new Error("OWNER_PIN is not set in web/.env");
-
-  const unlock = await fetch(`${BASE}/api/v1/owner/unlock`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pin: process.env.OWNER_PIN }),
-  });
-  ownerCookie = unlock.headers.get("set-cookie")?.split(";")[0] ?? "";
-  if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
+  // Slice 19: owner routes take an owner account session (scripts/lib/test-owner.ts).
+  testOwner = await createTestOwner(BASE, prisma, "reconcilia");
+  ownerCookie = testOwner.cookie;
 
   const first = parseBusinessDate(PREV)!.start;
   const last = parseBusinessDate(NEXT)!.end;
@@ -179,7 +175,7 @@ async function main() {
   console.log("\nA the reconciliation GET is owner-only (slice 15, finding #5)");
   const anonymous = await fetch(`${BASE}/api/v1/reports/reconciliation?date=${D}`);
   const anonymousBody = (await anonymous.json().catch(() => null)) as Record<string, unknown> | null;
-  check("A: GET without the owner cookie → 401 Owner PIN required", anonymous.status === 401 && anonymousBody?.success === false && anonymousBody.error === "Owner PIN required", `${anonymous.status} ${JSON.stringify(anonymousBody)}`);
+  check("A: GET without the owner cookie → 401 Owner sign-in required", anonymous.status === 401 && anonymousBody?.success === false && anonymousBody.error === "Owner sign-in required", `${anonymous.status} ${JSON.stringify(anonymousBody)}`);
   check("A: …and its body carries no expected figures", !!anonymousBody && !("expected" in anonymousBody) && !("saved" in anonymousBody), JSON.stringify(anonymousBody));
   check("A: the same GET with the owner cookie → 200, success", cur.status === 200 && cur.body.success === true, `${cur.status} ${JSON.stringify(cur.body).slice(0, 200)}`);
 
@@ -329,6 +325,7 @@ main()
     console.error(error);
   })
   .finally(async () => {
+    await testOwner?.cleanup().catch((e) => console.error("Test owner cleanup failed:", e));
     await cleanup().catch((e) => console.error("Cleanup failed:", e));
     await prisma.$disconnect();
     console.log(`\n${passed} passed, ${failures.length} failed`);

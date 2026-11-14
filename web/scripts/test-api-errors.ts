@@ -5,12 +5,13 @@
  * nothing stored. Only refused requests are sent, so nothing is written except one approved
  * test device (bind and sync need one, slice 15), which is deleted at the end.
  *
- *   npm run dev               (in another terminal; OWNER_PIN in web/.env)
+ *   npm run dev               (in another terminal)
  *   npm run test:api-errors   (TEST_BASE_URL overrides http://localhost:3000)
  */
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestOwner, type TestOwner } from "./lib/test-owner";
 import { SYNC_BATCH_MAX } from "../src/lib/schemas";
 import { createTestDevices } from "./lib/test-devices";
 
@@ -20,6 +21,7 @@ const BASE = process.env.TEST_BASE_URL ?? "http://localhost:3000";
 const devices = createTestDevices(BASE);
 let device = ""; // approved in main(), so bind and sync reach their body checks
 let ownerCookie = "";
+let testOwner: TestOwner | null = null;
 let passed = 0;
 const failures: string[] = [];
 
@@ -52,14 +54,9 @@ async function main() {
   console.log(`API error-shape test against ${BASE}`);
   const health = await fetch(`${BASE}/api/v1/health`).catch(() => null);
   if (!health?.ok) throw new Error(`Dev server not reachable at ${BASE}. Start it with \`npm run dev\`.`);
-  if (!process.env.OWNER_PIN) throw new Error("OWNER_PIN is not set in web/.env");
-  const unlock = await fetch(`${BASE}/api/v1/owner/unlock`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pin: process.env.OWNER_PIN }),
-  });
-  ownerCookie = unlock.headers.get("set-cookie")?.split(";")[0] ?? "";
-  if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
+  // Slice 19: owner routes take an owner account session (scripts/lib/test-owner.ts).
+  testOwner = await createTestOwner(BASE, prisma, "api-errors");
+  ownerCookie = testOwner.cookie;
   device = await devices.approve();
 
   console.log("\nBody that is not JSON");
@@ -121,6 +118,7 @@ main()
     console.error(error);
   })
   .finally(async () => {
+    await testOwner?.cleanup().catch((e) => console.error("Test owner cleanup failed:", e));
     await devices.cleanup(prisma).catch((e) => console.error("Device cleanup failed:", e));
     await prisma.$disconnect();
     console.log(`\n${passed} passed, ${failures.length} failed`);

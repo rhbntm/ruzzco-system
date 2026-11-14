@@ -16,6 +16,8 @@ export const REQUEST_TIMEOUT_MS = {
   bind: 10_000,
   bindingCheck: 10_000,
   catalog: 10_000,
+  // Staff sign-in and its recheck (slice 19). On timeout the phone checks the password itself.
+  signIn: 8_000,
   // One chunk of sales. If the server saved them but the answer was lost, the next sync
   // gets them back as duplicates: the client UUID makes a resend safe.
   sync: 30_000,

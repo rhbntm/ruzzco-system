@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/v1/devices (owner): approved and revoked phones, never their secrets. */
 export async function GET(request: NextRequest) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   try {
     const devices = await prisma.device.findMany({
       select: { deviceKey: true, label: true, approvedAt: true, approvedWith: true, revokedAt: true, lastSeenAt: true },

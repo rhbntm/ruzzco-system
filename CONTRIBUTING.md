@@ -236,6 +236,7 @@ Then run the test suites that match what you touched (all are `npm run test:<nam
 | Prices, discounts           | `test:pricing`                                                                                    |
 | POS sheets, the phone's Back | `test:sheet-stack`, `test:submit-lock`                                                           |
 | Owner PIN                   | `test:pin-attempts` (`test:owner-unlock` is rate limited: at most 5 runs per 15 minutes)          |
+| Staff login, accounts       | `test:local-session`, `test:auth` (dev server; at most 3 runs per 15 minutes)                     |
 | Forecast screens            | `test:forecast-parse`, `test:forecast-comparison`                                                 |
 | Payment QR                  | `test:payment-qr` (dev server), `test:qr-cache`                                                   |
 

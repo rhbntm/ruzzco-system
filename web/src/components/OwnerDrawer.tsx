@@ -2,14 +2,15 @@
 
 // The owner's drawer: the counter's own drawer, under the day's tools. It starts shut: the front
 // carries a brass nameplate, the lock and the pull, and the whole front is its handle. Out slides a
-// tray with the owner's tools: Barber Ledger, Detailed Forecast, Insights, Payment QR and Phones (each page
-// still asks for the PIN itself) and the 7/14/30-day forecast, which shows its numbers only once the
-// owner PIN has been entered on this device. Until then no figure reaches the page.
+// tray with the owner's tools: Barber Ledger, Detailed Forecast, Insights, Payment QR, Phones and Staff
+// accounts (each page still asks for the owner sign-in itself) and the 7/14/30-day forecast, which shows
+// its numbers only once the owner has signed in on this device (slice 19: the owner account, or the PIN
+// while no owner account exists). Until then no figure reaches the page. Lock ends both sessions.
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, LayoutDashboard, LineChart, LockKeyhole, LockKeyholeOpen, QrCode, Smartphone, TriangleAlert, Wallet } from "lucide-react";
+import { ArrowRight, LayoutDashboard, LineChart, LockKeyhole, LockKeyholeOpen, QrCode, Smartphone, TriangleAlert, Users, Wallet } from "lucide-react";
 import type { SerializedForecast } from "@/lib/forecast";
 import { ForecastLocked, ForecastPanel } from "@/components/ForecastPanel";
 
@@ -22,6 +23,7 @@ const ownerPages: OwnerPage[] = [
   { href: "/insights", title: "Insights", body: "Dashboards, trends and calculations from the shop's own numbers.", icon: LayoutDashboard },
   { href: "/payment-qr", title: "Payment QR", body: "Add or change the GCash and Maya QR shown for each barber.", icon: QrCode },
   { href: "/devices", title: "Phones", body: "See the approved phones and revoke a lost or replaced one.", icon: Smartphone },
+  { href: "/staff", title: "Staff accounts", body: "Create accounts, reset passwords, deactivate an account.", icon: Users },
 ];
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;

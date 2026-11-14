@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useRef,
   useState,
   useCallback,
   useTransition,
@@ -19,6 +20,7 @@ import {
   Banknote,
   Smartphone,
   Settings,
+  LogOut,
   List,
   X,
   ChevronRight,
@@ -77,6 +79,7 @@ import { qrCacheId } from "@/lib/payment-qr-plan";
 import { RejectedSales } from "@/components/RejectedSales";
 import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
 import { OwnerPinDialog } from "@/components/OwnerPinDialog";
+import { SignInGate, useStaffSession } from "@/components/SignInGate";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { ConnectionBadge, ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
 import { createSubmitLock } from "@/lib/submit-lock";
@@ -108,8 +111,21 @@ function getOnlineSnapshot() {
 }
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function MobilePOSPage() {
+// Slice 19: the barber signs in before the POS starts a sale (components/SignInGate.tsx).
+export default function MobilePOSPageWithSignIn() {
+  return (
+    <SignInGate title="POS Station">
+      <MobilePOSPage />
+    </SignInGate>
+  );
+}
+
+function MobilePOSPage() {
   const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, () => true);
+  // Who is signed in (slice 19). It never decides who a sale is credited to: the binding does.
+  const staff = useStaffSession();
+  const { signOut: endStaffSession, checkpoint: staffCheckpoint, holdSignIn, createdBinding } = staff;
+  const signedInUserId = staff.session?.userId;
 
   // Catalog state
   const [barbers, setBarbers] = useState<CachedBarber[]>(DEFAULT_BARBERS);
@@ -234,10 +250,13 @@ export default function MobilePOSPage() {
 
   // ── Sync dispatcher ─────────────────────────────────────────────────────────
 
+  // The server no longer honours this phone's binding. Slice 19, case 7: the next online sign-in
+  // assigns the phone again through the normal first bind, so the barber signs in again.
   const requireRebind = useCallback(() => {
     setBinding(null);
-    setShowBindModal(true);
-  }, []);
+    setShowBindModal(false);
+    endStaffSession();
+  }, [endStaffSession]);
 
   // After every bind attempt: show or clear the "needs the owner PIN" notice. Retry and
   // waiting say nothing new, so the notice stays as it was.
@@ -393,26 +412,37 @@ export default function MobilePOSPage() {
           // Offline or unreachable: keep the local binding; sales stay queued with their assignment.
           if (navigator.onLine && active) await reconcileWithServer();
         } else {
-          // No local binding — show first-boot modal, with the server's barber list when it answers
+          // No local binding: the sign-in screen assigns the phone at the next online sign-in (case 7).
           await refreshCatalog();
           if (active) {
             setBindingLoaded(true);
-            setShowBindModal(true);
+            endStaffSession();
           }
         }
       } catch (err) {
         console.error("Failed to initialize POS binding/catalog:", err);
         if (active) {
-          // Fallback to defaults and allow modal/POS to render instead of locking on loading screen
+          // Fallback to defaults and allow the POS to render instead of locking on loading screen
           setBindingLoaded(true);
-          setShowBindModal(true);
         }
       }
     }
 
     initBinding();
     return () => { active = false; };
-  }, [reconcileWithServer]);
+  }, [reconcileWithServer, endStaffSession]);
+
+  // A first sign-in on a phone with no binding made one (case 7): use it, register, sync.
+  useEffect(() => {
+    if (!createdBinding) return;
+    const timer = window.setTimeout(() => {
+      setBinding(createdBinding);
+      setShowBindModal(false);
+      void refreshPaymentQrs();
+      void triggerSync();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [createdBinding, triggerSync]);
 
   // ── Device bind action ──────────────────────────────────────────────────────
 
@@ -453,8 +483,10 @@ export default function MobilePOSPage() {
     setPendingNeedsPin(false);
     void refreshPaymentQrs();
     void triggerSync();
+    // The phone now belongs to another barber: they sign in with their own account.
+    staffCheckpoint();
     return null;
-  }, [switchTarget, triggerSync]);
+  }, [switchTarget, triggerSync, staffCheckpoint]);
 
   // The owner PIN for a barber change already queued on this phone (edge case: queued offline).
   const handlePendingPin = useCallback(async (pin: string) => {
@@ -525,6 +557,8 @@ export default function MobilePOSPage() {
         // Sale-time attribution: fixed now, never rewritten by a later rebind.
         assignmentId: binding.assignmentId,
         deviceKey: binding.deviceKey,
+        // Who was signed in (slice 19). Information only, never attribution.
+        ...(signedInUserId ? { userId: signedInUserId } : {}),
       };
 
       await db.transactions.add(newTransaction);
@@ -554,7 +588,7 @@ export default function MobilePOSPage() {
       }
       return { id: newTransaction.id, amount: amountPaid };
     },
-    [binding, services, selectedServiceId, customAmountInput, tipChoice, customTipInput, loyalty, customNote, triggerSync, pcDown, resetSaleForm]
+    [binding, services, selectedServiceId, customAmountInput, tipChoice, customTipInput, loyalty, customNote, triggerSync, pcDown, resetSaleForm, signedInUserId]
   );
 
   // Every payment method records through here. The lock is checked synchronously before
@@ -645,6 +679,24 @@ export default function MobilePOSPage() {
     return (await db.transactions.get(qrSaleId))?.synced === 1;
   }, [qrSaleId, triggerSync]);
 
+  // ── Sign-in checkpoints (slice 19) ──────────────────────────────────────────
+
+  // Case 2: never ask for sign-in between Charge and Record (charge sheet, GCash/Maya, QR Ph).
+  const midSale = charging || digitalMethod !== null || qrSale !== null;
+  useEffect(() => {
+    holdSignIn(midSale);
+  }, [midSale, holdSignIn]);
+  useEffect(() => () => holdSignIn(false), [holdSignIn]);
+
+  // A new ticket starts when the done screen or the QR checkout closes: today's session is
+  // checked there (a new business day, or a password reset seen by the PC, asks for sign-in).
+  const ticketOpen = doneSale !== null || qrSale !== null;
+  const wasTicketOpen = useRef(ticketOpen);
+  useEffect(() => {
+    if (wasTicketOpen.current && !ticketOpen) staffCheckpoint();
+    wasTicketOpen.current = ticketOpen;
+  }, [ticketOpen, staffCheckpoint]);
+
   // ── Sheets and Back (slice 17b) ─────────────────────────────────────────────
 
   // Closing a sheet records nothing. The GCash/Maya dialog closes onto the charge sheet under it;
@@ -727,7 +779,6 @@ export default function MobilePOSPage() {
             <button
               onClick={() => {
                 setBindingLoaded(true);
-                setShowBindModal(true);
               }}
               className="rz-btn rz-btn-secondary pointer-coarse:min-h-11"
             >
@@ -739,7 +790,27 @@ export default function MobilePOSPage() {
     );
   }
 
-  // ── First-boot binding modal ────────────────────────────────────────────────
+  // ── No binding (slice 19, case 7) ───────────────────────────────────────────
+  // A phone gets its barber from the first online sign-in; there is no barber picker for it.
+
+  if (!binding) {
+    return (
+      <div className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-sm space-y-5 text-center">
+          <RuzzcoLogoBanner className="w-56 mx-auto" alt="" />
+          <h1 className="rz-title text-3xl">No barber on this phone</h1>
+          <p className="text-sm text-dust leading-relaxed">
+            The barber who uses this phone signs in with the shop PC on; the phone is then assigned to them.
+          </p>
+          <button type="button" onClick={endStaffSession} className="rz-btn rz-btn-primary w-full min-h-12">
+            Sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Change the barber (owner PIN) ───────────────────────────────────────────
 
   if (showBindModal) {
     return (
@@ -748,10 +819,10 @@ export default function MobilePOSPage() {
           <div className="text-center space-y-4">
             <RuzzcoLogoBanner className="w-56 mx-auto" alt="" />
             <h1 className="rz-title text-3xl">
-              Assign Station Barber
+              Change the barber
             </h1>
             <p className="text-sm text-dust leading-relaxed">
-              Select the barber operating this station. All cuts logged here will automatically attribute to their commission and shift record.
+              Pick the barber who will use this phone. New sales go to that barber; sales already recorded stay with the barber they were made under.
             </p>
           </div>
 
@@ -784,32 +855,28 @@ export default function MobilePOSPage() {
             </div>
           </div>
 
-          {binding && (
-            <button
-              type="button"
-              onClick={() => setShowBindModal(false)}
-              disabled={isBinding}
-              className="rz-btn rz-btn-secondary w-full min-h-12"
-            >
-              Keep {binding.barberName}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowBindModal(false)}
+            disabled={isBinding}
+            className="rz-btn rz-btn-secondary w-full min-h-12"
+          >
+            Keep {binding.barberName}
+          </button>
 
           {(!isOnline || pcDown) && (
             <p className="animate-rise text-center text-sm text-dust">
-              {binding
-                ? "Station is offline. Changing to another barber needs the shop Wi-Fi and the owner PIN."
-                : "Station is offline — barber assignment will sync upon reconnection."}
+              Station is offline. Changing to another barber needs the shop Wi-Fi and the owner PIN.
             </p>
           )}
-          {binding && isOnline && !pcDown && (
+          {isOnline && !pcDown && (
             <p className="text-center text-xs text-dust">
               Changing to another barber needs the owner PIN.
             </p>
           )}
         </div>
 
-        {switchTarget && binding && (
+        {switchTarget && (
           <OwnerPinDialog
             title="Change barber"
             description={`Move this phone from ${binding.barberName} to ${switchTarget.fullName}. Mart types the owner PIN here. Sales already recorded stay with the barber they were made under.`}
@@ -1104,6 +1171,15 @@ export default function MobilePOSPage() {
               <Repeat className="w-4 h-4 text-crimson-ink" />
               Change the barber for this phone
               <ChevronRight className="w-4 h-4 text-dust transition-transform duration-200 group-hover:translate-x-0.5" />
+            </button>
+            {/* Slice 19: signing out never touches queued sales; they still sync. */}
+            <button
+              type="button"
+              onClick={() => { setShowSettings(false); endStaffSession(); }}
+              className="rz-btn rz-btn-secondary w-full min-h-12"
+            >
+              <LogOut className="w-4 h-4 text-crimson-ink" />
+              Sign out{staff.session ? ` ${staff.session.username}` : ""}
             </button>
           </div>
         </div>

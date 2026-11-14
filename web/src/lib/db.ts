@@ -25,6 +25,9 @@ export interface LocalTransaction {
   // Absent on sales queued before assignment ids existed.
   assignmentId?: string;
   deviceKey?: string;
+  // The account signed in on this phone when the sale was made (slice 19). Information only:
+  // never attribution. No index, so no Dexie version bump. Absent on older sales.
+  userId?: string;
   // Set when the server refused this sale (a SyncRejectReason). State is derived, no index:
   //   pending  = synced 0, no syncError       (in the automatic sync queue)
   //   rejected = synced 0, has syncError      (kept, never auto-retried, shown to the user)

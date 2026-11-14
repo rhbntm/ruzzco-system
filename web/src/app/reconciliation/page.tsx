@@ -15,6 +15,7 @@ import {
   LockKeyhole,
 } from "lucide-react";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { OwnerSignInDialog } from "@/components/OwnerSignIn";
 import { manilaToday } from "@/lib/business-date";
 
 interface ExpectedTotals {
@@ -103,9 +104,8 @@ export default function ReconciliationPage() {
   const [pettyCashAmount, setPettyCashAmount] = useState("");
   const [pettyCashNote, setPettyCashNote] = useState("");
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
-  const [ownerPin, setOwnerPin] = useState("");
   const [showOwnerUnlock, setShowOwnerUnlock] = useState(false);
-  // The day's figures need the owner PIN to view, not only to save.
+  // The day's figures need the owner to sign in to view, not only to save.
   const [locked, setLocked] = useState(false);
 
   const [refreshKey, setRefreshKey] = useState(0);
@@ -122,7 +122,7 @@ export default function ReconciliationPage() {
       setFeedback(null);
       try {
         const res = await fetch(`/api/v1/reports/reconciliation?date=${date}`);
-        // Owner-only (slice 15): no figure is shown until the owner PIN is entered.
+        // Owner-only (slice 15): no figure is shown until the owner signs in.
         if (res.status === 401) {
           if (!active) return;
           setLocked(true);
@@ -228,14 +228,6 @@ export default function ReconciliationPage() {
     }
   };
 
-  // Escape closes the owner PIN dialog, like its Cancel button.
-  useEffect(() => {
-    if (!showOwnerUnlock) return;
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setShowOwnerUnlock(false); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showOwnerUnlock]);
-
   const variance = saved ? parseFloat(saved.variance) : null;
   const previewExpectedDrawer = expected
     ? parseFloat(expected.expectedDrawerCash) - (parseFloat(pettyCashAmount) || 0) + parseFloat(expected.pettyCash)
@@ -248,18 +240,11 @@ export default function ReconciliationPage() {
   return (
     <div className="flex-1">
       {showOwnerUnlock && (
-        <div className="rz-overlay items-center">
-          <form role="dialog" aria-modal="true" aria-labelledby="owner-pin-title" onSubmit={async (event) => { event.preventDefault(); const res = await fetch("/api/v1/owner/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: ownerPin }) }); if (res.ok) { setShowOwnerUnlock(false); setOwnerPin(""); if (locked) { setLocked(false); setRefreshKey((k) => k + 1); } else { setFeedback({ msg: "Owner access granted. Save again.", ok: true }); } } else { const data = await res.json().catch(() => null); setFeedback({ msg: data?.error ?? "Invalid owner PIN.", ok: false }); } }} className="rz-dialog p-5 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <span aria-hidden="true" className="w-9 h-9 rounded-full bg-brass/10 ring-1 ring-brass/40 text-brass-bright flex items-center justify-center shrink-0">
-                <LockKeyhole className="w-4 h-4" />
-              </span>
-              <h2 id="owner-pin-title" className="rz-title text-xl">Owner PIN required</h2>
-            </div>
-            <input autoFocus type="password" inputMode="numeric" aria-label="Owner PIN" value={ownerPin} onChange={(event) => setOwnerPin(event.target.value)} className="rz-field min-h-12 text-center text-lg tracking-[0.4em] placeholder:text-base placeholder:tracking-normal" placeholder="Owner PIN" />
-            <div className="flex gap-2"><button type="button" onClick={() => setShowOwnerUnlock(false)} className="rz-btn rz-btn-secondary flex-1 pointer-coarse:min-h-11">Cancel</button><button type="submit" className="rz-btn rz-btn-primary flex-1 pointer-coarse:min-h-11">Unlock</button></div>
-          </form>
-        </div>
+        <OwnerSignInDialog
+          what="see and save End-of-Day Cash"
+          onSignedIn={() => { setShowOwnerUnlock(false); if (locked) { setLocked(false); setRefreshKey((k) => k + 1); } else { setFeedback({ msg: "Owner access granted. Save again.", ok: true }); } }}
+          onCancel={() => setShowOwnerUnlock(false)}
+        />
       )}
 
       {/* Header: the black banner */}
@@ -315,11 +300,11 @@ export default function ReconciliationPage() {
           </button>
         </div>
 
-        {/* Owner-only: nothing below shows until the owner PIN is entered. */}
+        {/* Owner-only: nothing below shows until the owner signs in. */}
         {locked && !showOwnerUnlock && (
           <div className="rz-notice flex-wrap items-center">
             <LockKeyhole className="w-4 h-4 text-brass shrink-0" />
-            <span className="flex-1 min-w-48">End-of-Day Cash needs the owner PIN.</span>
+            <span className="flex-1 min-w-48">End-of-Day Cash needs the owner to sign in.</span>
             <button type="button" onClick={() => setShowOwnerUnlock(true)} className="rz-btn rz-btn-secondary text-sm pointer-coarse:min-h-11">Unlock</button>
           </div>
         )}

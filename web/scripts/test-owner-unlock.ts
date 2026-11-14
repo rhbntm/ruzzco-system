@@ -7,6 +7,11 @@
  *   npm run dev                  (in another terminal; OWNER_PIN in web/.env)
  *   npm run test:owner-unlock    (TEST_BASE_URL overrides http://localhost:3000)
  *
+ * Slice 19: both states. With no active owner account, the PIN session cases above. Then, with a
+ * scratch owner account (scripts/lib/test-owner.ts): the unlock answers 409 OWNER_ACCOUNT_EXISTS
+ * and sets no cookie, is not counted as a wrong PIN, and a PIN session no longer opens owner routes.
+ * If the database already holds an active owner account, the PIN cases are skipped (said so below).
+ *
  * Uses a made-up x-forwarded-for per run, so only that test client is locked. Each run adds
  * 5 wrong PINs to the shop-wide count (30 in 15 minutes locks everyone), so run it at most
  * 5 times in 15 minutes; restarting the dev server clears the counts.
@@ -15,6 +20,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { DEFAULT_PIN_LIMITS } from "../src/lib/pin-attempts";
 import { OWNER_SESSION_MS, isOwnerCookie, ownerCookieValue } from "../src/lib/owner-access";
+import { prisma } from "../src/lib/prisma";
+import { createTestOwner } from "./lib/test-owner";
 
 loadEnvConfig(process.cwd());
 
@@ -91,6 +98,12 @@ async function main() {
   if (!health?.ok) throw new Error(`Dev server not reachable at ${BASE}. Start it with \`npm run dev\`.`);
   const pin = process.env.OWNER_PIN;
   if (!pin) throw new Error("OWNER_PIN is not set in web/.env");
+  const existing = await prisma.user.count({ where: { role: "OWNER", isActive: true, username: { not: null }, passwordHash: { not: null } } });
+  if (existing > 0) {
+    console.log("\n  - PIN-session cases skipped: this database already has an active owner account (the PIN unlock answers 409)");
+    await ownerAccountChecks(pin);
+    return;
+  }
   const wrong = `${pin}-wrong`;
   const target = `test-unlock-${RUN}`;
   const other = `test-unlock-other-${RUN}`;
@@ -134,6 +147,32 @@ async function main() {
 
   const otherClient = await unlock(pin, other);
   check("another client can still unlock", otherClient.status === 200, `got ${otherClient.status}`);
+
+  await ownerAccountChecks(pin, (otherClient.cookie ?? "").split(";")[0]);
+}
+
+// Slice 19, Decision 2: once an active owner account exists, the PIN opens no owner page.
+async function ownerAccountChecks(pin: string, pinCookie = "") {
+  console.log("\nWith an active owner account");
+  const owner = await createTestOwner(BASE, prisma, "unlock");
+  try {
+    const client = `test-unlock-acct-${RUN}`;
+    const refused = await unlock(pin, client);
+    check("the correct PIN answers 409 OWNER_ACCOUNT_EXISTS", refused.status === 409 && (refused.body as { code?: string } | null)?.code === "OWNER_ACCOUNT_EXISTS", `got ${refused.status}`);
+    check("...says to sign in with the owner account, and sets no cookie", refused.body?.error === "Sign in with your owner account." && !refused.cookie);
+    const statuses: number[] = [];
+    for (let i = 0; i <= DEFAULT_PIN_LIMITS.perClient; i++) statuses.push((await unlock(`${pin}-wrong`, client)).status);
+    check(`${DEFAULT_PIN_LIMITS.perClient + 1} wrong PINs all answer 409: checked before the PIN, never counted`, statuses.every((s) => s === 409), statuses.join(","));
+    if (pinCookie) check("an earlier PIN session no longer opens an owner route", (await ownerRoute(pinCookie)) === 401);
+    check("the owner account session opens it", (await ownerRoute(owner.cookie)) === 200);
+    const lock = await fetch(`${BASE}/api/v1/owner/lock`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: owner.cookie }, body: "{}" });
+    const cleared = lock.headers.getSetCookie?.() ?? [lock.headers.get("set-cookie") ?? ""];
+    check("Lock clears both cookies", cleared.some((c) => /^ruzzco_owner_access=;/.test(c)) && cleared.some((c) => /^ruzzco_session=;/.test(c)), cleared.join(" | "));
+  } finally {
+    await owner.cleanup();
+  }
+  const back = await unlock(pin, `test-unlock-after-${RUN}`);
+  if (pinCookie) check("with the account removed, the PIN unlocks again", back.status === 200, `got ${back.status}`);
 }
 
 main()
@@ -141,7 +180,8 @@ main()
     failures.push(`crashed: ${error instanceof Error ? error.message : String(error)}`);
     console.error(error);
   })
-  .finally(() => {
+  .finally(async () => {
+    await prisma.$disconnect();
     console.log(`\n${passed} passed, ${failures.length} failed`);
     if (failures.length) {
       for (const f of failures) console.log(`  FAIL ${f}`);

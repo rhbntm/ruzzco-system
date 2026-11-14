@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import type { LucideIcon } from "lucide-react";
 import {
   Scissors,
@@ -12,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
 import { countsOnDay } from "@/lib/time-review";
 import { gatewayConfig } from "@/lib/gateway";
-import { OWNER_COOKIE, isOwnerCookie } from "@/lib/owner-access";
+import { ownerAccessFromCookies } from "@/lib/owner-access";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
 import { MAX_FORECAST_DAYS } from "@/lib/forecast-chart";
 import { OwnerDrawer } from "@/components/OwnerDrawer";
@@ -71,7 +70,7 @@ const formatDay = (date: string) =>
   );
 
 export default async function HomePage() {
-  const isOwner = isOwnerCookie((await cookies()).get(OWNER_COOKIE)?.value);
+  const isOwner = await ownerAccessFromCookies();
   const [snapshot, forecast] = await Promise.all([loadSnapshot(), isOwner ? loadForecast() : Promise.resolve(null)]);
   const gatewayOn = gatewayConfig() !== null;
   const today = manilaToday();

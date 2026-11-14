@@ -22,6 +22,7 @@ import "fake-indexeddb/auto";
 import { createHmac, randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestOwner, type TestOwner } from "./lib/test-owner";
 import { createTestDevices } from "./lib/test-devices";
 
 loadEnvConfig(process.cwd());
@@ -40,6 +41,7 @@ const txIds: string[] = [];
 const eventIds: string[] = [];
 let device = ""; // approved in main(); every sale here has no deviceKey, so it counts as this phone's
 let ownerCookie = "";
+let testOwner: TestOwner | null = null;
 let passed = 0;
 const failures: string[] = [];
 
@@ -133,15 +135,9 @@ async function main() {
   const gw = await fetch(`${BASE}/api/v1/payments/qrph`);
   if (gw.status !== 200) throw new Error("Gateway is off on the dev server. Set PAYMENT_GATEWAY=paymongo_test and a sk_test_ key in web/.env, then restart it.");
   if (!SECRET) throw new Error("PAYMONGO_WEBHOOK_SECRET is not set in web/.env");
-  if (!process.env.OWNER_PIN) throw new Error("OWNER_PIN is not set in web/.env");
-
-  const unlock = await fetch(`${BASE}/api/v1/owner/unlock`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pin: process.env.OWNER_PIN }),
-  });
-  ownerCookie = unlock.headers.get("set-cookie")?.split(";")[0] ?? "";
-  if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
+  // Slice 19: owner routes take an owner account session (scripts/lib/test-owner.ts).
+  testOwner = await createTestOwner(BASE, prisma, "gateway");
+  ownerCookie = testOwner.cookie;
 
   device = await devices.approve();
   await prisma.barber.create({ data: { id: BARBER, fullName: `Test Barber GW ${RUN}`, commissionRate: 0.5 } });
@@ -287,6 +283,7 @@ main()
     console.error(error);
   })
   .finally(async () => {
+    await testOwner?.cleanup().catch((e) => console.error("Test owner cleanup failed:", e));
     await cleanup().catch((e) => console.error("Cleanup failed:", e));
     await prisma.$disconnect();
     console.log(`\n${passed} passed, ${failures.length} failed`);

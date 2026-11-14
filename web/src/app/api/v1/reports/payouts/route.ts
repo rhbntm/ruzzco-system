@@ -124,7 +124,7 @@ function serializeRow(row: Row, entries: PayoutEntry[], commissionBase: Base, to
 }
 
 export async function GET(request: NextRequest) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return NextResponse.json({ success: false, error: "date and valid commissionBase are required" }, { status: 400 });
   const { date } = parsed.data;
@@ -187,7 +187,7 @@ async function withLockedRow(row: Row, owed: Prisma.Decimal, decide: (tx: Prisma
 }
 
 export async function POST(request: NextRequest) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   const body = await readJson(request, "Invalid payout payload");
   if (!body.ok) return body.response;
   const legacy = typeof body.data === "object" && body.data !== null && !("id" in body.data) && "cashPaid" in body.data;

@@ -37,7 +37,7 @@ const MAX_REVISION_ATTEMPTS = 3;
  */
 export async function GET(request: NextRequest) {
   // The day's revenue, e-wallet totals, counted cash and notes are owner-only (slice 15).
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   const day = parseBusinessDate(new URL(request.url).searchParams.get("date") ?? "");
   if (!day) {
     return NextResponse.json(
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
  * reconciledAt.
  */
 export async function POST(request: NextRequest) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   try {
     const body = await readJson(request, "Invalid payload");
     if (!body.ok) return body.response;

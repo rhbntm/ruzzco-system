@@ -67,12 +67,26 @@ export function createPinLimiter(limits: PinLimits = DEFAULT_PIN_LIMITS, now: ()
 
 // One limiter per server process. Kept on globalThis so dev hot reloads don't reset it.
 // Phone approval (POST /api/v1/devices/approve) has its own counters, same limits.
+// Staff sign-in (slice 19, Decision 6) has its own counters, same limits, keyed by username
+// instead of client: 5 wrong passwords lock that username, 30 shop-wide lock every sign-in.
+// Unknown usernames count the same. Someone on the shop Wi-Fi can therefore lock a barber's
+// username for 15 minutes; offline sign-in on that barber's own phone still works.
 const globalForPin = globalThis as unknown as {
   ownerPinLimiter?: ReturnType<typeof createPinLimiter>;
   devicePinLimiter?: ReturnType<typeof createPinLimiter>;
+  loginLimiter?: ReturnType<typeof createPinLimiter>;
 };
 export const ownerPinLimiter = (globalForPin.ownerPinLimiter ??= createPinLimiter());
 export const devicePinLimiter = (globalForPin.devicePinLimiter ??= createPinLimiter());
+export const loginLimiter = (globalForPin.loginLimiter ??= createPinLimiter());
+
+export function tooManyLoginsResponse(waitMs: number) {
+  const minutes = Math.ceil(waitMs / 60000);
+  return Response.json(
+    { success: false, code: "TOO_MANY", error: `Too many wrong passwords. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.` },
+    { status: 429, headers: { "Retry-After": String(Math.ceil(waitMs / 1000)) } }
+  );
+}
 
 export function tooManyPinsResponse(waitMs: number) {
   const minutes = Math.ceil(waitMs / 60000);

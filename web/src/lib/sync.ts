@@ -103,6 +103,12 @@ function deviceHeaders(secret: string): Record<string, string> {
   };
 }
 
+/** This phone's key and secret for other phone-only routes (slice 19 sign-in), or null if not approved. */
+export function deviceAuthHeaders(): Record<string, string> | null {
+  const secret = getDeviceSecret();
+  return secret ? deviceHeaders(secret) : null;
+}
+
 async function isNotApproved(res: Response) {
   if (res.status !== 401) return false;
   const body = await res.clone().json().catch(() => null);
@@ -528,6 +534,8 @@ async function sendChunk(
       // Sale-time device key; legacy sales without one fall back to the current key.
       deviceKey: t.deviceKey ?? currentDeviceKey,
       assignmentId: t.assignmentId,
+      // Who was signed in (slice 19). Information only; absent on older sales.
+      ...(t.userId ? { userId: t.userId } : {}),
     })),
   };
 

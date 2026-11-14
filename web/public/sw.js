@@ -22,7 +22,7 @@
  *
  * Change VERSION to make every phone drop its copies and start over.
  */
-const VERSION = "1";
+const VERSION = "2";
 const PAGES = `ruzzco-pages-v${VERSION}`;
 const FILES = `ruzzco-files-v${VERSION}`;
 const POS = "/pos";

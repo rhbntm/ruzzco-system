@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OWNER_COOKIE, isSecureRequest } from "@/lib/owner-access";
 import { readJson } from "@/lib/api";
+import { clearSessionCookie } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/v1/owner/lock
- * Ends the owner session on this device: clears the cookie. Other devices keep theirs until
- * they expire (12 h) or the PIN or OWNER_SESSION_SECRET changes.
+ * Ends the owner session on this device: clears both the PIN cookie and the account session
+ * cookie (slice 19). Other devices keep theirs until they expire (12 h), or the PIN, the
+ * account's password or OWNER_SESSION_SECRET changes.
  */
 export async function POST(request: NextRequest) {
   const body = await readJson(request, "Invalid request");
@@ -22,5 +24,6 @@ export async function POST(request: NextRequest) {
     path: "/",
     maxAge: 0,
   });
+  clearSessionCookie(response, request);
   return response;
 }

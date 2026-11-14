@@ -5,7 +5,7 @@
  * every cash entry leaves expected drawer cash at once; a late sale after full payment shows as
  * additional owed; the old request body still works; and every ledger row equals its entries.
  *
- *   npm run dev                    (in another terminal; OWNER_PIN in web/.env)
+ *   npm run dev                    (in another terminal)
  *   npm run test:payout-entries    (TEST_BASE_URL overrides http://localhost:3000)
  *
  * Uses a throwaway barber, a scratch approved phone and fixed past business dates
@@ -14,6 +14,7 @@
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestOwner, type TestOwner } from "./lib/test-owner";
 import { manilaToday } from "../src/lib/business-date";
 import { createTestDevices } from "./lib/test-devices";
 
@@ -32,6 +33,7 @@ const devices = createTestDevices(BASE);
 let deviceKey = "";
 const txIds: string[] = [];
 let ownerCookie = "";
+let testOwner: TestOwner | null = null;
 let passed = 0;
 const failures: string[] = [];
 
@@ -81,10 +83,9 @@ async function main() {
   console.log(`Payout entries test against ${BASE} (run ${RUN}, dates ${DATES.join(", ")})`);
   const health = await fetch(`${BASE}/api/v1/health`).catch(() => null);
   if (!health?.ok) throw new Error(`Dev server not reachable at ${BASE}. Start it with \`npm run dev\`.`);
-  if (!process.env.OWNER_PIN) throw new Error("OWNER_PIN is not set in web/.env");
-  const unlock = await fetch(`${BASE}/api/v1/owner/unlock`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: process.env.OWNER_PIN }) });
-  ownerCookie = unlock.headers.get("set-cookie")?.split(";")[0] ?? "";
-  if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
+  // Slice 19: owner routes take an owner account session (scripts/lib/test-owner.ts).
+  testOwner = await createTestOwner(BASE, prisma, "payout-ent");
+  ownerCookie = testOwner.cookie;
 
   const existing = await prisma.transaction.count({ where: { transactionTime: { gte: new Date(AT(D, "00:00")), lt: new Date(AT("2000-04-12", "00:00")) } } });
   if (existing > 0) throw new Error(`${existing} sales already exist on ${DATES.join(", ")}; refusing to run`);
@@ -211,6 +212,7 @@ main()
     console.error(error);
   })
   .finally(async () => {
+    await testOwner?.cleanup().catch((e) => console.error("Test owner cleanup failed:", e));
     await cleanup().catch((e) => console.error("Cleanup failed:", e));
     await prisma.$disconnect();
     console.log(`\n${passed} passed, ${failures.length} failed`);

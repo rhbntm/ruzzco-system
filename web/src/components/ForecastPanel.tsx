@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { OwnerSignInInline } from "@/components/OwnerSignIn";
 import { ArrowRight, LineChart, LockKeyhole, RefreshCw, WifiOff } from "lucide-react";
 import { ColumnChart } from "@/components/ColumnChart";
 import type { SerializedForecast } from "@/lib/forecast";
@@ -34,7 +35,7 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
         setOffline(true);
         return;
       }
-      if (response.status === 401) throw new Error("Owner PIN required. Reload the page and unlock again.");
+      if (response.status === 401) throw new Error("Owner sign-in required. Reload the page and sign in again.");
       if (!response.ok || !data?.success) throw new Error(data?.error ?? "Could not refresh the forecast");
       setForecast({ run: data.run, days: data.days });
       setOffline(false);
@@ -192,32 +193,6 @@ export function ForecastLocked({
 }: { title?: string; description?: string; submitLabel?: string } = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [pin, setPin] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function unlock() {
-    setBusy(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/v1/owner/unlock", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error ?? "Wrong PIN.");
-      }
-      setPin("");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not unlock");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <section className="rz-panel p-5 sm:p-6 space-y-3.5">
       <div className="flex items-center justify-between gap-3">
@@ -228,42 +203,21 @@ export function ForecastLocked({
           <span className="rz-title text-xl">{title}</span>
         </div>
         <span className="rz-pill rz-pill-brass uppercase tracking-wider">
-          <LockKeyhole className="w-3 h-3" /> Owner PIN
+          <LockKeyhole className="w-3 h-3" /> Owner only
         </span>
       </div>
       <p className="text-sm text-dust leading-relaxed">{description}</p>
       {open ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void unlock();
-          }}
-          className="animate-rise flex flex-col sm:flex-row gap-2"
-        >
-          <input
-            autoFocus
-            type="password"
-            inputMode="numeric"
-            value={pin}
-            onChange={(event) => setPin(event.target.value)}
-            className="rz-field flex-1 sm:text-sm pointer-coarse:min-h-11"
-            placeholder="Owner PIN"
-            aria-label="Owner PIN"
-          />
-          <button disabled={busy || !pin} className="rz-btn rz-btn-primary px-5 pointer-coarse:min-h-11">
-            {busy ? "Checking…" : submitLabel}
-          </button>
-        </form>
+        <OwnerSignInInline submitLabel={submitLabel} onSignedIn={() => router.refresh()} />
       ) : (
         <button
           type="button"
           onClick={() => setOpen(true)}
           className="-my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 rounded-sm text-sm font-semibold text-brass-bright hover:text-bone transition-colors"
         >
-          Enter owner PIN
+          Owner sign-in
         </button>
       )}
-      {error && <p className="animate-rise text-sm text-crimson-ink">{error}</p>}
     </section>
   );
 }

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // panel shows the first 7, 14 or 30 of them (slice 14); every other page reads 7.
 // Service unreachable or a bad answer → 502 and nothing is saved.
 export async function POST(request: NextRequest) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   let forecast;
   try {
     forecast = await fetchForecast(manilaToday(), MAX_FORECAST_DAYS);

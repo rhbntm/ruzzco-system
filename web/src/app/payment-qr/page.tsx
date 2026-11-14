@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, ImageOff, LockKeyhole, RefreshCw, Trash2, Upload } from "lucide-react";
-import { BarberPoleIcon, MustacheIcon } from "@/components/RuzzcoBrand";
+import { ArrowLeft, Check, ImageOff, RefreshCw, Trash2, Upload } from "lucide-react";
+import { BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { OwnerSignInPage } from "@/components/OwnerSignIn";
 
 // Owner-only: attach a GCash and a Maya QR image to each active barber (slice 6).
 // The POS shows the QR of the barber a sale is attributed to. The server re-checks
@@ -25,7 +26,6 @@ const qrUrl = (barberId: string, method: Method) => `/api/v1/payment-qrs/${encod
 const withoutTick = (text: string) => text.replace(/\s*✓$/, "");
 
 export default function PaymentQrPage() {
-  const [pin, setPin] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,17 +55,6 @@ export default function PaymentQrPage() {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [unlocked, load]);
-
-  async function unlock() {
-    setBusy(true); setError(null);
-    try {
-      const response = await fetch("/api/v1/owner/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin }) });
-      const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error ?? "Invalid owner PIN");
-      setPin(""); setUnlocked(true);
-    } catch (err) { setError(err instanceof Error ? err.message : "Unlock failed"); }
-    finally { setBusy(false); }
-  }
 
   function showSlotMessage(key: string, text: string, ok: boolean) {
     setSlotMessage({ key, text, ok });
@@ -104,24 +93,7 @@ export default function PaymentQrPage() {
   }
 
   if (!unlocked) {
-    return (
-      <main className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6">
-        <form onSubmit={(event) => { event.preventDefault(); void unlock(); }} className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5">
-          <div className="flex flex-col items-center text-center gap-3">
-            <span aria-hidden="true" className="w-14 h-14 rounded-full bg-brass/10 ring-1 ring-brass/45 text-brass-bright flex items-center justify-center">
-              <LockKeyhole className="w-6 h-6" />
-            </span>
-            <h1 className="rz-title text-3xl">Payment QR codes</h1>
-            <p className="text-sm text-dust leading-relaxed">Enter the owner PIN to add or change the GCash and Maya QR shown for each barber.</p>
-          </div>
-          <div className="rz-ornament" aria-hidden="true"><MustacheIcon className="w-8 h-3 text-brass" /></div>
-          <input autoFocus type="password" inputMode="numeric" aria-label="Owner PIN" value={pin} onChange={(event) => setPin(event.target.value)} className="rz-field min-h-12 text-center text-lg tracking-[0.4em] placeholder:text-base placeholder:tracking-normal" placeholder="Owner PIN" />
-          <button disabled={busy || !pin} className="rz-btn rz-btn-primary w-full min-h-12">{busy ? "Checking…" : "Unlock"}</button>
-          {error && <p role="alert" className="animate-rise rz-notice rz-notice-danger">{error}</p>}
-          <Link href="/" className="block py-2 pointer-coarse:py-3.5 text-center text-sm text-dust hover:text-bone transition-colors">Back to home</Link>
-        </form>
-      </main>
-    );
+    return <OwnerSignInPage title="Payment QR codes" what="add or change the GCash and Maya QR shown for each barber" submitLabel="Unlock" onSignedIn={() => setUnlocked(true)} />;
   }
 
   return (

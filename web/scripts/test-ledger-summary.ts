@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestOwner, type TestOwner } from "./lib/test-owner";
 import { createTestDevices } from "./lib/test-devices";
 import { latestRevisionPerDate, leftForShop, listPriceOf, periodDates, remainingToPay, serviceGap } from "../src/lib/ledger-summary";
 
@@ -34,6 +35,7 @@ const devices = createTestDevices(BASE);
 let deviceKey = ""; // the scratch phone every sale is synced from (its sales carry no deviceKey)
 const txIds: string[] = [];
 let ownerCookie = "";
+let testOwner: TestOwner | null = null;
 let passed = 0;
 const failures: string[] = [];
 
@@ -116,12 +118,9 @@ function pure() {
 async function integration() {
   const health = await fetch(`${BASE}/api/v1/health`).catch(() => null);
   if (!health?.ok) throw new Error(`Dev server not reachable at ${BASE}. Start it with \`npm run dev\`.`);
-  if (!process.env.OWNER_PIN) throw new Error("OWNER_PIN is not set in web/.env");
-  const unlock = await fetch(`${BASE}/api/v1/owner/unlock`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: process.env.OWNER_PIN }),
-  });
-  ownerCookie = unlock.headers.get("set-cookie")?.split(";")[0] ?? "";
-  if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
+  // Slice 19: owner routes take an owner account session (scripts/lib/test-owner.ts).
+  testOwner = await createTestOwner(BASE, prisma, "ledger-sum");
+  ownerCookie = testOwner.cookie;
 
   const first = new Date("2000-02-01T00:00:00.000+08:00");
   const last = new Date("2000-03-01T00:00:00.000+08:00");
@@ -248,6 +247,7 @@ main()
     console.error(error);
   })
   .finally(async () => {
+    await testOwner?.cleanup().catch((e) => console.error("Test owner cleanup failed:", e));
     await cleanup().catch((e) => console.error("Cleanup failed:", e));
     await prisma.$disconnect();
     console.log(`\n${passed} passed, ${failures.length} failed`);

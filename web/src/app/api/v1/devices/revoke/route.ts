@@ -14,7 +14,7 @@ const revokeSchema = z.object({ deviceKey: z.string().min(1).max(191) });
  * phone until it is approved again. Revoking again is a no-op.
  */
 export async function POST(request: NextRequest) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   try {
     const body = await readJson(request, "Invalid request");
     if (!body.ok) return body.response;

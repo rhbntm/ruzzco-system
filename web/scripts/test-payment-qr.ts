@@ -4,7 +4,7 @@
  * sale synced while a QR exists is stored exactly as before.
  *
  * Calls the REAL routes on a running dev server:
- *   npm run dev                  (in another terminal; OWNER_PIN in web/.env)
+ *   npm run dev                  (in another terminal)
  *   npm run test:payment-qr      (TEST_BASE_URL overrides http://localhost:3000)
  *
  * Uses only scripts/fixtures/sample-qr.png, which encodes the plain text
@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestOwner, type TestOwner } from "./lib/test-owner";
 import { createTestDevices } from "./lib/test-devices";
 
 loadEnvConfig(process.cwd());
@@ -33,6 +34,7 @@ const sha = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
 
 const txIds: string[] = [];
 let ownerCookie = "";
+let testOwner: TestOwner | null = null;
 let passed = 0;
 const failures: string[] = [];
 
@@ -80,14 +82,9 @@ async function main() {
   console.log(`Payment QR integration test against ${BASE} (run ${RUN})`);
   const health = await fetch(`${BASE}/api/v1/health`).catch(() => null);
   if (!health?.ok) throw new Error(`Dev server not reachable at ${BASE}. Start it with \`npm run dev\`.`);
-  if (!process.env.OWNER_PIN) throw new Error("OWNER_PIN is not set in web/.env");
-  const unlock = await fetch(`${BASE}/api/v1/owner/unlock`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pin: process.env.OWNER_PIN }),
-  });
-  ownerCookie = unlock.headers.get("set-cookie")?.split(";")[0] ?? "";
-  if (!unlock.ok || !ownerCookie) throw new Error(`Owner unlock failed with ${unlock.status}`);
+  // Slice 19: owner routes take an owner account session (scripts/lib/test-owner.ts).
+  testOwner = await createTestOwner(BASE, prisma, "payment-qr");
+  ownerCookie = testOwner.cookie;
 
   await prisma.barber.create({ data: { id: BARBER, fullName: `Test Barber QR ${RUN}`, commissionRate: 0.5 } });
   await prisma.barber.create({ data: { id: INACTIVE, fullName: `Test Barber QR off ${RUN}`, commissionRate: 0.5, isActive: false } });
@@ -189,6 +186,7 @@ main()
     console.error(error);
   })
   .finally(async () => {
+    await testOwner?.cleanup().catch((e) => console.error("Test owner cleanup failed:", e));
     await cleanup().catch((e) => console.error("Cleanup failed:", e));
     await prisma.$disconnect();
     console.log(`\n${passed} passed, ${failures.length} failed`);

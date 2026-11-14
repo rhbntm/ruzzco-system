@@ -23,7 +23,7 @@ const ZERO = new Prisma.Decimal(0);
 const money = (value: Prisma.Decimal) => value.toFixed(2);
 
 export async function GET(request: NextRequest) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return NextResponse.json({ success: false, error: "date, period and commissionBase must be valid" }, { status: 400 });
   const { date, period, commissionBase } = parsed.data;

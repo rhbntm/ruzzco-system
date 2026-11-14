@@ -37,6 +37,9 @@ export const syncTransactionItemSchema = z.object({
   deviceKey: z.string().uuid().optional(),
   // Assignment active on the phone when the sale was made. Absent on legacy queued sales.
   assignmentId: z.string().uuid().optional(),
+  // The account signed in on the phone (slice 19). Information only, never a reject reason:
+  // an unreadable value is dropped so an odd client never loses a sale.
+  userId: z.string().uuid().optional().catch(undefined),
 }).refine((item) => !item.assignmentId || item.deviceKey, {
   message: "deviceKey is required when assignmentId is present",
   path: ["deviceKey"],

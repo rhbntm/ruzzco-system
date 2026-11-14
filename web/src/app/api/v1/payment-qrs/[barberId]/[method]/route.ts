@@ -69,7 +69,7 @@ export async function GET(_request: NextRequest, { params }: Context) {
 
 // Owner only: upload or replace a barber's QR. The body is the raw image file.
 export async function PUT(request: NextRequest, { params }: Context) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   const { barberId, method: rawMethod } = await params;
   const method = parseQrMethod(rawMethod);
   if (!method) return fail(400, "Method must be GCASH or MAYA");
@@ -99,7 +99,7 @@ export async function PUT(request: NextRequest, { params }: Context) {
 
 // Owner only: remove a barber's QR. Removing one that does not exist is not an error.
 export async function DELETE(request: NextRequest, { params }: Context) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   const { barberId, method: rawMethod } = await params;
   const method = parseQrMethod(rawMethod);
   if (!method) return fail(400, "Method must be GCASH or MAYA");

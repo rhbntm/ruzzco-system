@@ -18,7 +18,7 @@ const reviewSchema = z.object({
  * counts on that day only. The same choice again is a no-op; a different one is refused.
  */
 export async function POST(request: NextRequest) {
-  if (!hasOwnerAccess(request)) return ownerRequiredResponse();
+  if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   const body = await readJson(request, "Invalid review payload");
   if (!body.ok) return body.response;
   const parsed = reviewSchema.safeParse(body.data);

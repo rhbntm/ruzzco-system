@@ -1,5 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { getSession, ownerAccountExists, requestSession } from "@/lib/session";
 
 export const OWNER_COOKIE = "ruzzco_owner_access";
 
@@ -80,13 +82,26 @@ export function isOwnerCookie(value: string | undefined, now = Date.now()) {
   return timingSafeEqual(Buffer.from(given), Buffer.from(signature(expiresAt)));
 }
 
-export function hasOwnerAccess(request: NextRequest) {
-  return isOwnerCookie(request.cookies.get(OWNER_COOKIE)?.value);
+/**
+ * Owner pages and routes (slice 19, Decision 2): an active OWNER account session, or a valid PIN
+ * session while no active owner account exists. Once one exists, PIN sessions open nothing.
+ */
+export async function hasOwnerAccess(request: NextRequest): Promise<boolean> {
+  const session = await requestSession(request);
+  if (session.ok) return session.account.role === "OWNER";
+  return isOwnerCookie(request.cookies.get(OWNER_COOKIE)?.value) && !(await ownerAccountExists());
+}
+
+/** The same check for server components. */
+export async function ownerAccessFromCookies(): Promise<boolean> {
+  const session = await getSession();
+  if (session.ok) return session.account.role === "OWNER";
+  return isOwnerCookie((await cookies()).get(OWNER_COOKIE)?.value) && !(await ownerAccountExists());
 }
 
 export function ownerRequiredResponse() {
   return NextResponse.json(
-    { success: false, error: "Owner PIN required" },
+    { success: false, code: "OWNER_REQUIRED", error: "Owner sign-in required" },
     { status: 401 }
   );
 }

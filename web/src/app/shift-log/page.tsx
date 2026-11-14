@@ -25,6 +25,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { RejectedSales } from "@/components/RejectedSales";
 import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
+import { SignInGate } from "@/components/SignInGate";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { ConnectionBadge, ShopPcReminder, useShopPc } from "@/components/ShopPcStatus";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
@@ -45,7 +46,16 @@ function useMounted() {
   return useSyncExternalStore(emptySubscribe, () => true, () => false);
 }
 
-export default function ShiftLogPage() {
+// Slice 19: the shift log opens after the barber signs in, like the POS.
+export default function ShiftLogPageWithSignIn() {
+  return (
+    <SignInGate title="Shift log">
+      <ShiftLogPage />
+    </SignInGate>
+  );
+}
+
+function ShiftLogPage() {
   const mounted = useMounted();
   const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, () => true);
   const [isSyncing, setIsSyncing] = useState(false);

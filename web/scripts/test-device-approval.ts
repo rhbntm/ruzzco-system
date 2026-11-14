@@ -15,6 +15,7 @@
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
+import { createTestOwner, type TestOwner } from "./lib/test-owner";
 import { DEFAULT_PIN_LIMITS, createPinLimiter, devicePinLimiter, ownerPinLimiter } from "../src/lib/pin-attempts";
 
 loadEnvConfig(process.cwd());
@@ -202,13 +203,12 @@ async function main() {
   check("approved again, the phone's held sale syncs", held.status === 200 && (held.body?.syncedIds as string[] | undefined)?.includes(afterRevoke.id) === true, `got ${held.status}`);
 }
 
-let cachedCookie = "";
+// Slice 19: owner routes take an owner account session (scripts/lib/test-owner.ts). Made only
+// after the unlock checks above, which need "no owner account" to answer 401, not 409.
+let testOwner: TestOwner | null = null;
 async function ownerCookie() {
-  if (cachedCookie) return cachedCookie;
-  const res = await call("/api/v1/owner/unlock", { body: { pin: process.env.OWNER_PIN } });
-  cachedCookie = (res.cookie ?? "").split(";")[0];
-  if (!cachedCookie) throw new Error(`owner unlock failed: HTTP ${res.status}`);
-  return cachedCookie;
+  testOwner ??= await createTestOwner(BASE, prisma, "approval");
+  return testOwner.cookie;
 }
 
 async function cleanup() {
@@ -224,6 +224,7 @@ main()
     console.error(error);
   })
   .finally(async () => {
+    await testOwner?.cleanup().catch((e) => console.error("Test owner cleanup failed:", e));
     await cleanup().catch((e) => console.error("Cleanup failed:", e));
     await prisma.$disconnect();
     console.log(`\n${passed} passed, ${failures.length} failed`);
