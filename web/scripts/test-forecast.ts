@@ -39,7 +39,12 @@ function check(name: string, ok: boolean, detail = "") {
 type Body = ({ success: true } & SerializedForecast) | { success: false; error: string };
 
 async function call(method: "GET" | "POST", path: string, owner = true) {
-  const res = await fetch(`${BASE}${path}`, { method, headers: owner ? { Cookie: ownerCookie } : {} });
+  // Refresh takes `application/json` and `{}` (slice 19 §7, C1).
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { ...(method === "POST" ? { "Content-Type": "application/json" } : {}), ...(owner ? { Cookie: ownerCookie } : {}) },
+    ...(method === "POST" ? { body: "{}" } : {}),
+  });
   return { status: res.status, body: (await res.json().catch(() => null)) as Body | null };
 }
 

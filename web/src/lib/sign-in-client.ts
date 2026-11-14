@@ -77,7 +77,7 @@ export async function checkSessionOnline(storage: KeyValueStorage): Promise<Sess
   if (GATEWAY_DOWN.has(res.status)) return { kind: "unreachable" };
   const body = await res.json().catch(() => null);
   if (res.ok && body?.success && body.account) return { kind: "ok", account: body.account as SignedInAccount };
-  if (res.status === 401 && ["NONE", "EXPIRED", "PASSWORD_CHANGED", "INACTIVE"].includes(body?.reason)) {
+  if (res.status === 401 && ["NONE", "EXPIRED", "PASSWORD_CHANGED", "INACTIVE", "SESSION_REPLACED"].includes(body?.reason)) {
     return { kind: "refused", reason: body.reason };
   }
   return { kind: "unreachable" };

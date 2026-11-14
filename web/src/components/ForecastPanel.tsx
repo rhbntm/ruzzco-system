@@ -29,7 +29,8 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/v1/forecast/refresh", { method: "POST" });
+      // JSON and `{}` (slice 19 §7, C1): the route refuses anything else before calling the ml-service.
+      const response = await fetch("/api/v1/forecast/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       const data = await response.json().catch(() => null);
       if (response.status === 502) {
         setOffline(true);

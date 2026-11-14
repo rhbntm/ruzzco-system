@@ -1,7 +1,9 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, ownerAccountExists, requestSession } from "@/lib/session";
+import { BARBER_HOME } from "@/lib/approval-gate";
 
 export const OWNER_COOKIE = "ruzzco_owner_access";
 
@@ -92,10 +94,19 @@ export async function hasOwnerAccess(request: NextRequest): Promise<boolean> {
   return isOwnerCookie(request.cookies.get(OWNER_COOKIE)?.value) && !(await ownerAccountExists());
 }
 
-/** The same check for server components. */
-export async function ownerAccessFromCookies(): Promise<boolean> {
+/**
+ * The same check for server components, for every page except /pos, /shift-log and /login
+ * (slice 19b correction: role-based page access). A signed-in account that isn't OWNER (a barber)
+ * is redirected to /pos before the page renders: barbers open /pos and /shift-log only. The
+ * account session decides alone when it is valid, so a leftover PIN cookie never gives a barber
+ * session owner access. Only pages call this: route handlers use hasOwnerAccess (401, no redirect).
+ */
+export async function ownerPageAccess(): Promise<boolean> {
   const session = await getSession();
-  if (session.ok) return session.account.role === "OWNER";
+  if (session.ok) {
+    if (session.account.role !== "OWNER") redirect(BARBER_HOME);
+    return true;
+  }
   return isOwnerCookie((await cookies()).get(OWNER_COOKIE)?.value) && !(await ownerAccountExists());
 }
 

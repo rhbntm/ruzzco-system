@@ -118,6 +118,23 @@ async function main() {
   check("...and records the sign-in time", (await lastSignIn(accA.id)) !== null && (await lastSignIn(accA.id)) !== before);
   check("GET /api/v1/auth/session with it: the account", (await session(okA.cookie)).status === 200);
 
+  // Slice 19 §7.13: the POS names its account; a cookie of another account means it was replaced.
+  console.log("\nSession replaced (slice 19 §7.13)");
+  // What the POS sends: the account it holds, with that account's passwordChangedAt.
+  const heldChangedAt = (okA.body?.account as { passwordChangedAt?: string | null })?.passwordChangedAt ?? "";
+  const asked = `?${new URLSearchParams({ userId: accA.id, passwordChangedAt: heldChangedAt })}`;
+  const own = await session(okA.cookie, asked, devices.headers(phone));
+  check("the barber's own cookie naming its own account: 200, the account", own.status === 200 && (own.body?.account as { id?: string })?.id === accA.id, `got ${own.status}`);
+  const replaced = await session(owner.cookie, asked, devices.headers(phone));
+  check("the owner's cookie while the POS names the barber: 401 SESSION_REPLACED", replaced.status === 401 && replaced.body?.reason === "SESSION_REPLACED", `got ${replaced.status} ${JSON.stringify(replaced.body)}`);
+  check("...and it says nothing about either account", Object.keys(replaced.body ?? {}).sort().join(",") === "ownerSignIn,reason,success" && !JSON.stringify(replaced.body).includes(owner.username) && !JSON.stringify(replaced.body).includes(accA.id));
+  const replacedNoHeaders = await session(owner.cookie, asked);
+  check("...the same without phone headers (no data either way)", replacedNoHeaders.status === 401 && replacedNoHeaders.body?.reason === "SESSION_REPLACED");
+  const ownerAsks = await session(owner.cookie);
+  check("the owner's cookie with no account named (owner sign-in form): still 200, the owner", ownerAsks.status === 200 && (ownerAsks.body?.account as { role?: string })?.role === "OWNER");
+  const noCookie = await session("", asked, devices.headers(phone));
+  check("no cookie, the POS names its account (offline sign-in): unchanged, 401 NONE", noCookie.status === 401 && noCookie.body?.reason === "NONE", `got ${noCookie.status} ${JSON.stringify(noCookie.body)}`);
+
   const wrong = await login(`t-a-${RUN}`, "wrong-password", phone);
   const unknown = await login(`t-nobody-${RUN}`, "wrong-password", phone);
   check("wrong password: 401 WRONG_PASSWORD", wrong.status === 401 && wrong.body?.code === "WRONG_PASSWORD", `got ${wrong.status}`);

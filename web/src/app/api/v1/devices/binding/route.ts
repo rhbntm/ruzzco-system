@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { authenticateDevice, deviceNotApprovedResponse } from "@/lib/device-auth";
+import { hasOwnerAccess } from "@/lib/owner-access";
 
 /**
  * GET /api/v1/devices/binding?deviceKey=<uuid>
  * Returns the active DeviceAssignment for the given key, or { bound: false }.
  * Used on POS mount to verify the device is still bound server-side.
+ *
+ * Slice 19 §7 (S2): only that phone (its approved headers, same key) or the owner; anyone else
+ * gets 401 with no assignment data.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const deviceKey = searchParams.get("deviceKey");
+
+  if ((await authenticateDevice(request)) !== deviceKey || !deviceKey) {
+    if (!(await hasOwnerAccess(request))) return deviceNotApprovedResponse();
+  }
 
   if (!deviceKey) {
     return NextResponse.json(

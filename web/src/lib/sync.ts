@@ -1,5 +1,6 @@
 import { db, generateUUID, getOrCreateDeviceKey, type LocalDeviceBinding, type LocalTransaction } from "@/lib/db";
 import { REQUEST_TIMEOUT_MS, fetchWithTimeout } from "@/lib/fetch-timeout";
+import { forgetBarberQrs } from "@/lib/payment-qr-list";
 
 /**
  * Shared POS sync lifecycle, used by /pos and /shift-log.
@@ -218,6 +219,10 @@ export async function switchBarber(barber: { id: string; fullName: string }, pin
     }, REQUEST_TIMEOUT_MS.bind);
     if (res.ok) {
       markAccepted();
+      // Slice 19 §7 (S4): the old barber's cached QRs and the QR list record go at once; the POS
+      // then refreshes the QRs for the new barber.
+      const previous = await db.deviceBindings.get(deviceKey).catch(() => undefined);
+      if (previous && previous.barberId !== barber.id) await forgetBarberQrs(previous.barberId);
       const binding: LocalDeviceBinding = {
         deviceKey,
         barberId: barber.id,
@@ -596,10 +601,14 @@ export async function verifyCurrentAssignment(): Promise<boolean> {
   if (!local) return false;
   // Still waiting for /bind: the server cannot know it yet.
   if (readPendingBind()?.assignmentId && readPendingBind()?.assignmentId === local.assignmentId) return false;
+  // Slice 19 §7 (S2): the route answers only this phone's own headers. Not approved: can't check,
+  // so the binding is kept (as for any other refusal below).
+  const headers = deviceAuthHeaders();
+  if (!headers) return false;
   try {
     const res = await fetchWithTimeout(
       `/api/v1/devices/binding?deviceKey=${encodeURIComponent(deviceKey)}`,
-      {},
+      { headers },
       REQUEST_TIMEOUT_MS.bindingCheck
     );
     if (!res.ok) return false;

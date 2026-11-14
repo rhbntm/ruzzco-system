@@ -3,6 +3,7 @@ import { readJson, serverError } from "@/lib/api";
 import { authenticateDevice } from "@/lib/device-auth";
 import { dummyPasswordHash, normalizeUsername, verifyPassword } from "@/lib/passwords";
 import { loginLimiter, tooManyLoginsResponse } from "@/lib/pin-attempts";
+import { OWNER_COOKIE, isSecureRequest } from "@/lib/owner-access";
 import { prisma } from "@/lib/prisma";
 import { accountUsable, findAccount, sessionCookieValue, sessionExpiry, sessionSecretConfigured, setSessionCookie, toSessionAccount } from "@/lib/session";
 
@@ -80,6 +81,12 @@ export async function POST(request: NextRequest) {
       expiresAt: new Date(expiresAt).toISOString(),
     });
     setSessionCookie(response, request, sessionCookieValue(user, expiresAt), expiresAt);
+    // Slice 19b correction: a barber session never carries owner access, and a PIN cookie left in
+    // this browser (owner unlocked here earlier) must not come back into force when the barber
+    // session ends at midnight. The session already wins while it is valid; this removes the rest.
+    if (user.role !== "OWNER") {
+      response.cookies.set({ name: OWNER_COOKIE, value: "", httpOnly: true, sameSite: "strict", secure: isSecureRequest(request), path: "/", maxAge: 0 });
+    }
     return response;
   } catch (error) {
     return serverError("[auth] login failed", error);

@@ -18,6 +18,10 @@ loadEnvConfig(process.cwd());
 
 const RUN = randomUUID().slice(0, 8);
 const BARBER = `test-qrc-${RUN}`;
+// Slice 19 §7 (S1): a charge only for the phone that made the sale (its assignment's deviceKey).
+const PHONE = `test-qrc-phone-${RUN}`;
+const OTHER_PHONE = `test-qrc-other-${RUN}`;
+const ASSIGNMENT = randomUUID();
 const txIds: string[] = [];
 let passed = 0;
 const failures: string[] = [];
@@ -45,13 +49,14 @@ function fakeClient(delayMs = 150) {
   return { client, calls };
 }
 
-async function sale(method: "QRPH" | "CASH", amount = 250) {
+async function sale(method: "QRPH" | "CASH", amount = 250, opts: { legacy?: boolean } = {}) {
   const id = randomUUID();
   txIds.push(id);
   await prisma.transaction.create({
     data: {
       id,
       barberId: BARBER,
+      ...(opts.legacy ? {} : { assignmentId: ASSIGNMENT, cashierId: BARBER }),
       totalAmount: amount,
       amountPaid: amount,
       listPrice: amount,
@@ -69,11 +74,12 @@ async function sale(method: "QRPH" | "CASH", amount = 250) {
 async function main() {
   console.log(`QR Ph charge test (run ${RUN})`);
   await prisma.barber.create({ data: { id: BARBER, fullName: `Test Barber QRC ${RUN}`, commissionRate: 0.5 } });
+  await prisma.deviceAssignment.create({ data: { id: ASSIGNMENT, deviceKey: PHONE, barberId: BARBER } });
 
   console.log("\nOne charge per sale");
   const qr = await sale("QRPH", 250);
   const fake = fakeClient();
-  const results = await Promise.all([1, 2, 3].map(() => ensureQrphCharge(qr, fake.client)));
+  const results = await Promise.all([1, 2, 3].map(() => ensureQrphCharge(qr, fake.client, PHONE)));
   check("three concurrent requests make one PayMongo charge", fake.calls.length === 1, `${fake.calls.length} charges`);
   check("charged for the sale's amount (tip excluded)", fake.calls[0]?.amount === "250.00" && fake.calls[0]?.transactionId === qr);
   const created = results.filter((r) => r.kind === "created");
@@ -83,16 +89,28 @@ async function main() {
   check("all three see the same intent", intentIds.size === 1);
   check("one stored charge row", (await prisma.gatewayPayment.count({ where: { transactionId: qr } })) === 1);
 
-  const again = await ensureQrphCharge(qr, fake.client);
+  const again = await ensureQrphCharge(qr, fake.client, PHONE);
   check("a later retry returns the stored charge without charging again", again.kind === "existing" && fake.calls.length === 1);
   check("the stored charge is still PENDING", again.kind === "existing" && again.payment.status === "PENDING");
 
   console.log("\nRequests that must not charge");
   const none = fakeClient();
-  check("a sale not on the server yet", (await ensureQrphCharge(randomUUID(), none.client)).kind === "not_synced");
+  check("a sale not on the server yet", (await ensureQrphCharge(randomUUID(), none.client, PHONE)).kind === "not_synced");
   const cash = await sale("CASH", 200);
-  check("a cash sale", (await ensureQrphCharge(cash, none.client)).kind === "not_qrph");
+  check("a cash sale", (await ensureQrphCharge(cash, none.client, PHONE)).kind === "not_qrph");
   check("neither reached PayMongo", none.calls.length === 0);
+
+  console.log("\nOnly the phone that made the sale (slice 19 §7, S1)");
+  const mine = await sale("QRPH", 260);
+  const others = fakeClient();
+  check("another phone's sale answers like an unknown sale", (await ensureQrphCharge(mine, others.client, OTHER_PHONE)).kind === "not_synced");
+  const legacy = await sale("QRPH", 270, { legacy: true });
+  check("a sale with no assignment answers like an unknown sale", (await ensureQrphCharge(legacy, others.client, PHONE)).kind === "not_synced");
+  const cashOther = await sale("CASH", 280);
+  check("another phone's cash sale isn't confirmed to exist (not NOT_QRPH)", (await ensureQrphCharge(cashOther, others.client, OTHER_PHONE)).kind === "not_synced");
+  check("none of them reached PayMongo or stored a charge", others.calls.length === 0 && (await prisma.gatewayPayment.count({ where: { transactionId: { in: [mine, legacy, cashOther] } } })) === 0);
+  const own = fakeClient(10);
+  check("the sale's own phone gets its charge", (await ensureQrphCharge(mine, own.client, PHONE)).kind === "created" && own.calls.length === 1);
 
   console.log("\nA failed charge leaves nothing behind");
   const failing = await sale("QRPH", 300);
@@ -103,14 +121,14 @@ async function main() {
   };
   let threw = false;
   try {
-    await ensureQrphCharge(failing, broken);
+    await ensureQrphCharge(failing, broken, PHONE);
   } catch {
     threw = true;
   }
   check("the error reaches the caller (the route answers 502)", threw);
   check("no charge row is stored", (await prisma.gatewayPayment.count({ where: { transactionId: failing } })) === 0);
   const retry = fakeClient(10);
-  const recovered = await ensureQrphCharge(failing, retry.client);
+  const recovered = await ensureQrphCharge(failing, retry.client, PHONE);
   check("a retry afterwards creates the charge once", recovered.kind === "created" && retry.calls.length === 1);
   check("the sale itself was never changed", (await prisma.transaction.findUniqueOrThrow({ where: { id: failing } })).totalAmount.equals(new Prisma.Decimal(300)));
 }
@@ -118,6 +136,7 @@ async function main() {
 async function cleanup() {
   await prisma.gatewayPayment.deleteMany({ where: { transactionId: { in: txIds } } });
   await prisma.transaction.deleteMany({ where: { id: { in: txIds } } });
+  await prisma.deviceAssignment.deleteMany({ where: { id: ASSIGNMENT } });
   await prisma.barber.deleteMany({ where: { id: BARBER } });
 }
 

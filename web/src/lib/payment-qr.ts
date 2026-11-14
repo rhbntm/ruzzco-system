@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import type { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { authenticateDevice } from "@/lib/device-auth";
+import { hasOwnerAccess } from "@/lib/owner-access";
 
 /**
  * Per-barber GCash/Maya QR images (slice 6). Display only: a QR is never part of a sale.
@@ -41,4 +45,25 @@ export function describeError(error: unknown): string {
   const code = (error as { code?: unknown })?.code;
   const name = error instanceof Error ? error.constructor.name : typeof error;
   return typeof code === "string" ? `${name} ${code}` : name;
+}
+
+/**
+ * Who may read QRs (slice 19 §7, S4): the owner sees every active barber's; an approved phone
+ * only those of the barber on its active assignment (none without one); anyone else nothing.
+ * Valid phone headers win over an owner cookie in the same browser, so a POS never caches
+ * another barber's QR.
+ */
+export type QrViewer = { kind: "owner" } | { kind: "phone"; barberId: string | null };
+
+export async function qrViewer(request: NextRequest): Promise<QrViewer | null> {
+  const deviceKey = await authenticateDevice(request);
+  if (deviceKey) {
+    const active = await prisma.deviceAssignment.findFirst({
+      where: { deviceKey, revokedAt: null },
+      orderBy: { assignedAt: "desc" },
+      select: { barberId: true },
+    });
+    return { kind: "phone", barberId: active?.barberId ?? null };
+  }
+  return (await hasOwnerAccess(request)) ? { kind: "owner" } : null;
 }

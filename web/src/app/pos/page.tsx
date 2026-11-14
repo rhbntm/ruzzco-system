@@ -60,6 +60,7 @@ import {
 import {
   countPending,
   createLocalAssignment,
+  deviceAuthHeaders,
   ensureAssignmentId,
   isRejected,
   listRejected,
@@ -75,7 +76,8 @@ import {
 import { REQUEST_TIMEOUT_MS, fetchWithTimeout } from "@/lib/fetch-timeout";
 import { checkQrphAvailable } from "@/lib/qrph-client";
 import { refreshPaymentQrs } from "@/lib/payment-qr-cache";
-import { qrCacheId } from "@/lib/payment-qr-plan";
+import { parseQrListRecord, qrCacheId, qrModalState } from "@/lib/payment-qr-plan";
+import { readQrListRaw, subscribeQrList } from "@/lib/payment-qr-list";
 import { RejectedSales } from "@/components/RejectedSales";
 import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
 import { OwnerPinDialog } from "@/components/OwnerPinDialog";
@@ -234,8 +236,8 @@ function MobilePOSPage() {
   );
 
   // QR shown in the GCash/Maya modal: the bound barber's, from the device cache, so it
-  // still shows offline. Undefined while loading, null when none is set up.
-  const modalQr = useLiveQuery(
+  // still shows offline. Undefined while loading, null when none is cached.
+  const cachedModalQr = useLiveQuery(
     async () => {
       if (!binding || !digitalMethod) return null;
       try {
@@ -247,6 +249,13 @@ function MobilePOSPage() {
     [binding?.barberId, digitalMethod],
     undefined
   );
+  // Slice 19 §7 (S4): the QR only when it is the binding's barber's; "not set up" only when the
+  // last list for that barber had none; otherwise "unavailable". Never another barber's QR.
+  const qrListRaw = useSyncExternalStore(subscribeQrList, readQrListRaw, () => null);
+  const modalQr =
+    cachedModalQr === undefined || !digitalMethod
+      ? null
+      : qrModalState({ barberId: binding?.barberId, method: digitalMethod, cached: cachedModalQr, list: parseQrListRecord(qrListRaw) });
 
   // ── Sync dispatcher ─────────────────────────────────────────────────────────
 
@@ -371,10 +380,14 @@ function MobilePOSPage() {
         if (active && cachedS.length > 0) setServices(sortServices(cachedS));
 
         // Refresh catalog from server if online
+        // Slice 19 §7 (S3): the catalog needs this phone's approval headers. Not approved, or
+        // refused: the cached catalog stays.
         const refreshCatalog = async () => {
           if (!navigator.onLine) return;
+          const headers = deviceAuthHeaders();
+          if (!headers) return;
           try {
-            const res = await fetchWithTimeout("/api/v1/catalog", {}, REQUEST_TIMEOUT_MS.catalog);
+            const res = await fetchWithTimeout("/api/v1/catalog", { headers }, REQUEST_TIMEOUT_MS.catalog);
             if (res.ok && active) {
               const data = await res.json();
               if (data.barbers && data.services) {
@@ -944,15 +957,19 @@ function MobilePOSPage() {
             </div>
 
             <div>
-              {modalQr ? (
+              {modalQr?.kind === "qr" ? (
                 <div className="animate-fade mx-auto mb-1 w-52 space-y-2">
                   {/* eslint-disable-next-line @next/next/no-img-element -- cached data URL from IndexedDB */}
                   <img src={modalQr.dataUrl} alt={`${digitalLabel} QR on file for ${binding?.barberName ?? "this barber"}`} className="w-full aspect-square object-contain rounded-xl bg-white p-2.5 shadow-[0_12px_28px_-14px_rgb(0_0_0/0.9)]" />
                   <p className="text-xs text-dust text-center">{digitalLabel} QR on file for {binding?.barberName}</p>
                 </div>
-              ) : modalQr === null ? (
+              ) : modalQr?.kind === "not_set_up" ? (
                 <div className="mb-1 p-3 rounded-xl border border-dashed border-seam-strong text-center text-sm text-dust">
                   No {digitalLabel} QR set up for {binding?.barberName}. Ask the owner to add one.
+                </div>
+              ) : modalQr?.kind === "unavailable" ? (
+                <div role="status" className="mb-1 p-3 rounded-xl border border-dashed border-seam-strong text-center text-sm text-dust break-words">
+                  {digitalLabel} QR unavailable: the phone couldn&apos;t load it from the shop PC.
                 </div>
               ) : null}
               <div className={`rz-figure text-4xl text-center pt-3 ${digitalColor === "emerald" ? "text-maya-ink" : "text-gcash-ink"}`}>
@@ -964,7 +981,7 @@ function MobilePOSPage() {
                 </p>
               )}
               <p className="text-sm text-dust text-center mt-2 mb-3 leading-relaxed">
-                {modalQr ? "Have the customer scan the QR and send " : "Have the customer send "}
+                {modalQr?.kind === "qr" ? "Have the customer scan the QR and send " : "Have the customer send "}
                 <strong className="text-bone">{peso(saleTotal)}</strong> by {digitalLabel}. If you have the{" "}
                 {digitalLabel} reference number, enter it below.
               </p>
@@ -1189,7 +1206,8 @@ function MobilePOSPage() {
       <header className="rz-banner sticky top-0 z-40">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 px-4 py-2.5">
           <h1 className="sr-only">Point of sale</h1>
-          <Link href="/" className="inline-flex items-center gap-2 sm:gap-2.5 shrink-0 pointer-coarse:min-h-11 text-bone hover:text-white transition-colors group">
+          {/* Not a link: only barbers use the POS, and they open /pos and /shift-log only (slice 19b correction). */}
+          <span className="inline-flex items-center gap-2 sm:gap-2.5 shrink-0 pointer-coarse:min-h-11 text-bone">
             {/* The station light: it turns while a sync is running. */}
             <BarberPoleIcon className="w-3 h-7" spinning={isSyncing} />
             <span className="flex items-center gap-1.5">
@@ -1198,7 +1216,7 @@ function MobilePOSPage() {
               </span>
               <MustacheIcon className="w-4 h-2 text-crimson hidden sm:inline-block" />
             </span>
-          </Link>
+          </span>
 
           {/* Bound barber badge */}
           {binding && (
@@ -1532,7 +1550,7 @@ function MobilePOSPage() {
               )}
             </div>
 
-            {/* Links to full shift log & reconciliation */}
+            {/* The full shift log. End-of-Day Cash is the owner's page: barbers open /pos and /shift-log only. */}
             <div className="space-y-2 pt-1">
               <Link
                 href="/shift-log"
@@ -1540,14 +1558,6 @@ function MobilePOSPage() {
               >
                 <List className="w-4 h-4 text-crimson-ink" />
                 Full Shift Log &amp; EOD Summary
-                <ChevronRight className="w-4 h-4 text-dust transition-transform duration-200 group-hover:translate-x-0.5" />
-              </Link>
-              <Link
-                href="/reconciliation"
-                className="rz-btn rz-btn-secondary w-full pointer-coarse:min-h-11 group"
-              >
-                <Banknote className="w-4 h-4 text-crimson-ink" />
-                Daily Cash Reconciliation
                 <ChevronRight className="w-4 h-4 text-dust transition-transform duration-200 group-hover:translate-x-0.5" />
               </Link>
             </div>

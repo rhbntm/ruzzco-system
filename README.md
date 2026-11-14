@@ -15,6 +15,8 @@
 
 ## 🚀 Quick Start Guide
 
+> **Before the shop uses this version:** complete and sign off the required [production handover checklist](docs/production-handover.md) (Mart's owner account, the checks on the shop PC, barber accounts, supervised phone setup). Until then the owner PIN opens the owner pages.
+
 ### One-click start (Windows)
 
 Double-click `start-ruzzco.cmd` in the repo root (or run `scripts\start-ruzzco.ps1`). It does steps 1 to 5 below for you:

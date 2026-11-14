@@ -179,16 +179,26 @@ const CHARGE_TRANSACTION_TIMEOUT_MS = 50_000;
  * created and stored, so a second request for the same sale (a double tap, a retry, the
  * shift log and the POS at once) waits, then finds the stored charge instead of making
  * another. An existing charge is returned as is; the caller refreshes its status.
+ *
+ * Only for the phone that made the sale (slice 19 §7, S1): a sale with no assignment, or whose
+ * assignment is another phone's, answers not_synced like an unknown sale, so it is neither
+ * charged nor confirmed to exist, and PayMongo is not called.
  */
-export async function ensureQrphCharge(transactionId: string, client: QrphClient): Promise<ChargeResult> {
+export async function ensureQrphCharge(transactionId: string, client: QrphClient, deviceKey: string): Promise<ChargeResult> {
   return prisma.$transaction(
     async (tx) => {
       const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM transactions WHERE id = ${transactionId} FOR UPDATE`;
       if (locked.length === 0) return { kind: "not_synced" } as const;
       const sale = await tx.transaction.findUniqueOrThrow({
         where: { id: transactionId },
-        select: { paymentMethod: true, totalAmount: true, gatewayPayment: { select: { intentId: true, status: true } } },
+        select: {
+          paymentMethod: true,
+          totalAmount: true,
+          assignment: { select: { deviceKey: true } },
+          gatewayPayment: { select: { intentId: true, status: true } },
+        },
       });
+      if (sale.assignment?.deviceKey !== deviceKey) return { kind: "not_synced" } as const;
       if (sale.paymentMethod !== "QRPH") return { kind: "not_qrph" } as const;
       if (sale.gatewayPayment) return { kind: "existing", payment: sale.gatewayPayment } as const;
 

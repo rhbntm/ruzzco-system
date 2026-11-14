@@ -13,7 +13,8 @@
  * G8 runs the real src/lib/sync.ts (retryRejected) on fake-indexeddb against the same server.
  * Sync needs an approved device (slice 15): the suite's own sales go from one approved test
  * phone, and G8's fake phone gets its own approved key and secret in its localStorage.
- * The QR charge itself (one per sale) is covered by test:qrph-charge, without PayMongo.
+ * The QR charge itself (one per sale) is covered by test:qrph-charge, without PayMongo. G9 checks
+ * that the charge and status routes answer only the phone that made the sale (slice 19 §7, S1).
  *
  * Secrets are read, never printed. Uses a throwaway barber and a fixed past business date
  * (2000-01-20); everything it creates (approved test devices included) is deleted at the end.
@@ -222,6 +223,39 @@ async function main() {
   wh = await deliver(other.body, sign(other.body));
   check("unhandled event type → 200 ignored", wh.status === 200 && wh.body?.ignored === true);
 
+  console.log("\nG9 QR Ph charge and status only for the phone that made the sale (slice 19 §7, S1)");
+  // An assignment-backed QRPH sale from this suite's phone, on another date so no G total moves.
+  // Its charge is stored FAILED, so neither the routes nor this suite ever call PayMongo.
+  const assignmentId = randomUUID();
+  const bound = await request("POST", "/api/v1/devices/bind", { deviceKey: device, barberId: BARBER, assignmentId }, device);
+  check("set up: the suite's phone is bound", bound.status === 200, JSON.stringify(bound.body));
+  const ownSale = sale("13:00", "QRPH", 200, { transactionTime: "2000-01-25T05:00:00.000Z", assignmentId, deviceKey: device });
+  await sync([ownSale]);
+  await charge(ownSale.id, `pi_test_${RUN}_s1`);
+  await prisma.gatewayPayment.update({ where: { transactionId: ownSale.id }, data: { status: "FAILED" } });
+  const otherPhone = await devices.approve();
+  const statusOf = async (deviceKey?: string) =>
+    (await fetch(`${BASE}/api/v1/payments/qrph/check?transactionId=${ownSale.id}`, { headers: deviceKey ? devices.headers(deviceKey) : {} })).status;
+  const post = async (path: string, deviceKey?: string, cookie?: string, type = "application/json") =>
+    (await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: { ...(deviceKey ? devices.headers(deviceKey) : {}), "Content-Type": type, ...(cookie ? { Cookie: cookie } : {}) },
+      body: JSON.stringify({ transactionId: ownSale.id }),
+    })).status;
+  check("own phone: stored status → 200", (await statusOf(device)) === 200);
+  const ownCheck = await request<{ status?: string }>("POST", "/api/v1/payments/qrph/check", { transactionId: ownSale.id }, device);
+  check("own phone: Check status → 200 FAILED (no PayMongo call for a settled charge)", ownCheck.status === 200 && ownCheck.body.status === "FAILED");
+  const ownCharge = await request<{ status?: string }>("POST", "/api/v1/payments/qrph", { transactionId: ownSale.id }, device);
+  check("own phone: the charge route returns the stored charge", ownCharge.status === 200 && ownCharge.body.status === "FAILED");
+  check("another phone: stored status → 404", (await statusOf(otherPhone)) === 404);
+  check("another phone: Check status → 404", (await post("/api/v1/payments/qrph/check", otherPhone)) === 404);
+  check("another phone: the charge route → 404", (await post("/api/v1/payments/qrph", otherPhone)) === 404);
+  check("no credentials: status, Check status and charge → 401", (await statusOf()) === 401 && (await post("/api/v1/payments/qrph/check")) === 401 && (await post("/api/v1/payments/qrph")) === 401);
+  check("the owner session alone: charge and Check status → 401", (await post("/api/v1/payments/qrph", undefined, ownerCookie)) === 401 && (await post("/api/v1/payments/qrph/check", undefined, ownerCookie)) === 401);
+  check("own phone, text/plain: charge and Check status → 415", (await post("/api/v1/payments/qrph", device, undefined, "text/plain")) === 415 && (await post("/api/v1/payments/qrph/check", device, undefined, "text/plain")) === 415);
+  const stillOne = await prisma.gatewayPayment.findMany({ where: { transactionId: ownSale.id } });
+  check("still exactly one charge, unchanged", stillOne.length === 1 && stillOne[0].status === "FAILED" && stillOne[0].intentId === `pi_test_${RUN}_s1`);
+
   console.log("\nG8 a QRPH sale refused while QR Ph was off: Retry after it is back on");
   // The phone as it was left: the sale saved, refused with GATEWAY_DISABLED, not on the server.
   // It is an approved phone (slice 15): its key and secret are in its localStorage.
@@ -274,6 +308,7 @@ async function cleanup() {
   await prisma.gatewayPayment.deleteMany({ where: { transactionId: { in: txIds } } });
   await prisma.dailyPayoutLedger.deleteMany({ where: { OR: [{ businessDate: new Date(`${DATE}T00:00:00.000Z`) }, { barberId: BARBER }] } });
   await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: BARBER }] } });
+  await prisma.deviceAssignment.deleteMany({ where: { barberId: BARBER } });
   await prisma.barber.deleteMany({ where: { id: BARBER } });
 }
 

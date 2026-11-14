@@ -1,7 +1,8 @@
 /**
  * The phone's offline sign-in (slice 19, src/lib/local-session.ts), in Node only: the verifier,
  * the business-day rollover at Manila midnight, the offline back-off, and the online-first rules
- * (Decisions 8 to 11). The server is replaced by a scripted answer; storage is a Map.
+ * (Decisions 8 to 11), and the owner signing in on the same browser (slice 19 §7.13). The server
+ * is replaced by a scripted answer; storage is a Map.
  *
  *   npm run test:local-session
  */
@@ -17,6 +18,7 @@ import {
   applySessionAnswer,
   checkVerifier,
   createVerifier,
+  endBarberSessionForOwner,
   endLocalSession,
   endOfBusinessDay,
   offlineWaitMs,
@@ -25,6 +27,7 @@ import {
   readVerifier,
   signIn,
   signInNeeded,
+  staffSessionChanged,
   type KeyValueStorage,
   type LoginAnswer,
   type SignInDeps,
@@ -260,11 +263,60 @@ async function signInChecks() {
   check("recheck, INACTIVE: session ended, verifier deleted", recheck.map.get(SESSION_KEY) === undefined && recheck.map.get(VERIFIER_KEY) === undefined);
 }
 
+// Slice 19 §7.13: an owner sign-in on this browser ends the barber's session and deletes the
+// verifier; nothing else on the phone changes, and the next barber sign-in must be online.
+async function ownerSignInChecks() {
+  console.log("\nOwner sign-in on this browser (slice 19 §7.13)");
+  // What must survive: the device key and secret, the pending assignment and the offline back-off
+  // (the binding, IndexedDB and queued sales aren't in localStorage at all).
+  const KEEP: Record<string, string> = {
+    ruzzco_device_key: "device-1",
+    ruzzco_device_secret: "secret-1",
+    ruzzco_pending_assignment: JSON.stringify({ id: "assignment-1" }),
+    ruzzco_device_not_approved: "0",
+  };
+  const kept = (storage: ReturnType<typeof memoryStorage>) => Object.entries(KEEP).every(([k, v]) => storage.map.get(k) === v);
+
+  for (const via of ["owner account or PIN unlock (endBarberSessionForOwner)", "SESSION_REPLACED from the session check"] as const) {
+    const storage = memoryStorage();
+    const first = await signIn("bayani", PASSWORD, deps(storage, server()).d);
+    for (const [k, v] of Object.entries(KEEP)) storage.setItem(k, v);
+    check(`${via}: a barber signed in online first (session and verifier stored)`, first.ok && readLocalSession(storage) !== null && readVerifier(storage) !== null);
+    if (via.startsWith("owner")) endBarberSessionForOwner(storage);
+    else check(`${via}: answer applied → ended`, applySessionAnswer({ kind: "refused", reason: "SESSION_REPLACED" }, storage) === "ended");
+    check(`${via}: the barber session is gone`, readLocalSession(storage) === null && storage.map.get(SESSION_KEY) === undefined);
+    check(`${via}: the verifier is gone`, readVerifier(storage) === null && storage.map.get(VERIFIER_KEY) === undefined);
+    check(`${via}: device key, secret, pending assignment and approval flag untouched`, kept(storage));
+    const offline = await signIn("bayani", PASSWORD, deps(storage, OFFLINE).d);
+    check(`${via}: offline sign-in now refused (NEEDS_PC), no session written`, !offline.ok && offline.code === "NEEDS_PC" && readLocalSession(storage) === null);
+    const online = await signIn("bayani", PASSWORD, deps(storage, server()).d);
+    check(`${via}: a fresh online sign-in works and stores a new verifier`, online.ok && readVerifier(storage) !== null && kept(storage));
+    endLocalSession(storage); // an ordinary sign-out keeps the verifier
+    const offlineAgain = await signIn("bayani", PASSWORD, deps(storage, OFFLINE).d);
+    check(`${via}: after that online sign-in, offline sign-in is available again`, offlineAgain.ok && offlineAgain.session.mode === "offline");
+  }
+
+  const replaced = memoryStorage();
+  check("no barber session here: endBarberSessionForOwner is harmless", (endBarberSessionForOwner(replaced), replaced.map.size === 0));
+  check("the session check's other answers still keep the session (no cookie, expired, unreachable)", await (async () => {
+    const s = memoryStorage();
+    await signIn("bayani", PASSWORD, deps(s, server()).d);
+    return [applySessionAnswer({ kind: "refused", reason: "NONE" }, s), applySessionAnswer({ kind: "refused", reason: "EXPIRED" }, s), applySessionAnswer({ kind: "unreachable" }, s)].every((r) => r === "kept") && readLocalSession(s) !== null;
+  })());
+
+  console.log("\nOther tabs (storage events)");
+  check("the session key changed → reread", staffSessionChanged(SESSION_KEY));
+  check("the verifier changed → reread", staffSessionChanged(VERIFIER_KEY));
+  check("storage cleared (key null) → reread", staffSessionChanged(null));
+  check("unrelated keys → ignored", !staffSessionChanged("ruzzco_device_key") && !staffSessionChanged(BACKOFF_KEY) && !staffSessionChanged("ruzzco_payment_qr_list"));
+}
+
 async function main() {
   await verifierChecks();
   businessDayChecks();
   backoffChecks();
   await signInChecks();
+  await ownerSignInChecks();
   console.log(`\n${passed} passed, ${failures.length} failed`);
   if (failures.length > 0) {
     for (const failure of failures) console.log(`  - ${failure}`);

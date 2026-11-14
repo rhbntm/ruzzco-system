@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { readJson } from "@/lib/api";
+import { authenticateDevice, deviceNotApprovedResponse } from "@/lib/device-auth";
 import { applyGatewayStatus, ensureQrphCharge, gatewayConfig, paymongoClient, retrieveIntentStatus } from "@/lib/gateway";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +10,7 @@ export const dynamic = "force-dynamic";
 const notFound = () => NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
 const bodySchema = z.object({ transactionId: z.string().uuid() });
 
-/** GET: 200 when QR Ph (test) is available, 404 when the gateway is off. The POS uses it to show the button. */
+/** GET: 200 when QR Ph (test) is available, 404 when the gateway is off. The POS uses it to show the button. Public: it says only on or off. */
 export async function GET() {
   if (!gatewayConfig()) return notFound();
   return NextResponse.json({ success: true, enabled: true, mode: "test" });
@@ -20,16 +22,24 @@ export async function GET() {
  * never creates a second charge (ensureQrphCharge). This is also the "Retry QR payment" path
  * for a sale that synced without a charge. An expired or failed charge is not retried (out of
  * scope); the cashier rings a new sale.
+ *
+ * Slice 19 §7 (S1): only the approved phone that made the sale. The phone is checked first, before
+ * the gateway switch, so a caller without credentials always gets 401; another phone's sale answers
+ * the same 404 as an unknown one. An owner session doesn't count.
  */
 export async function POST(request: NextRequest) {
+  const deviceKey = await authenticateDevice(request);
+  if (!deviceKey) return deviceNotApprovedResponse();
   const config = gatewayConfig();
   if (!config) return notFound();
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  const body = await readJson(request, "transactionId (UUID) is required");
+  if (!body.ok) return body.response;
+  const parsed = bodySchema.safeParse(body.data);
   if (!parsed.success) return NextResponse.json({ success: false, error: "transactionId (UUID) is required" }, { status: 400 });
   const { transactionId } = parsed.data;
 
   try {
-    const result = await ensureQrphCharge(transactionId, paymongoClient(config));
+    const result = await ensureQrphCharge(transactionId, paymongoClient(config), deviceKey);
     if (result.kind === "not_synced") return NextResponse.json({ success: false, error: "NOT_SYNCED" }, { status: 404 });
     if (result.kind === "not_qrph") return NextResponse.json({ success: false, error: "NOT_QRPH" }, { status: 409 });
     if (result.kind === "existing") return NextResponse.json(await existingCharge(config, result.payment));

@@ -21,7 +21,7 @@ import { totalsForDate } from "@/lib/payout-totals";
 import { isAdditionalOwed, lastEntry, remainingToPay } from "@/lib/payout-entries";
 import { countHeldForReview, countsOnDay } from "@/lib/time-review";
 import { gatewayConfig } from "@/lib/gateway";
-import { ownerAccessFromCookies } from "@/lib/owner-access";
+import { ownerPageAccess } from "@/lib/owner-access";
 import { addDays, latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
 import { METHOD_NAMES, basisLine } from "@/lib/forecast-comparison";
 import { DEFAULT_TREND_RANGE, TREND_RANGES, loadTrends, parseTrendRange, type TrendRange, type Trends } from "@/lib/trends";
@@ -174,7 +174,7 @@ export default async function InsightsPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const isOwner = await ownerAccessFromCookies();
+  const isOwner = await ownerPageAccess();
   if (!isOwner) {
     // No figures are loaded without the owner cookie.
     return (

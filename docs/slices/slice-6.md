@@ -40,6 +40,8 @@ model BarberPaymentQr {
 
 ## 4. Routes and validation
 
+[Superseded 2026-11-14 by slice 19 §7 (S4): the two GET routes below are no longer public. The owner gets every active barber's QRs; an approved phone only those of the barber on its active assignment; anyone else 401. The phone's cache is barber-bound (slice 19 §7.4 Decision 8).]
+
 - `GET /api/v1/payment-qrs`: metadata for active barbers `{ barberId, method, sha256, contentType }`. No image bytes. Public, like the catalog.
 - `GET /api/v1/payment-qrs/[barberId]/[method]`: the image bytes with their content type. Public (POS phones have no login). Same exposure as a printed QR on the counter.
 - `PUT` and `DELETE` on the same path: owner PIN cookie required (401 otherwise).

@@ -13,6 +13,8 @@
     "test:api-errors": "tsx scripts/test-api-errors.ts",
     "test:auth": "tsx scripts/test-auth.ts",
     "test:attribution": "tsx scripts/test-assignment-attribution.ts",
+    "test:approval-gate": "tsx scripts/test-approval-gate.ts",
+    "test:authz": "tsx scripts/test-authz.ts",
     "test:commission": "tsx scripts/test-commission.ts",
     "test:device-approval": "tsx scripts/test-device-approval.ts",
     "test:forecast": "tsx scripts/test-forecast.ts",

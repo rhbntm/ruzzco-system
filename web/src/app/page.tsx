@@ -11,12 +11,13 @@ import { prisma } from "@/lib/prisma";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
 import { countsOnDay } from "@/lib/time-review";
 import { gatewayConfig } from "@/lib/gateway";
-import { ownerAccessFromCookies } from "@/lib/owner-access";
+import { ownerPageAccess } from "@/lib/owner-access";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
 import { MAX_FORECAST_DAYS } from "@/lib/forecast-chart";
 import { OwnerDrawer } from "@/components/OwnerDrawer";
 import { RuzzcoLogoBanner, MustacheIcon } from "@/components/RuzzcoBrand";
 import { MirrorGlass } from "@/components/StationMirror";
+import { ApprovalGate } from "@/components/ApprovalScreen";
 
 export const dynamic = "force-dynamic";
 
@@ -28,15 +29,17 @@ const counterTools: Tool[] = [
   { href: "/reconciliation", title: "End-of-Day Cash", body: "Close out today: count the drawer against expected cash after tips, payouts and petty cash.", icon: ClipboardCheck },
 ];
 
-async function loadSnapshot() {
+// Today's paid-sale count only with owner access (slice 19 §7, S5): without it the count is never
+// queried, so it can't reach the HTML. Active barber names and the price list stay public.
+async function loadSnapshot(isOwner: boolean) {
   try {
     const today = parseBusinessDate(manilaToday());
     const [barbers, services, salesToday] = await Promise.all([
       prisma.barber.findMany({ where: { isActive: true }, select: { id: true, fullName: true }, orderBy: { fullName: "asc" } }),
       prisma.service.findMany({ where: { isActive: true }, select: { id: true, name: true, standardPrice: true }, orderBy: { standardPrice: "desc" } }),
-      today
+      isOwner && today
         ? prisma.transaction.count({ where: { paymentStatus: "PAID", ...countsOnDay(today) } })
-        : Promise.resolve(0),
+        : Promise.resolve(null),
     ]);
     return { ok: true as const, barbers, services, salesToday };
   } catch (error) {
@@ -70,12 +73,14 @@ const formatDay = (date: string) =>
   );
 
 export default async function HomePage() {
-  const isOwner = await ownerAccessFromCookies();
-  const [snapshot, forecast] = await Promise.all([loadSnapshot(), isOwner ? loadForecast() : Promise.resolve(null)]);
+  const isOwner = await ownerPageAccess();
+  const [snapshot, forecast] = await Promise.all([loadSnapshot(isOwner), isOwner ? loadForecast() : Promise.resolve(null)]);
   const gatewayOn = gatewayConfig() !== null;
   const today = manilaToday();
 
+  // Slice 19 §7: a browser that is neither approved nor signed in as the owner sees the approval screen.
   return (
+    <ApprovalGate pathname="/" title="Ruzzco Barbers" ownerAccess={isOwner}>
     <div className="relative flex-1 overflow-x-clip">
       <main className="rz-page pb-10">
         {/* The station, seen from the chair: the mirror over the counter */}
@@ -189,6 +194,7 @@ export default async function HomePage() {
         </footer>
       </main>
     </div>
+    </ApprovalGate>
   );
 }
 
@@ -202,7 +208,7 @@ function DayLine({ variant, snapshot, today }: { variant: "glass" | "board"; sna
   const day: DayUnit[] = snapshot.ok
     ? [
         hours,
-        { label: "Paid sales today", value: String(snapshot.salesToday), brass: true },
+        ...(snapshot.salesToday === null ? [] : [{ label: "Paid sales today", value: String(snapshot.salesToday), brass: true }]),
         { label: "Barbers", value: String(snapshot.barbers.length) },
       ]
     : [hours];

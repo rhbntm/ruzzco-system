@@ -10,10 +10,22 @@ import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { LockKeyhole } from "lucide-react";
 import { MustacheIcon } from "@/components/RuzzcoBrand";
+import { endBarberSessionForOwner } from "@/lib/local-session";
 
 type Mode = "ACCOUNT" | "PIN";
 
 const json = { "Content-Type": "application/json" };
+
+// Slice 19 §7.13: the owner signed in on this browser, so a barber's sign-in on it ends here, and
+// the next barber sign-in must be online. A POS open in another tab sees it at once (`storage`
+// event). Binding, IndexedDB and queued sales are untouched.
+function endBarberSessionHere() {
+  try {
+    endBarberSessionForOwner(window.localStorage);
+  } catch {
+    // Storage unavailable: nothing was stored here either.
+  }
+}
 
 /** Signs in with the owner account, or the PIN. Returns an error to show, or null when signed in. */
 async function submitOwnerSignIn(mode: Mode, username: string, secret: string): Promise<{ error: string | null; mode?: Mode }> {
@@ -21,19 +33,25 @@ async function submitOwnerSignIn(mode: Mode, username: string, secret: string): 
     if (mode === "PIN") {
       const res = await fetch("/api/v1/owner/unlock", { method: "POST", headers: json, body: JSON.stringify({ pin: secret }) });
       const body = await res.json().catch(() => null);
-      if (res.ok && body?.success) return { error: null };
+      if (res.ok && body?.success) {
+        endBarberSessionHere();
+        return { error: null };
+      }
       if (res.status === 409 && body?.code === "OWNER_ACCOUNT_EXISTS") return { error: "Sign in with your owner account.", mode: "ACCOUNT" };
       return { error: body?.error ?? "Wrong PIN." };
     }
     const res = await fetch("/api/v1/auth/login", { method: "POST", headers: json, body: JSON.stringify({ username, password: secret }) });
     const body = await res.json().catch(() => null);
     if (res.ok && body?.success) {
-      if (body.account?.role === "OWNER") return { error: null };
+      if (body.account?.role === "OWNER") {
+        endBarberSessionHere();
+        return { error: null };
+      }
       await fetch("/api/v1/auth/logout", { method: "POST", headers: json, body: "{}" }).catch(() => {});
-      return { error: "Only owner accounts open owner pages." };
+      return { error: "Only owner accounts open owner pages. Barbers sign in on the POS." };
     }
     // A barber account without a phone's approval is refused before anything else is said.
-    if (body?.code === "DEVICE_NOT_APPROVED") return { error: "Only owner accounts open owner pages." };
+    if (body?.code === "DEVICE_NOT_APPROVED") return { error: "Only owner accounts open owner pages. Barbers sign in on the POS." };
     return { error: body?.error ?? `Sign-in failed (HTTP ${res.status}).` };
   } catch {
     return { error: "Can't reach the shop PC." };

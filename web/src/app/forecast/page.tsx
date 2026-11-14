@@ -4,7 +4,7 @@ import { ForecastLocked } from "@/components/ForecastPanel";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
 import { COMPARISON_ONLY, buildReportView, type ReportView } from "@/lib/forecast-comparison";
-import { ownerAccessFromCookies } from "@/lib/owner-access";
+import { ownerPageAccess } from "@/lib/owner-access";
 
 // Slice 10: the detailed forecast. Owner only; reads the saved run from the database and never
 // calls the forecast service, so it still shows when the service is down.
@@ -28,7 +28,7 @@ async function load(): Promise<SerializedForecast | null> {
 }
 
 export default async function ForecastPage() {
-  const isOwner = await ownerAccessFromCookies();
+  const isOwner = await ownerPageAccess();
   const forecast = isOwner ? await load() : null;
   const run = forecast?.run ?? null;
   const view = run ? buildReportView(run.comparison, (iso) => formatDate(iso)) : null;

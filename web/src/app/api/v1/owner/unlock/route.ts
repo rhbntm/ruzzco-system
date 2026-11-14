@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { OWNER_COOKIE, OWNER_SESSION_MS, isSecureRequest, ownerCookieValue, ownerSessionConfigured, validOwnerPin } from "@/lib/owner-access";
 import { ownerPinLimiter, pinClientKey, tooManyPinsResponse } from "@/lib/pin-attempts";
 import { readJson, serverError } from "@/lib/api";
-import { ownerAccountExists } from "@/lib/session";
+import { SESSION_COOKIE, clearSessionCookie, ownerAccountExists } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -52,5 +52,9 @@ export async function POST(request: NextRequest) {
     // The server checks the expiry inside the value too; this only lets the browser drop it.
     maxAge: OWNER_SESSION_MS / 1000,
   });
+  // Slice 19 §7.13: an account cookie left in this browser would win over the PIN session (a valid
+  // session alone decides). The PIN unlocks only while no owner account exists, so that cookie can
+  // only be a barber's: clear it, after the PIN cookie (which stays the first Set-Cookie).
+  if (request.cookies.has(SESSION_COOKIE)) clearSessionCookie(response, request);
   return response;
 }

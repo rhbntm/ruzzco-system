@@ -9,7 +9,7 @@ import { approveThisDevice, isWaitingForApproval, subscribeApproval } from "@/li
  * recorded and kept on the phone; they are sent once Bayani or Mart types the approval PIN
  * here. `onApproved` runs the normal sync right after.
  */
-export function DeviceApprovalBanner({ onApproved }: { onApproved?: () => void }) {
+export function DeviceApprovalBanner({ onApproved, message }: { onApproved?: () => void; message?: string }) {
   // The server render (and the first client render) never shows it: approval lives in localStorage.
   const waiting = useSyncExternalStore(subscribeApproval, isWaitingForApproval, () => false);
   const [open, setOpen] = useState(false);
@@ -48,7 +48,7 @@ export function DeviceApprovalBanner({ onApproved }: { onApproved?: () => void }
       <div role="status" className="animate-drop rz-notice rz-notice-warn text-sm flex-wrap">
         <TriangleAlert className="w-4.5 h-4.5 text-warn shrink-0 mt-px" />
         <span className="flex-1 min-w-48">
-          This phone isn&apos;t approved yet. Sales are saved on this phone and will be sent once Bayani or Mart approves it.
+          {message ?? "This phone isn't approved yet. Sales are saved on this phone and will be sent once Bayani or Mart approves it."}
         </span>
         <button
           type="button"

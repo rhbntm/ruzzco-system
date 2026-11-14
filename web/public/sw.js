@@ -22,7 +22,7 @@
  *
  * Change VERSION to make every phone drop its copies and start over.
  */
-const VERSION = "2";
+const VERSION = "4"; // 3: slice 19 §7 (device headers on catalog, QRs and QR Ph; barber-bound QR cache). 4: slice 19 §7.13 (POS links only to /pos and /shift-log)
 const PAGES = `ruzzco-pages-v${VERSION}`;
 const FILES = `ruzzco-files-v${VERSION}`;
 const POS = "/pos";

@@ -4,6 +4,8 @@ import { ArrowLeft, Banknote, CheckCircle2, Clock, RefreshCw, Server, Smartphone
 import { prisma } from "@/lib/prisma";
 import { gatewayConfig } from "@/lib/gateway";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { ApprovalGate } from "@/components/ApprovalScreen";
+import { ownerPageAccess } from "@/lib/owner-access";
 
 // How one sale is recorded, and what the system does so far. Both sat under the counter on the
 // home page; they live here so Open the POS stays near the top of the home screen on phones.
@@ -27,7 +29,7 @@ async function loadExample() {
 const peso = (value: number) => `₱${value.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default async function AboutPage() {
-  const example = await loadExample();
+  const [example, isOwner] = await Promise.all([loadExample(), ownerPageAccess()]);
   const gatewayOn = gatewayConfig() !== null;
 
   const built = [
@@ -44,7 +46,9 @@ export default async function AboutPage() {
   const exampleName = example?.name ?? "Cut";
   const exampleAmount = example ? peso(Number(example.standardPrice)) : null;
 
+  // Slice 19 §7: a browser that is neither approved nor signed in as the owner sees the approval screen.
   return (
+    <ApprovalGate pathname="/about" title="About" ownerAccess={isOwner}>
     <main className="flex-1">
       <header className="rz-banner">
         <div className="max-w-312 mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
@@ -164,6 +168,7 @@ export default async function AboutPage() {
         </section>
       </div>
     </main>
+    </ApprovalGate>
   );
 }
 

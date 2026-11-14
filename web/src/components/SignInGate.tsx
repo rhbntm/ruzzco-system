@@ -10,9 +10,12 @@
 //   normal first bind (case 7). Moving a bound phone still needs the owner PIN ("Change the barber").
 // - While the PC answers, the account is rechecked; a reset password or a deactivated account ends
 //   the session (Decision 10). Signing in never changes who a sale is credited to.
+// - An owner sign-in on this browser ends the barber's session (slice 19 §7.13): at once in other
+//   tabs (`storage` event), and at the next recheck through SESSION_REPLACED.
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { LogIn, ShieldCheck } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { LogIn } from "lucide-react";
 import { db, getOrCreateDeviceKey, type LocalDeviceBinding } from "@/lib/db";
 import {
   applySessionAnswer,
@@ -20,11 +23,13 @@ import {
   readLocalSession,
   signIn,
   signInNeeded,
+  staffSessionChanged,
   type LocalSession,
 } from "@/lib/local-session";
 import { browserRandom, browserStorage, browserSubtle, checkSessionOnline, loginOnline, logoutOnline } from "@/lib/sign-in-client";
 import { createLocalAssignment, isWaitingForApproval, registerPendingAssignment, subscribeApproval } from "@/lib/sync";
-import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
+import { gateScreen } from "@/lib/approval-gate";
+import { ApprovalScreen } from "@/components/ApprovalScreen";
 import { BarberPoleIcon, RuzzcoLogoBanner } from "@/components/RuzzcoBrand";
 
 type GateContext = {
@@ -70,8 +75,10 @@ export function SignInGate({ title, children }: { title: string; children: React
   const [createdBinding, setCreatedBinding] = useState<LocalDeviceBinding | null>(null);
   const waiting = useSyncExternalStore(subscribeApproval, isWaitingForApproval, () => false);
   const checking = useRef(false);
+  const pathname = usePathname() ?? "/pos";
 
-  // Decision 10: only PASSWORD_CHANGED or INACTIVE end the session; no answer keeps it.
+  // Decision 10 and slice 19 §7.13: only PASSWORD_CHANGED, INACTIVE or SESSION_REPLACED end the
+  // session; no cookie, an expired cookie or no answer keep it.
   const recheck = useCallback(async () => {
     if (checking.current || typeof navigator === "undefined" || !navigator.onLine) return;
     checking.current = true;
@@ -114,6 +121,17 @@ export function SignInGate({ title, children }: { title: string; children: React
     return () => { active = false; window.clearTimeout(timer); };
   }, [loadSession, recheck]);
 
+  // Slice 19 §7.13: another tab changed the sign-in (the owner signed in there, or a barber signed
+  // in or out): reread it, so this POS never keeps a stale barber session. A sale between Charge
+  // and Record still finishes first (`hold`).
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (staffSessionChanged(event.key)) void loadSession();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [loadSession]);
+
   const checkpoint = useCallback(() => {
     void loadSession().then((local) => { if (local) void recheck(); });
   }, [loadSession, recheck]);
@@ -140,7 +158,10 @@ export function SignInGate({ title, children }: { title: string; children: React
   }
 
   const needsApproval = waiting && (askApproval || !ready);
-  const screen = needsApproval ? <ApprovalStep title={title} /> : <SignInScreen title={title} onSignedIn={onSignedIn} />;
+  // Slice 19 §7, Decision 2: approval first, then the barber's sign-in. Owner access never counts here.
+  const screen = gateScreen({ pathname, approved: !needsApproval, ownerAccess: false }) === "approval"
+    ? <ApprovalScreen title={title} />
+    : <SignInScreen title={title} onSignedIn={onSignedIn} />;
 
   // Before the first sign-in the page isn't rendered at all.
   if (!ready) return screen;
@@ -152,23 +173,6 @@ export function SignInGate({ title, children }: { title: string; children: React
       {covered && <div className="fixed inset-0 z-[60] flex overflow-y-auto bg-wall">{screen}</div>}
       <div inert={covered} className="flex-1 flex flex-col">{children}</div>
     </Gate.Provider>
-  );
-}
-
-function ApprovalStep({ title }: { title: string }) {
-  return (
-    <main className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6 w-full">
-      <div className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5">
-        <div className="flex flex-col items-center text-center gap-3">
-          <span aria-hidden="true" className="w-14 h-14 rounded-full bg-brass/10 ring-1 ring-brass/45 text-brass-bright flex items-center justify-center">
-            <ShieldCheck className="w-6 h-6" />
-          </span>
-          <h1 className="rz-title text-3xl">{title}</h1>
-          <p className="text-sm text-dust leading-relaxed">Approve this phone first. Then each barber signs in with their own account.</p>
-        </div>
-        <DeviceApprovalBanner />
-      </div>
-    </main>
   );
 }
 

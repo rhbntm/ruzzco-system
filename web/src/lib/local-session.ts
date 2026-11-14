@@ -107,6 +107,22 @@ export function deleteVerifier(storage: KeyValueStorage) {
   remove(storage, VERIFIER_KEY);
 }
 
+/**
+ * The owner signed in on this browser (owner account or PIN unlock; slice 19 §7.13): today's barber
+ * session ends and its verifier is deleted, so the next barber sign-in on this phone must be online.
+ * Only these two keys: the device key and secret, the binding, IndexedDB and queued sales are
+ * untouched, so attribution never changes.
+ */
+export function endBarberSessionForOwner(storage: KeyValueStorage) {
+  endLocalSession(storage);
+  deleteVerifier(storage);
+}
+
+/** A `storage` event from another tab that changed the staff sign-in (null: storage was cleared). */
+export function staffSessionChanged(key: string | null): boolean {
+  return key === null || key === SESSION_KEY || key === VERIFIER_KEY;
+}
+
 // ── Business day ─────────────────────────────────────────────────────────────
 
 /** End of the Manila business day `now` falls in (midnight Manila), in ms. */
@@ -301,16 +317,17 @@ export async function signIn(usernameInput: string, password: string, deps: Sign
 
 export type SessionAnswer =
   | { kind: "ok"; account: SignedInAccount }
-  | { kind: "refused"; reason: "NONE" | "EXPIRED" | "PASSWORD_CHANGED" | "INACTIVE" }
+  | { kind: "refused"; reason: "NONE" | "EXPIRED" | "PASSWORD_CHANGED" | "INACTIVE" | "SESSION_REPLACED" }
   | { kind: "unreachable" };
 
 /**
- * Applies the server's answer about the signed-in account. PASSWORD_CHANGED or INACTIVE end the
- * local session and delete the verifier; anything else (no cookie, an expired cookie, no
- * connection) keeps the local session.
+ * Applies the server's answer about the signed-in account. PASSWORD_CHANGED, INACTIVE or
+ * SESSION_REPLACED (this browser's cookie now belongs to another account, e.g. the owner signed in
+ * here; slice 19 §7.13) end the local session and delete the verifier; anything else (no cookie,
+ * an expired cookie, no connection) keeps the local session.
  */
 export function applySessionAnswer(answer: SessionAnswer, storage: KeyValueStorage): "kept" | "ended" {
-  if (answer.kind === "refused" && (answer.reason === "PASSWORD_CHANGED" || answer.reason === "INACTIVE")) {
+  if (answer.kind === "refused" && (answer.reason === "PASSWORD_CHANGED" || answer.reason === "INACTIVE" || answer.reason === "SESSION_REPLACED")) {
     endLocalSession(storage);
     deleteVerifier(storage);
     return "ended";

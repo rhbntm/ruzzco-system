@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
-import { MAX_QR_BYTES, describeError, detectImageType, parseQrMethod, sha256Hex } from "@/lib/payment-qr";
+import { MAX_QR_BYTES, describeError, detectImageType, parseQrMethod, qrViewer, sha256Hex } from "@/lib/payment-qr";
+import { deviceNotApprovedResponse } from "@/lib/device-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +42,22 @@ async function activeBarberExists(barberId: string) {
   return (await prisma.barber.count({ where: { id: barberId, isActive: true } })) > 0;
 }
 
-// The image itself, for the POS cache. Public like the catalog (POS phones have no login):
-// the same exposure as a printed QR on the counter. Inactive barbers' QRs are not served.
-export async function GET(_request: NextRequest, { params }: Context) {
+// The image itself, for the POS cache and the owner page. Slice 19 §7 (S4), superseding slice 6's
+// public access: the owner gets any active barber's; an approved phone only its active assignment's
+// barber's (404 for another, as for a missing QR); anyone else 401. Inactive barbers' QRs are not served.
+export async function GET(request: NextRequest, { params }: Context) {
   const { barberId, method: rawMethod } = await params;
+  let viewer;
+  try {
+    viewer = await qrViewer(request);
+  } catch (error) {
+    console.error("[payment-qrs] access check failed:", describeError(error));
+    return fail(500, "Could not load the QR");
+  }
+  if (!viewer) return deviceNotApprovedResponse();
   const method = parseQrMethod(rawMethod);
   if (!method) return fail(400, "Method must be GCASH or MAYA");
+  if (viewer.kind === "phone" && viewer.barberId !== barberId) return fail(404, "No QR for this barber and method");
   try {
     const row = await prisma.barberPaymentQr.findFirst({
       where: { barberId, method, barber: { isActive: true } },

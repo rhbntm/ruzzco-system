@@ -395,7 +395,11 @@ async function main() {
   check("T18: legacy bind (no id) to another barber without PIN → 403", t18e.status === 403, JSON.stringify(t18e.body));
   const active18a = await activeFor(dev8);
   check("T18: after the refusals A2 is still the only active binding", active18a.length === 1 && active18a[0].id === idA2);
+  // Slice 19 §7.10 #3: a sale synced before the move stays A's after it (the queued case is below).
+  const syncedBefore = sale({ barber: "A", assignmentId: idA2, deviceKey: dev8 });
+  await sync([syncedBefore]);
   check("T18: with the owner PIN → 200", (await rebind(dev8, "B", idB1)).status === 200);
+  await expectAttributed("T18 sale synced before the change", syncedBefore.id, "A", idA2);
   const active18b = await activeFor(dev8);
   check("T18: B1 now the only active binding", active18b.length === 1 && active18b[0].id === idB1);
   check("T18: retry of the accepted change without PIN → 200 (no-op)", (await bind(dev8, "B", idB1)).status === 200);

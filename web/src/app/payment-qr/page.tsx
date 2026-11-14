@@ -40,6 +40,8 @@ export default function PaymentQrPage() {
     setBusy(true); setError(null);
     try {
       const [catalogRes, qrRes] = await Promise.all([fetch("/api/v1/catalog", { cache: "no-store" }), fetch("/api/v1/payment-qrs", { cache: "no-store" })]);
+      // Both need owner access (slice 19 §7): an ended session shows the sign-in again.
+      if (catalogRes.status === 401 || qrRes.status === 401) { setUnlocked(false); return; }
       const catalog = await catalogRes.json();
       const list = await qrRes.json();
       if (!catalogRes.ok || !catalog.success) throw new Error(catalog.error ?? "Could not load barbers");

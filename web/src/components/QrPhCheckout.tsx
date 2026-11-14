@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, QrCode, RefreshCw, TriangleAlert, X } from "lucide-react";
+import { deviceAuthHeaders } from "@/lib/sync";
 
 /**
  * QR Ph (PayMongo test mode) checkout for one sale that is already saved in Dexie.
  * It waits for the sale to sync, asks the server for the QR (idempotent per sale), then shows
  * the server's status. The client never decides payment status; it only displays it.
+ * Every call carries this phone's approval headers (slice 19 §7, S1): only the phone that made
+ * the sale can charge it or read its status. Without them nothing is called.
  */
+
+const NOT_APPROVED = "This phone isn't approved, so it can't charge by QR. Use cash, GCash or Maya.";
 
 type Status = "PENDING" | "PAID" | "EXPIRED" | "FAILED";
 type Qr = { imageUrl: string; expiresAt: string | null; testUrl: string | null };
@@ -54,15 +59,24 @@ export function QrPhCheckout({
         if (active) setPhase({ kind: "error", text: "This sale hasn't reached the server yet, so it can't be charged by QR. Try again when online." });
         return;
       }
+      const headers = deviceAuthHeaders();
+      if (!headers) {
+        if (active) setPhase({ kind: "error", text: NOT_APPROVED });
+        return;
+      }
       if (active) setPhase({ kind: "loading", text: "Creating QR…" });
       try {
         const res = await fetch("/api/v1/payments/qrph", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({ transactionId }),
         });
         const data = await res.json().catch(() => null);
         if (!active) return;
+        if (res.status === 401) {
+          setPhase({ kind: "error", text: NOT_APPROVED });
+          return;
+        }
         if (!res.ok || !data?.success) {
           setPhase({ kind: "error", text: data?.error === "Not found" ? "QR Ph is switched off." : "Could not create the QR. Use cash, GCash or Maya." });
           return;
@@ -82,8 +96,10 @@ export function QrPhCheckout({
     if (!pending) return;
     const tick = setInterval(() => setNow(Date.now()), 1000);
     const poll = setInterval(async () => {
+      const headers = deviceAuthHeaders();
+      if (!headers) return;
       try {
-        const res = await fetch(`/api/v1/payments/qrph/check?transactionId=${transactionId}`, { cache: "no-store" });
+        const res = await fetch(`/api/v1/payments/qrph/check?transactionId=${transactionId}`, { cache: "no-store", headers });
         const data = await res.json();
         if (data?.success && data.status !== "PENDING") {
           setPhase((p) => (p.kind === "charge" ? { ...p, status: data.status } : p));
@@ -97,11 +113,16 @@ export function QrPhCheckout({
 
   // Demo fallback when the webhook tunnel is down: the server asks PayMongo directly.
   const checkStatus = useCallback(async () => {
+    const headers = deviceAuthHeaders();
+    if (!headers) {
+      setPhase({ kind: "error", text: NOT_APPROVED });
+      return;
+    }
     setChecking(true);
     try {
       const res = await fetch("/api/v1/payments/qrph/check", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ transactionId }),
       });
       const data = await res.json();

@@ -16,10 +16,12 @@
  * 5 wrong PINs to the shop-wide count (30 in 15 minutes locks everyone), so run it at most
  * 5 times in 15 minutes; restarting the dev server clears the counts.
  */
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { DEFAULT_PIN_LIMITS } from "../src/lib/pin-attempts";
-import { OWNER_SESSION_MS, isOwnerCookie, ownerCookieValue } from "../src/lib/owner-access";
+import { OWNER_COOKIE, OWNER_SESSION_MS, isOwnerCookie, ownerCookieValue } from "../src/lib/owner-access";
+import { SESSION_COOKIE, sessionCookieValue, sessionExpiry } from "../src/lib/session";
+import { hashPassword } from "../src/lib/passwords";
 import { prisma } from "../src/lib/prisma";
 import { createTestOwner } from "./lib/test-owner";
 
@@ -123,6 +125,8 @@ async function main() {
   check("a forged signature is refused", (await ownerRoute(`ruzzco_owner_access=${expiresAt}.${"0".repeat(64)}`)) === 401);
   check("an expired cookie is refused", (await ownerRoute(`ruzzco_owner_access=${Date.now() - 1000}.${value.split(".")[1]}`)) === 401);
 
+  await barberCookieChecks(pin, other);
+
   console.log("\nLock");
   const lockPlain = await fetch(`${BASE}/api/v1/owner/lock`, { method: "POST", headers: { "Content-Type": "text/plain", Cookie: cookie }, body: "{}" });
   check("lock refuses a non-JSON Content-Type (415)", lockPlain.status === 415, `got ${lockPlain.status}`);
@@ -149,6 +153,42 @@ async function main() {
   check("another client can still unlock", otherClient.status === 200, `got ${otherClient.status}`);
 
   await ownerAccountChecks(pin, (otherClient.cookie ?? "").split(";")[0]);
+}
+
+// Slice 19 §7.13: an account cookie left in the browser would win over the PIN session (a valid
+// session alone decides), so a successful PIN unlock clears it. Uses a real, server-signed barber
+// session for a scratch barber and account, removed at the end.
+async function barberCookieChecks(pin: string, client: string) {
+  console.log("\nPIN unlock with a barber session in the browser (slice 19 §7.13)");
+  const barberId = `test-unlock-barber-${RUN}`;
+  await prisma.barber.create({ data: { id: barberId, fullName: `Test Barber Unlock ${RUN}`, commissionRate: 0.5 } });
+  try {
+    const user = await prisma.user.create({
+      data: { name: "Test barber (unlock)", role: "BARBER", barberId, username: `t-ub-${RUN}`, passwordHash: await hashPassword(randomBytes(12).toString("hex")), passwordChangedAt: new Date() },
+      select: { id: true, passwordChangedAt: true },
+    });
+    const barberCookie = `${SESSION_COOKIE}=${sessionCookieValue(user, sessionExpiry("BARBER"))}`;
+    const asked = await fetch(`${BASE}/api/v1/auth/session`, { headers: { Cookie: barberCookie } });
+    check("the barber session is valid (so the case means something)", asked.status === 200, `got ${asked.status}`);
+    const res = await fetch(`${BASE}/api/v1/owner/unlock`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-for": client, Cookie: barberCookie },
+      body: JSON.stringify({ pin }),
+    });
+    const set = res.headers.getSetCookie();
+    const pinSet = set.find((c) => c.startsWith(`${OWNER_COOKIE}=`) && !c.startsWith(`${OWNER_COOKIE}=;`)) ?? "";
+    const cleared = set.find((c) => c.startsWith(`${SESSION_COOKIE}=;`)) ?? "";
+    check("correct PIN with a barber cookie: 200, the PIN cookie is the first Set-Cookie", res.status === 200 && Boolean(set[0]?.startsWith(`${OWNER_COOKIE}=`)) && Boolean(pinSet), set.join(" | "));
+    check("...and the barber's account cookie is cleared (empty, Max-Age=0, HttpOnly, SameSite=Strict)", /Max-Age=0/i.test(cleared) && /HttpOnly/i.test(cleared) && /SameSite=Strict/i.test(cleared), set.join(" | "));
+    const pinCookie = pinSet.split(";")[0];
+    check("had the browser kept both, the barber session would win: owner route 401", (await ownerRoute(`${barberCookie}; ${pinCookie}`)) === 401);
+    check("with the barber cookie cleared, the PIN session opens the owner route", (await ownerRoute(pinCookie)) === 200);
+    const plain = await unlock(pin, client);
+    check("without an account cookie, unlock clears nothing else", plain.status === 200 && !(plain.cookie ?? "").includes(`${SESSION_COOKIE}=`), plain.cookie ?? "");
+  } finally {
+    await prisma.user.deleteMany({ where: { barberId } });
+    await prisma.barber.deleteMany({ where: { id: barberId } });
+  }
 }
 
 // Slice 19, Decision 2: once an active owner account exists, the PIN opens no owner page.

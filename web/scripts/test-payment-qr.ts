@@ -1,7 +1,8 @@
 /**
  * Integration test for per-barber GCash/Maya QR images (slice 6): owner-only writes, method,
  * barber and upload validation, round trip, replace, remove, inactive barbers, and that a
- * sale synced while a QR exists is stored exactly as before.
+ * sale synced while a QR exists is stored exactly as before. Slice 19 §7 (S4): reads are no
+ * longer public; the owner sees every barber's QRs, a phone only its own barber's (Q10).
  *
  * Calls the REAL routes on a running dev server:
  *   npm run dev                  (in another terminal)
@@ -28,6 +29,7 @@ const SERVICE_ID = "10000000-0000-0000-0000-000000000001"; // seeded Haircut
 const RUN = randomUUID().slice(0, 8);
 const BARBER = `test-qr-${RUN}`;
 const INACTIVE = `test-qr-off-${RUN}`;
+const OTHER = `test-qr-other-${RUN}`;
 const MAX = 1024 * 1024;
 const SAMPLE = new Uint8Array(readFileSync(join(process.cwd(), "scripts", "fixtures", "sample-qr.png")));
 const sha = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
@@ -64,16 +66,29 @@ async function del(barberId: string, method: string, owner = true) {
   return { status: res.status, body: (await res.json().catch(() => null)) as { removed?: boolean } | null };
 }
 
-async function getImage(barberId: string, method: string) {
-  const res = await fetch(`${BASE}${path(barberId, method)}`);
+// Reads need the owner or an approved phone (slice 19 §7, S4); the owner by default.
+async function getImage(barberId: string, method: string, headers?: Record<string, string>) {
+  const res = await fetch(`${BASE}${path(barberId, method)}`, { headers: headers ?? { Cookie: ownerCookie } });
   return { status: res.status, type: res.headers.get("content-type"), nosniff: res.headers.get("x-content-type-options"), bytes: new Uint8Array(await res.arrayBuffer()) };
 }
 
-async function listed(barberId: string) {
-  const res = await fetch(`${BASE}/api/v1/payment-qrs`);
-  const body = (await res.json()) as { qrs: { barberId: string; method: string; sha256: string; contentType: string }[] };
-  return body.qrs.filter((q) => q.barberId === barberId);
+type ListBody = { scope?: string; barberId?: string | null; qrs?: { barberId: string; method: string; sha256: string; contentType: string }[] };
+
+async function listQrs(headers?: Record<string, string>) {
+  const res = await fetch(`${BASE}/api/v1/payment-qrs`, { headers: headers ?? { Cookie: ownerCookie } });
+  return { status: res.status, body: (await res.json().catch(() => null)) as ListBody | null };
 }
+
+async function listed(barberId: string) {
+  return ((await listQrs()).body?.qrs ?? []).filter((q) => q.barberId === barberId);
+}
+
+const bind = (deviceKey: string, barberId: string, pin?: string) =>
+  fetch(`${BASE}/api/v1/devices/bind`, {
+    method: "POST",
+    headers: devices.headers(deviceKey),
+    body: JSON.stringify({ deviceKey, barberId, assignmentId: randomUUID(), ...(pin ? { pin } : {}) }),
+  }).then((r) => r.status);
 
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
 const rowCount = (barberId: string) => prisma.barberPaymentQr.count({ where: { barberId } });
@@ -168,15 +183,66 @@ async function main() {
   check("GET → 404 and not listed", (await getImage(BARBER, "GCASH")).status === 404 && (await listed(BARBER)).length === 0);
   const again = await del(BARBER, "GCASH");
   check("DELETE again → 200, nothing removed", again.status === 200 && again.body?.removed === false);
+
+  console.log("\nQ10 reads: the owner sees every barber's QRs, a phone only its own barber's (slice 19 §7, S4)");
+  await prisma.barber.create({ data: { id: OTHER, fullName: `Test Barber QR other ${RUN}`, commissionRate: 0.5 } });
+  check("set up: a QR for each of two barbers", (await put(BARBER, "GCASH", SAMPLE)).status === 200 && (await put(OTHER, "GCASH", jpeg, { type: "image/jpeg" })).status === 200);
+  const mine = await devices.approve();
+  check("set up: the phone is bound to the first barber", (await bind(mine, BARBER)) === 200);
+
+  const ownerList = await listQrs();
+  const ownerIds = new Set((ownerList.body?.qrs ?? []).map((q) => q.barberId));
+  check("owner: the list has both barbers' QRs", ownerList.status === 200 && ownerIds.has(BARBER) && ownerIds.has(OTHER));
+  check("owner: both images", (await getImage(BARBER, "GCASH")).status === 200 && sameBytes((await getImage(OTHER, "GCASH")).bytes, jpeg));
+
+  const phoneList = await listQrs(devices.headers(mine));
+  const phoneQrs = phoneList.body?.qrs ?? [];
+  check(
+    "phone: the list is for its barber and holds only that barber's QR",
+    phoneList.status === 200 && phoneList.body?.scope === "phone" && phoneList.body.barberId === BARBER && phoneQrs.length === 1 && phoneQrs[0].barberId === BARBER && phoneQrs[0].sha256 === sha(SAMPLE),
+    JSON.stringify(phoneList.body),
+  );
+  const ownImage = await getImage(BARBER, "GCASH", devices.headers(mine));
+  check("phone: its own barber's image, identical bytes", ownImage.status === 200 && sameBytes(ownImage.bytes, SAMPLE));
+  const otherImage = await getImage(OTHER, "GCASH", devices.headers(mine));
+  check("phone: another barber's image → 404, no bytes of it", otherImage.status === 404 && !sameBytes(otherImage.bytes, jpeg));
+
+  const madeUp = { "X-Ruzzco-Device": mine, Authorization: `Bearer ${"0".repeat(64)}` };
+  for (const [label, headers] of [["no credentials", {}], ["a made-up secret", madeUp]] as const) {
+    check(`${label}: list → 401`, (await listQrs(headers)).status === 401);
+    check(`${label}: image → 401`, (await getImage(BARBER, "GCASH", headers)).status === 401);
+  }
+  const lost = await devices.approve();
+  await bind(lost, BARBER);
+  const revoke = await fetch(`${BASE}/api/v1/devices/revoke`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: ownerCookie }, body: JSON.stringify({ deviceKey: lost }) });
+  check("set up: a revoked phone", revoke.status === 200);
+  check("a revoked phone: list → 401", (await listQrs(devices.headers(lost))).status === 401);
+  check("a revoked phone: image → 401", (await getImage(BARBER, "GCASH", devices.headers(lost))).status === 401);
+  const unbound = await devices.approve();
+  const empty = await listQrs(devices.headers(unbound));
+  check("an approved phone with no assignment: an empty list for no barber", empty.status === 200 && empty.body?.barberId === null && (empty.body.qrs ?? []).length === 0);
+  check("an approved phone with no assignment: any image → 404", (await getImage(BARBER, "GCASH", devices.headers(unbound))).status === 404);
+
+  const pin = process.env.OWNER_PIN ?? "";
+  check("set up: the phone moves to the other barber with the owner PIN", (await bind(mine, OTHER, pin)) === 200);
+  const moved = await listQrs(devices.headers(mine));
+  check(
+    "after the move the list follows the new barber",
+    moved.body?.barberId === OTHER && (moved.body.qrs ?? []).length === 1 && moved.body.qrs![0].barberId === OTHER,
+    JSON.stringify(moved.body),
+  );
+  check("after the move the old barber's image → 404", (await getImage(BARBER, "GCASH", devices.headers(mine))).status === 404);
+  check("after the move the new barber's image → 200", (await getImage(OTHER, "GCASH", devices.headers(mine))).status === 200);
 }
 
 async function cleanup() {
   // First and on its own, so the approved test phone is removed even if a later step fails.
   await devices.cleanup(prisma).catch((e) => console.error("Device cleanup failed:", e));
-  const barberIds = [BARBER, INACTIVE];
+  const barberIds = [BARBER, INACTIVE, OTHER];
   await prisma.barberPaymentQr.deleteMany({ where: { barberId: { in: barberIds } } });
   await prisma.dailyPayoutLedger.deleteMany({ where: { barberId: { in: barberIds } } });
   await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: { in: barberIds } }] } });
+  await prisma.deviceAssignment.deleteMany({ where: { barberId: { in: barberIds } } });
   await prisma.barber.deleteMany({ where: { id: { in: barberIds } } });
 }
 
