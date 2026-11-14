@@ -53,7 +53,7 @@ Status: **PRELIMINARY, register item PR-1** (written 2026-11-14). Branch `revisi
 
 - In: `/pos` and `/shift-log` (display and client-side state only), the "needs attention" list both pages share, one line of copy on `/about` and three on `/`, and the tests below.
 - Unchanged: what a sale records, the Dexie-first write, the checkout lock, attribution, sync, rejected-sale handling, the QR Ph checkout. No schema change, no migration, no payload change, no new Dexie version.
-- Not covered: the owner-PIN dialogs, the "Change the barber" screen and the QR Ph checkout keep their own buttons, and the phone's Back there behaves as before. The home page's layout waits for slice 19.
+- Not covered: the owner-PIN dialogs, the "Change the barber" screen and the QR Ph checkout keep their own buttons, and the phone's Back there behaves as before. The home page's layout waits for slice 21.
 
 ### 6.2 Decisions
 

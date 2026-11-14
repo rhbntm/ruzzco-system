@@ -7,7 +7,7 @@ Goal: every payout the owner records on `/ledger` is kept as its own entry, so p
 
 - In: a `payout_entries` table and one additive migration (with a backfill), `GET`/`POST /api/v1/reports/payouts`, `lib/payout-entries.ts`, the barber cards on `/ledger`, the drawer formula's payout term (`lib/reconciliation.ts`), the payout figures and wording on `/insights`, and the tests.
 - Unchanged: what a sale records, sync, attribution, commission snapshots, tips (100% to the barber, outside revenue), the ledger summary route and its figures, End-of-Day Cash apart from the payout term, the owner cookie. `DailyPayoutLedger` keeps `cashPaid` and `gcashPaid`; they become the sums of the day's entries, so every reader of those columns keeps working.
-- Out: advances (paying more than is owed), editing or deleting an entry, who else may record a payout, a payout history across dates (slice 21). These are open questions for Mart or later slices.
+- Out: advances (paying more than is owed), editing or deleting an entry, who else may record a payout, a payout history across dates (slice 20). These are open questions for Mart or later slices.
 
 ## 2. Rule (OK'd by Brent, 2026-11-14)
 
