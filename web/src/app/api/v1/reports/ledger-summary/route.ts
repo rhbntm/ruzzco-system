@@ -4,10 +4,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { serverError } from "@/lib/api";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
-import { isBusinessDate, parseBusinessDate } from "@/lib/business-date";
+import { isBusinessDate, manilaToday, parseBusinessDate } from "@/lib/business-date";
+import { parseRange, type DateRange } from "@/lib/date-range";
+import { rangeFigures } from "@/lib/range-figures";
 import { computeExpected } from "@/lib/reconciliation";
 import { totalsForDate } from "@/lib/payout-totals";
-import { countsOnDay } from "@/lib/time-review";
+import { countHeldForReview, countsOnDay } from "@/lib/time-review";
 import { latestRevisionPerDate, leftForShop, listPriceOf, periodDates, remainingToPay, serviceGap } from "@/lib/ledger-summary";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +24,31 @@ const querySchema = z.object({
 const ZERO = new Prisma.Decimal(0);
 const money = (value: Prisma.Decimal) => value.toFixed(2);
 
+// Slice 20: `from`/`to` (both included, never after today) instead of `date`/`period`.
+const rangeSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  commissionBase: z.enum(["LIST_PRICE", "AMOUNT_PAID"]).default("LIST_PRICE"),
+});
+
 export async function GET(request: NextRequest) {
   if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
-  const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
+  const params = new URL(request.url).searchParams;
+  if (params.has("from") || params.has("to")) {
+    if (params.has("date") || params.has("period")) {
+      return NextResponse.json({ success: false, error: "Use either from and to, or date and period, not both" }, { status: 400 });
+    }
+    const asked = rangeSchema.safeParse(Object.fromEntries(params));
+    if (!asked.success) return NextResponse.json({ success: false, error: "from, to and commissionBase must be valid" }, { status: 400 });
+    const range = parseRange(asked.data.from, asked.data.to, manilaToday());
+    if (!range.ok) return NextResponse.json({ success: false, error: range.error }, { status: range.status });
+    try {
+      return NextResponse.json(await rangeSummary(range, asked.data.commissionBase));
+    } catch (error) {
+      return serverError("[GET /api/v1/reports/ledger-summary]", error, "Could not load the summary");
+    }
+  }
+  const parsed = querySchema.safeParse(Object.fromEntries(params));
   if (!parsed.success) return NextResponse.json({ success: false, error: "date, period and commissionBase must be valid" }, { status: 400 });
   const { date, period, commissionBase } = parsed.data;
 
@@ -127,4 +151,73 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return serverError("[GET /api/v1/reports/ledger-summary]", error, "Could not load the summary");
   }
+}
+
+// Slice 20: the legacy answer's shape for any range, from one query per table (rangeFigures).
+// Per day it adds up exactly what the legacy path adds up: computeExpected, totalsForDate, the
+// day's items, the latest petty cash and the stored paid amounts; remaining is the sum of each
+// day's clamped balance. Read-only.
+async function rangeSummary(range: DateRange, commissionBase: "LIST_PRICE" | "AMOUNT_PAID") {
+  const { first, last, dates, bounds } = range;
+  const [figures, reconciliations, ledgerRows, heldForReview] = await Promise.all([
+    rangeFigures(first, last, commissionBase),
+    prisma.shiftReconciliation.findMany({
+      where: { reconciliationDate: { gte: bounds.dateStart, lt: bounds.dateEnd } },
+      select: { reconciliationDate: true, revision: true, pettyCashAmount: true },
+    }),
+    prisma.dailyPayoutLedger.findMany({
+      where: { businessDate: { gte: bounds.dateStart, lt: bounds.dateEnd } },
+      select: { businessDate: true, cashPaid: true, gcashPaid: true },
+    }),
+    countHeldForReview(first, last),
+  ]);
+
+  const petty = latestRevisionPerDate(
+    reconciliations.map((r) => ({ date: r.reconciliationDate.toISOString().slice(0, 10), revision: r.revision, amount: r.pettyCashAmount }))
+  );
+  const paidByDate = new Map<string, Prisma.Decimal>();
+  for (const row of ledgerRows) {
+    const key = row.businessDate.toISOString().slice(0, 10);
+    paidByDate.set(key, (paidByDate.get(key) ?? ZERO).add(row.cashPaid).add(row.gcashPaid));
+  }
+
+  let pettyCash = ZERO, owed = ZERO, paid = ZERO, remaining = ZERO;
+  let pettyCashMissingDays = 0;
+  const perDay: { date: string; revenue: string; commissions: string }[] = [];
+  for (const date of dates) {
+    const day = figures.perDate.get(date)!;
+    const dayPetty = petty.get(date)?.amount;
+    if (dayPetty === undefined) pettyCashMissingDays++;
+    pettyCash = pettyCash.add(dayPetty ?? ZERO);
+    const dayOwed = day.commissions.add(day.tips);
+    const dayPaid = paidByDate.get(date) ?? ZERO;
+    owed = owed.add(dayOwed);
+    paid = paid.add(dayPaid);
+    remaining = remaining.add(remainingToPay(dayOwed, dayPaid));
+    perDay.push({ date, revenue: money(day.revenue), commissions: money(day.commissions) });
+  }
+
+  const { total } = figures;
+  const serviceRows = [...total.services.entries()]
+    .map(([name, entry]) => ({ name, count: entry.count, listSales: entry.listSales }))
+    .sort((a, b) => b.listSales.comparedTo(a.listSales) || a.name.localeCompare(b.name));
+  const serviceSales = serviceRows.reduce((sum, row) => sum.add(row.listSales), ZERO);
+
+  return {
+    success: true,
+    date: first.date,
+    period: "range",
+    from: first.date,
+    to: last.date,
+    commissionBase,
+    sales: { cash: money(total.cash), gcash: money(total.gcash), maya: money(total.maya), qrph: money(total.qrph), total: money(total.revenue), count: total.count },
+    shared: { commissions: money(total.commissions), tips: money(total.tips), pettyCash: money(pettyCash), pettyCashRecorded: pettyCashMissingDays === 0 },
+    leftForShop: money(leftForShop(total.revenue, total.commissions, pettyCash)),
+    payouts: { owed: money(owed), paid: money(paid), remaining: money(remaining) },
+    services: serviceRows.map((row) => ({ name: row.name, count: row.count, listSales: money(row.listSales) })),
+    serviceGap: money(serviceGap(total.revenue, serviceSales)),
+    days: dates.length === 1 ? [] : perDay,
+    pettyCashMissingDays,
+    heldForReview,
+  };
 }

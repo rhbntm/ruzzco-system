@@ -9,6 +9,11 @@
  * Needs OWNER_PIN in web/.env (read, never printed). Uses a throwaway barber, an approved scratch
  * phone (sync needs one, slice 15) and fixed past dates in February 2000 (no real data); its
  * sales, ledger rows, reconciliations, phone and barber are deleted at the end.
+ *
+ * Part 4 (slice 20) checks `from`/`to`: rangeFigures against computeExpected + totalsForDate +
+ * the legacy item query day by day (both bases), whole answers against the legacy date/period
+ * answer (one day, a completed past week and month), Manila midnights, held sales, clamped
+ * daily remaining, 400/401/422 and a 366-date range's time. Its fixtures are in January 2000.
  */
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
@@ -17,6 +22,13 @@ import { prisma } from "../src/lib/prisma";
 import { createTestOwner, type TestOwner } from "./lib/test-owner";
 import { createTestDevices } from "./lib/test-devices";
 import { latestRevisionPerDate, leftForShop, listPriceOf, periodDates, remainingToPay, serviceGap } from "../src/lib/ledger-summary";
+import { createTestBarberSession } from "./lib/test-barber-session";
+import { manilaToday, parseBusinessDate } from "../src/lib/business-date";
+import { datesBetween } from "../src/lib/date-range";
+import { rangeFigures } from "../src/lib/range-figures";
+import { computeExpected } from "../src/lib/reconciliation";
+import { totalsForDate, type Base } from "../src/lib/payout-totals";
+import { countsOnDay } from "../src/lib/time-review";
 
 loadEnvConfig(process.cwd());
 
@@ -219,6 +231,7 @@ async function integration() {
   check("over the week too: service sales + Discounts = revenue", loyaltyWeek.services.reduce((n, s) => n.add(s.listSales), D(0)).add(loyaltyWeek.serviceGap).equals(loyaltyWeek.sales.total), `${JSON.stringify(loyaltyWeek.services)} ${loyaltyWeek.serviceGap} ${loyaltyWeek.sales.total}`);
 
   await customAmounts();
+  await ranges();
 }
 
 type CustomList = {
@@ -307,9 +320,226 @@ async function customAmounts() {
   check("read-only: a missing date answers 400", (await call("GET", "/api/v1/reports/custom-amounts")).status === 400);
 }
 
+// ── Part 4, slice 20: from/to ────────────────────────────────────────────────
+
+const JAN = periodDates("2000-01-15", "month"); // all of January 2000
+const W_MON = "2000-01-10"; // a completed past week: Mon 2000-01-10 .. Sun 2000-01-16
+const W_SUN = "2000-01-16";
+let barberSessionCleanup: (() => Promise<void>) | null = null;
+
+type RangeSummary = Summary & { date: string; heldForReview: number; commissionBase: string };
+const rangeSummary = (from: string, to: string, base = "LIST_PRICE", cookie = ownerCookie) =>
+  call<RangeSummary>("GET", `/api/v1/reports/ledger-summary?from=${from}&to=${to}&commissionBase=${base}`, undefined, cookie);
+const legacy = (date: string, period: string, base = "LIST_PRICE") =>
+  call<RangeSummary>("GET", `/api/v1/reports/ledger-summary?date=${date}&period=${period}&commissionBase=${base}`);
+// Every field but the two that name the request (`date`, `period`).
+function sameAnswer(a: RangeSummary, b: RangeSummary) {
+  const strip = (s: RangeSummary) => JSON.stringify({ ...s, date: undefined, period: undefined });
+  return strip(a) === strip(b);
+}
+
+type Fixture = {
+  at: string; amount: number; method?: "CASH" | "GCASH" | "MAYA" | "QRPH"; status?: "PAID" | "PENDING" | "EXPIRED" | "FAILED";
+  tip?: number; listPrice?: number; flag?: boolean; reviewedOn?: string;
+};
+// Written directly, as the sync would store them: QR Ph sales and their statuses can't be synced
+// while the gateway is off, and a flagged sale needs a phone clock that is wrong.
+async function insertSale(f: Fixture) {
+  const id = randomUUID();
+  txIds.push(id);
+  const list = f.listPrice ?? f.amount;
+  await prisma.transaction.create({
+    data: {
+      id, barberId: BARBER, totalAmount: f.amount, listPrice: list, amountPaid: f.amount, tipAmount: f.tip ?? 0,
+      discountType: list > f.amount ? "PERCENT" : "NONE", discountAmount: list - f.amount,
+      barberCommissionAmount: list / 2, commissionRate: 0.5, paymentMethod: f.method ?? "CASH", paymentStatus: f.status ?? "PAID",
+      transactionTime: new Date(f.at),
+      ...(f.flag ? { timeFlag: "DEVICE_CLOCK_SKEW" as const, clockSkewSeconds: 3600 } : {}),
+      ...(f.reviewedOn ? { timeReviewedAt: new Date(), timeReviewChoice: "RECEIVED_DATE" as const, timeReviewedBusinessDate: dateValue(f.reviewedOn) } : {}),
+      items: { create: { serviceId: SERVICE_ID, priceAtSale: list } },
+      commissionLogs: { create: { barberId: BARBER, amount: list / 2 } },
+    },
+  });
+  return id;
+}
+
+// The legacy summary's per-day sources, called as its date/period path calls them.
+async function legacyDay(date: string, base: Base) {
+  const day = parseBusinessDate(date)!;
+  const [expected, byBarber, items] = await Promise.all([
+    computeExpected(day, 0),
+    totalsForDate(date, base),
+    prisma.transactionItem.findMany({
+      where: { transaction: { ...countsOnDay(day), paymentStatus: "PAID" } },
+      select: { service: { select: { name: true } }, transaction: { select: { listPrice: true, amountPaid: true, totalAmount: true } } },
+    }),
+  ]);
+  const services = new Map<string, { count: number; listSales: Prisma.Decimal }>();
+  for (const item of items) {
+    const entry = services.get(item.service.name) ?? { count: 0, listSales: D(0) };
+    services.set(item.service.name, { count: entry.count + 1, listSales: entry.listSales.add(listPriceOf(item.transaction)) });
+  }
+  return { expected, byBarber, services };
+}
+
+const mapJson = <V>(m: Map<string, V>, f: (v: V) => unknown) =>
+  JSON.stringify([...m.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, f(v)]));
+const sumOf = (values: Iterable<{ commission: Prisma.Decimal; viewCommission: Prisma.Decimal; tips: Prisma.Decimal }>, key: "commission" | "viewCommission" | "tips") =>
+  [...values].reduce((n, t) => n.add(t[key]), D(0));
+
+async function equivalence(label: string) {
+  const first = parseBusinessDate(JAN[0])!;
+  const last = parseBusinessDate(JAN[JAN.length - 1])!;
+  for (const base of ["LIST_PRICE", "AMOUNT_PAID"] as const) {
+    const { perDate, total } = await rangeFigures(first, last, base);
+    const mismatches: string[] = [];
+    let sumRevenue = D(0);
+    for (const date of JAN) {
+      const got = perDate.get(date)!;
+      const want = await legacyDay(date, base);
+      const fields: [string, string, string][] = [
+        ["cash", got.cash.toFixed(2), want.expected.cashSales.toFixed(2)],
+        ["gcash", got.gcash.toFixed(2), want.expected.gcashTotal.toFixed(2)],
+        ["maya", got.maya.toFixed(2), want.expected.mayaTotal.toFixed(2)],
+        ["qrph", got.qrph.toFixed(2), want.expected.qrphTotal.toFixed(2)],
+        ["revenue", got.revenue.toFixed(2), want.expected.totalRevenue.toFixed(2)],
+        ["count", String(got.count), String(want.expected.transactionCount)],
+        ["commissions", got.commissions.toFixed(2), sumOf(want.byBarber.values(), "viewCommission").toFixed(2)],
+        ["canonical commission", got.canonicalCommission.toFixed(2), sumOf(want.byBarber.values(), "commission").toFixed(2)],
+        ["tips", got.tips.toFixed(2), sumOf(want.byBarber.values(), "tips").toFixed(2)],
+      ];
+      for (const [name, a, b] of fields) if (a !== b) mismatches.push(`${date} ${name} ${a} ≠ ${b}`);
+      const svc = (v: { count: number; listSales: Prisma.Decimal }) => [v.count, v.listSales.toFixed(2)];
+      if (mapJson(got.services, svc) !== mapJson(want.services, svc)) mismatches.push(`${date} services`);
+      const barber = (v: { commission: Prisma.Decimal; viewCommission: Prisma.Decimal; tips: Prisma.Decimal }) =>
+        [v.commission.toFixed(2), v.viewCommission.toFixed(2), v.tips.toFixed(2)];
+      if (mapJson(got.byBarber, barber) !== mapJson(want.byBarber, barber)) mismatches.push(`${date} per barber`);
+      sumRevenue = sumRevenue.add(got.revenue);
+    }
+    check(`${label}: rangeFigures = computeExpected + totalsForDate + item query on each of January's 31 days (${base})`, mismatches.length === 0, mismatches.slice(0, 5).join("; "));
+    check(`${label}: the range total is the sum of its days (${base})`, total.revenue.equals(sumRevenue), `${total.revenue} vs ${sumRevenue}`);
+  }
+}
+
+async function ranges() {
+  console.log("\nDate ranges (slice 20)");
+  const existing = await prisma.transaction.count({ where: { transactionTime: { gte: new Date("2000-01-01T00:00:00.000+08:00"), lt: new Date("2000-02-01T00:00:00.000+08:00") } } });
+  if (existing > 0) throw new Error(`${existing} sales already exist in January 2000; refusing to run`);
+
+  // Every payment method and status, tips, a loyalty discount (so the two bases differ), flagged sales.
+  await insertSale({ at: AT(W_MON, "10:00:00.000"), amount: 250, tip: 20 });
+  await insertSale({ at: AT(W_MON, "11:00:00.000"), amount: 300, method: "GCASH" });
+  await insertSale({ at: AT("2000-01-11", "10:00:00.000"), amount: 250, method: "MAYA", tip: 10 });
+  await insertSale({ at: AT("2000-01-11", "12:00:00.000"), amount: 250, method: "QRPH" });
+  await insertSale({ at: AT("2000-01-11", "13:00:00.000"), amount: 250, method: "QRPH", status: "PENDING" });
+  await insertSale({ at: AT("2000-01-12", "13:00:00.000"), amount: 250, method: "QRPH", status: "EXPIRED" });
+  await insertSale({ at: AT("2000-01-12", "14:00:00.000"), amount: 250, method: "QRPH", status: "FAILED" });
+  await insertSale({ at: AT("2000-01-12", "15:00:00.000"), amount: 125, listPrice: 250 });
+  // Flagged: stamped after the week and confirmed onto its Thursday; stamped inside and confirmed after it; one held.
+  await insertSale({ at: AT("2000-01-20", "10:00:00.000"), amount: 500, flag: true, reviewedOn: "2000-01-13" });
+  await insertSale({ at: AT("2000-01-14", "10:00:00.000"), amount: 300, flag: true, reviewedOn: "2000-01-25" });
+  const held = await insertSale({ at: AT("2000-01-15", "10:00:00.000"), amount: 400, flag: true });
+  // Edge case 1: the four Manila midnights around the week.
+  await insertSale({ at: AT("2000-01-09", "23:59:59.999"), amount: 111 });
+  await insertSale({ at: AT(W_MON, "00:00:00.000"), amount: 222 });
+  await insertSale({ at: AT(W_SUN, "23:59:59.999"), amount: 333, method: "GCASH" });
+  await insertSale({ at: AT("2000-01-17", "00:00:00.000"), amount: 444 });
+
+  // Petty cash on Tuesday; a part payout on Wednesday through the route; Monday overpaid by 100
+  // (a stored payment above what its sales now say, written directly: the route refuses one).
+  const rec = await call("POST", "/api/v1/reports/reconciliation", { date: "2000-01-11", countedCash: 0, pettyCashAmount: 50 });
+  check("ranges setup: petty cash saved on Tuesday", rec.status === 200 || rec.status === 201, String(rec.status));
+  const partial = await call<{ success: boolean }>("POST", "/api/v1/reports/payouts", { id: randomUUID(), date: "2000-01-12", barberId: BARBER, commissionBase: "LIST_PRICE", method: "CASH", amount: 50 });
+  check("ranges setup: a ₱50 payout on Wednesday", partial.status === 200 && partial.body.success, JSON.stringify(partial.body));
+  const mondayOwed = D(125 + 150 + 111).add(20); // the 250, 300 and 00:00 ₱222 sales at 50%, plus the tip
+  const ledger = await prisma.dailyPayoutLedger.create({
+    data: { barberId: BARBER, businessDate: dateValue(W_MON), commissionTotal: mondayOwed.sub(20), tipTotal: 20, totalOwed: mondayOwed, cashPaid: mondayOwed.add(100), paidAt: new Date() },
+  });
+  await prisma.payoutEntry.create({
+    data: { id: randomUUID(), ledgerId: ledger.id, barberId: BARBER, businessDate: dateValue(W_MON), method: "CASH", amount: mondayOwed.add(100), owedAtEntry: mondayOwed.add(100) },
+  });
+
+  console.log("\nEquivalence with the existing calculations");
+  await equivalence("before review");
+  for (const base of ["LIST_PRICE", "AMOUNT_PAID"]) {
+    const [rDay, lDay] = await Promise.all([rangeSummary("2000-01-12", "2000-01-12", base), legacy("2000-01-12", "day", base)]);
+    check(`a one-day range = the legacy period=day answer, field for field (${base})`, rDay.status === 200 && sameAnswer(rDay.body, lDay.body), `\n${JSON.stringify(rDay.body)}\n${JSON.stringify(lDay.body)}`);
+    const [rWeek, lWeek] = await Promise.all([rangeSummary(W_MON, W_SUN, base), legacy("2000-01-13", "week", base)]);
+    check(`a completed past week Mon..Sun = the legacy period=week answer, field for field (${base})`, rWeek.status === 200 && sameAnswer(rWeek.body, lWeek.body), `\n${JSON.stringify(rWeek.body)}\n${JSON.stringify(lWeek.body)}`);
+    const [rMonth, lMonth] = await Promise.all([rangeSummary(JAN[0], JAN[30], base), legacy("2000-01-20", "month", base)]);
+    check(`a completed past month = the legacy period=month answer, field for field (${base})`, rMonth.status === 200 && sameAnswer(rMonth.body, lMonth.body), `\n${JSON.stringify(rMonth.body)}\n${JSON.stringify(lMonth.body)}`);
+  }
+  const weekRange = (await rangeSummary(W_MON, W_SUN)).body;
+  check("the answer echoes from and to and lists each of the 7 days", weekRange.from === W_MON && weekRange.to === W_SUN && weekRange.days.length === 7 && weekRange.days[0].date === W_MON && weekRange.days[6].date === W_SUN);
+  check("a one-day range has no per-day list, as the legacy day", (await rangeSummary(W_MON, W_MON)).body.days.length === 0);
+
+  console.log("\nManila midnights (edge case 1)");
+  const dayRevenue = (s: RangeSummary, date: string) => s.days.find((d) => d.date === date)?.revenue;
+  check("00:00:00.000 on from is in (Monday 250 + 300 + 222 = 772.00)", dayRevenue(weekRange, W_MON) === "772.00", dayRevenue(weekRange, W_MON));
+  check("23:59:59.999 on to is in (Sunday 333.00)", dayRevenue(weekRange, W_SUN) === "333.00", dayRevenue(weekRange, W_SUN));
+  check("23:59:59.999 the day before from is out: it counts on that day", (await rangeSummary("2000-01-09", "2000-01-09")).body.sales.total === "111.00");
+  check("00:00:00.000 the day after to is out: it counts on that day", (await rangeSummary("2000-01-17", "2000-01-17")).body.sales.total === "444.00");
+  // Mon 772, Tue 250 Maya + 250 QR Ph, Wed 125, Thu 500 (reviewed onto it), Sun 333.
+  check("the week holds exactly its own sales (2230.00, 8 paid)", weekRange.sales.total === "2230.00" && weekRange.sales.count === 8, JSON.stringify(weekRange.sales));
+  check("PENDING, EXPIRED and FAILED QR Ph sales count nowhere; the PAID one counts", weekRange.sales.qrph === "250.00", weekRange.sales.qrph);
+
+  console.log("\nHeld for review (edge case 2)");
+  check("an unreviewed flagged sale stamped in the range is held, not counted (Saturday 0.00)", weekRange.heldForReview === 1 && dayRevenue(weekRange, "2000-01-15") === "0.00", `${weekRange.heldForReview} ${dayRevenue(weekRange, "2000-01-15")}`);
+  check("a flagged sale stamped in the range but confirmed after it is not in it (Friday 0.00)", dayRevenue(weekRange, "2000-01-14") === "0.00");
+  check("a flagged sale stamped after the range but confirmed inside it counts on that day (Thursday 500.00)", dayRevenue(weekRange, "2000-01-13") === "500.00");
+  const reviewed = await call<{ success: boolean }>("POST", "/api/v1/reports/time-review", { transactionId: held, choice: "STATED_DATE" });
+  check("ranges setup: the held sale's stated date confirmed", reviewed.status === 200 && reviewed.body.success, JSON.stringify(reviewed.body));
+  const afterReview = (await rangeSummary(W_MON, W_SUN)).body;
+  check("after review it counts on its confirmed date (Saturday 400.00, week 2630.00, none held)", dayRevenue(afterReview, "2000-01-15") === "400.00" && afterReview.sales.total === "2630.00" && afterReview.heldForReview === 0, JSON.stringify(afterReview.sales));
+  check("…and on no other day of the range", afterReview.days.filter((d) => d.date !== "2000-01-15").every((d) => d.revenue === dayRevenue(weekRange, d.date)));
+  await equivalence("after review");
+
+  console.log("\nDaily versus range-level remaining (edge case 5)");
+  const owed = D(afterReview.payouts.owed), paid = D(afterReview.payouts.paid), remaining = D(afterReview.payouts.remaining);
+  const days = await Promise.all(datesBetween(W_MON, W_SUN).map(async (d) => (await rangeSummary(d, d)).body.payouts));
+  const clampedSum = days.reduce((n, p) => n.add(p.remaining), D(0));
+  check("Monday is overpaid by 100: its remaining is 0.00", days[0].remaining === "0.00" && D(days[0].paid).sub(days[0].owed).equals(100), JSON.stringify(days[0]));
+  check("the range remaining is the sum of the clamped daily balances", remaining.equals(clampedSum), `${remaining} vs ${clampedSum}`);
+  check("…not owed − paid (which is 100 lower: the overpaid day hides another day's balance)", remaining.equals(owed.sub(paid).add(100)), `${owed} ${paid} ${remaining}`);
+
+  console.log("\nRefused");
+  const to = JAN[30];
+  const year = datesBetween("1999-01-31", to); // 366 dates
+  check("from after to → 400", (await rangeSummary(W_SUN, W_MON)).status === 400);
+  check("367 dates → 400", (await rangeSummary("1999-01-30", to)).status === 400);
+  check("date together with from → 400", (await call("GET", `/api/v1/reports/ledger-summary?date=${W_MON}&from=${W_MON}&to=${W_SUN}`)).status === 400);
+  check("period together with from/to → 400", (await call("GET", `/api/v1/reports/ledger-summary?period=week&from=${W_MON}&to=${W_SUN}`)).status === 400);
+  check("from without to → 400", (await call("GET", `/api/v1/reports/ledger-summary?from=${W_MON}`)).status === 400);
+  check("an impossible date → 400", (await rangeSummary("2000-02-30", "2000-03-01")).status === 400);
+  const today = manilaToday();
+  const tomorrow = new Date(Date.parse(`${today}T00:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
+  const future = await rangeSummary(today, tomorrow);
+  check("to after today (Manila) → 422 \"That date has not happened yet\"", future.status === 422 && future.body.error === "That date has not happened yet", `${future.status} ${future.body.error}`);
+  check("to = today (Manila) is accepted", (await rangeSummary(today, today)).status === 200);
+  check("no owner access → 401", (await rangeSummary(W_MON, W_SUN, "LIST_PRICE", "")).status === 401);
+  const barber = await createTestBarberSession(BASE, prisma, BARBER, devices.headers(deviceKey), deviceKey, "sum");
+  barberSessionCleanup = barber.cleanup;
+  check("a barber session → 401", (await rangeSummary(W_MON, W_SUN, "LIST_PRICE", barber.cookie)).status === 401);
+  const onPhone = await call("GET", `/api/v1/reports/ledger-summary?from=${W_MON}&to=${W_SUN}`, undefined, barber.cookie, devices.headers(deviceKey));
+  check("a barber session on an approved phone → 401", onPhone.status === 401);
+
+  console.log("\nRead-only and time");
+  const counts = () => Promise.all([prisma.transaction.count(), prisma.dailyPayoutLedger.count(), prisma.payoutEntry.count(), prisma.shiftReconciliation.count()]);
+  const before = await counts();
+  const started = performance.now();
+  const long = await rangeSummary(year[0], to);
+  const ms = Math.round(performance.now() - started);
+  console.log(`    366-date range ${year[0]}..${to}: ${ms} ms`);
+  check(`a 366-date range answers in under 10 seconds (${ms} ms)`, long.status === 200 && long.body.days.length === 366 && ms < 10_000, `HTTP ${long.status}`);
+  check("…and holds January's sales", long.body.sales.total === (await rangeSummary(JAN[0], to)).body.sales.total);
+  check("range requests write nothing (transactions, ledger rows, entries, reconciliations)", JSON.stringify(await counts()) === JSON.stringify(before));
+}
+
 async function cleanupDates() {
   await prisma.dailyPayoutLedger.deleteMany({ where: { businessDate: { in: MONTH.map(dateValue) } } });
   await prisma.shiftReconciliation.deleteMany({ where: { reconciliationDate: { in: MONTH.map(dateValue) } } });
+  await prisma.dailyPayoutLedger.deleteMany({ where: { businessDate: { in: JAN.map(dateValue) } } });
+  await prisma.shiftReconciliation.deleteMany({ where: { reconciliationDate: { in: JAN.map(dateValue) } } });
 }
 
 async function cleanup() {
@@ -337,6 +567,7 @@ main()
   })
   .finally(async () => {
     await testOwner?.cleanup().catch((e) => console.error("Test owner cleanup failed:", e));
+    await barberSessionCleanup?.().catch((e) => console.error("Test barber cleanup failed:", e));
     await cleanup().catch((e) => console.error("Cleanup failed:", e));
     await prisma.$disconnect();
     console.log(`\n${passed} passed, ${failures.length} failed`);
