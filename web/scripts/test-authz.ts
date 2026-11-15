@@ -447,7 +447,7 @@ async function allowed() {
 
 // Markup only a rendered page has (the template's `rz-page-in`/`rz-page-out` transition names don't count).
 function pageMarkup(html: string): string | null {
-  const found = ["Paid sales today", "New account", "Owner ledger"].filter((t) => html.includes(t));
+  const found = ["Expected drawer cash", "New account", "Owner ledger"].filter((t) => html.includes(t));
   for (const cls of [/rz-page(?!-)/, /rz-panel/, /rz-banner/, /rz-mirror/]) if (cls.test(html)) found.push(cls.source);
   return found.length ? found.join(", ") : null;
 }
@@ -484,7 +484,7 @@ async function pages() {
 
   console.log("\nP2 the owner opens / and every owner page from an unapproved browser");
   const homeOwner = await call("GET", "/", { headers: as(ownerCookie) });
-  check("/ with the owner session alone → 200 with the paid-sale count", homeOwner.status === 200 && homeOwner.text.includes("Paid sales today"), `HTTP ${homeOwner.status}`);
+  check("/ with the owner session alone → 200 with the dashboard (slice 21a)", homeOwner.status === 200 && homeOwner.text.includes("Expected drawer cash") && homeOwner.text.includes("Owed to barbers"), `HTTP ${homeOwner.status}`);
   check("/ with the owner session: page markup present (the barber check above means something)", pageMarkup(homeOwner.text) !== null);
   const aboutOwner = await call("GET", "/about", { headers: as(ownerCookie) });
   check("/about with the owner session alone → 200", aboutOwner.status === 200, `HTTP ${aboutOwner.status}`);
@@ -516,7 +516,7 @@ async function pages() {
   for (const path of ["/", "/about", "/ledger", "/insights", "/forecast", "/staff"]) {
     const none = await call("GET", path);
     check(`${path} with no credentials → 200 (the approval or sign-in screen), not redirected`, none.status === 200, `HTTP ${none.status}`);
-    check(`${path} with no credentials: no paid-sale count or account form`, !none.text.includes("Paid sales today") && !none.text.includes("New account"));
+    check(`${path} with no credentials: no dashboard, peso figure or account form`, !none.text.includes("Expected drawer cash") && !none.text.includes("Owed to barbers") && !none.text.includes("₱") && !none.text.includes("New account"));
   }
 
   console.log("\nP4 barber sign-in clears a leftover PIN cookie");

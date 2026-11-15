@@ -119,6 +119,26 @@ const accessSource = read(join(process.cwd(), "src", "lib", "owner-access.ts"));
 const helper = accessSource.slice(accessSource.indexOf("export async function ownerPageAccess"), accessSource.indexOf("export async function ownerPageAccess") + 600);
 check("ownerPageAccess redirects a non-owner account session to BARBER_HOME", /role !== "OWNER"\) redirect\(BARBER_HOME\)/.test(helper));
 
+console.log("\nA8 `/` without owner access queries nothing (slice 21a, Decision 6)");
+const home = read(join(APP, "page.tsx"));
+const homeCode = home.replace(/^\s*\/\/.*$/gm, "");
+const homeImports = [...home.matchAll(/from "(@\/[^"]+)"/g)].map((m) => m[1]);
+const HOME_MAY_IMPORT = ["@/lib/owner-access", "@/lib/dashboard", "@/components/ApprovalScreen", "@/components/OwnerPageGate", "@/components/dashboard/Dashboard"];
+check("/ imports only the access check, the gate and the dashboard", homeImports.length > 0 && homeImports.every((name) => HOME_MAY_IMPORT.includes(name)), homeImports.join(", "));
+check("/ holds no query of its own (no prisma, no loader call)", !/\bprisma\b|\bload[A-Z]\w*\(|latestForecast\(/.test(homeCode));
+const fromDashboardLib = /import \{([^}]*)\} from "@\/lib\/dashboard"/.exec(home)?.[1].split(",").map((name) => name.trim()).filter(Boolean) ?? [];
+check("/ takes only the period parser from lib/dashboard (no loader)", fromDashboardLib.join(",") === "parseDashboardPeriod", fromDashboardLib.join(","));
+const ownerCheckAt = homeCode.indexOf("await ownerPageAccess()");
+const refusalAt = homeCode.indexOf("if (!isOwner)");
+const dashboardAt = homeCode.indexOf("<Dashboard");
+const searchAt = homeCode.indexOf("await searchParams");
+check("/ checks owner access first, and returns before the dashboard without it", ownerCheckAt > 0 && refusalAt > ownerCheckAt && dashboardAt > refusalAt && /if \(!isOwner\) \{\s*return \(/.test(homeCode));
+check("/ renders the dashboard once, in the owner branch", homeCode.split("<Dashboard").length === 2);
+check("/ reads the period only with owner access", searchAt > refusalAt);
+check("/ without owner access renders the gate with no content", /<ApprovalGate pathname="\/" title="Ruzzco Barbers" ownerAccess=\{false\}>\s*\{null\}\s*<\/ApprovalGate>/.test(homeCode));
+const dashboardLib = read(join(process.cwd(), "src", "lib", "dashboard.ts"));
+check("the dashboard's loaders are read-only (no create, update, upsert or delete)", dashboardLib.length > 0 && !/\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(/.test(dashboardLib));
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   for (const f of failures) console.log(`  FAIL ${f}`);

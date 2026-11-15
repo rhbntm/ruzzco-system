@@ -55,10 +55,10 @@
   /* Payment methods. Cash is neutral, so red never means both "cash" and "wrong". */
   --color-cash: #374151;
   --color-cash-ink: #1f2937;
-  --color-gcash: #1f6fe0;
+  --color-gcash: #1a64d0;
   --color-gcash-ink: #1553b7;
   --color-gcash-solid: #1f66d9;
-  --color-maya: #0b8650;
+  --color-maya: #0a7a48;
   --color-maya-ink: #0a6b3f;
   --color-maya-solid: #0d7f4a;
   --color-qrph: #7c3aed;

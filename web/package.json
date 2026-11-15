@@ -25,6 +25,7 @@
     "test:insights-story": "tsx scripts/test-insights-story.ts",
     "test:ledger-summary": "tsx scripts/test-ledger-summary.ts",
     "test:local-session": "tsx scripts/test-local-session.ts",
+    "test:nav": "tsx scripts/test-nav.ts",
     "test:payout-entries": "tsx scripts/test-payout-entries.ts",
     "test:payout-history": "tsx scripts/test-payout-history.ts",
     "test:local-name": "node scripts/test-local-name.mjs",
@@ -43,6 +44,7 @@
     "test:reconciliation": "tsx scripts/test-reconciliation.ts",
     "test:submit-lock": "tsx scripts/test-submit-lock.ts",
     "test:time-review": "tsx scripts/test-time-review.ts",
+    "test:theme": "tsx scripts/test-theme.ts",
     "test:sync-clock": "tsx scripts/test-sync-clock.ts",
     "test:sync-queue": "tsx scripts/test-sync-queue.ts",
     "test:sync-rejections": "tsx scripts/test-sync-rejections.ts"

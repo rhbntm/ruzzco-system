@@ -1,6 +1,6 @@
 # Slice 21 — Redesign: owner shell and dashboard, light and dark themes, logo, range picker
 
-Repo: `ruzzco-system`. Status: **DRAFT, not approved. PRELIMINARY, register items PR-2, PR-3, PR-5 (screen half) and PR-7** (written 2026-11-15), branch `revision/preliminary`. Nothing here is built until the decisions in §3 and the assumptions in §8 are answered. Built on slice 20 (date ranges backend), which is committed (`948efef`). Delivered as four increments, 21a to 21d (§5).
+Repo: `ruzzco-system`. Status: **APPROVED 2026-11-15 (§8 answered, see §8), in progress: 21a built (§5.1 "As built"), 21c, 21b and 21d not started. PRELIMINARY, register items PR-2, PR-3, PR-5 (screen half) and PR-7** (written 2026-11-15), branch `revision/preliminary`. Built on slice 20 (date ranges backend), which is committed (`948efef`). Delivered as four increments, 21a to 21d (§5).
 Source design: six screen mock-ups and two design-system documents in the private vault (`../ruzzco-barbers/70_App_Screens/stitch_ruzzco_pos_design_system/`). They are generated mock-ups: layout and visual language are the input; their figures, names, labels and features are not (§2). Requirements: the team's redesign brief of 2026-11-14 (private notes), whose rules this spec follows: a light, plain POS theme; two role-specific experiences; presentation only, with no change to pricing, discounts, tips, commission, payouts, cash reconciliation, sync, offline behaviour or forecasting.
 Goal: the owner lands on a dashboard inside one navigation, the app reads as a plain POS in a light theme (dark kept as a choice), the shop's logo is on every screen, and the reports get the from/to picker that slice 20 prepared.
 
@@ -27,7 +27,7 @@ The mock-ups also omit states the pages must keep: sign-in and approval screens,
 
 No figure, name or identifier is copied from the mock-ups into code, fixtures, tests or this spec.
 
-## 3. Decisions (all proposed, none approved)
+## 3. Decisions (approved 2026-11-15 with the answers in §8)
 
 1. **Two themes from one token set, light by default.** The existing `--color-*` tokens keep their names; `:root` holds the light values and `:root[data-theme="dark"]` today's values. The choice is per browser (`localStorage`), applied by a small inline script in the root layout before first paint, so it works on a cached `/pos` with the shop PC off and needs no server check. The brief asks only for light; dark is kept because its values already exist. If time runs out the switch is dropped and light ships alone.
 2. **Colour roles** (the plan's role table): crimson for the logo, the barber-pole strip and the one primary action per screen; red text only for errors and a short drawer; three statuses (done, waiting, needs attention), each with an icon and a word; payment methods keep their colours, with cash neutral (dark ink) so red stops meaning both "cash" and "wrong". Brass stays in dark only; in light, money totals are plain ink. Text contrast at least 4.5:1 in both themes.
@@ -95,7 +95,7 @@ Four increments, each a complete workflow that can be verified, committed and st
 
 Rules for every increment:
 
-- It starts only when the §8 assumptions it lists are answered. Nothing in this section answers one.
+- It starts only when the §8 assumptions it lists are answered (all were, 2026-11-15).
 - It ends with the app working on every page, the checks of §6 passing, its own manual test done, and one commit (when asked). The next increment starts from that commit.
 - If time runs out, whole increments are cut from the end; inside an increment, the items marked "cut first".
 
@@ -120,6 +120,21 @@ The owner signs in, lands on a dashboard, and reaches every owner page from one 
   - Every page, `/pos` and `/shift-log` included, has no dark surface left and no text below 4.5:1; the POS still records a sale online and with the shop PC off.
 - Tests: new `test:theme` (light set only: every token defined; no colour literal outside the token blocks; contrast pairs); new `test:nav` (owner list holds no `/pos` or `/shift-log`); `test:approval-gate` gains the no-query check on `/`; `test:ledger-summary` unchanged after the move, plus the dashboard-equals-summary check for today and for Monday to today.
 - Manual test: (1) sign in as the owner, read the dashboard, switch the three periods; (2) compare one period's sales with `/ledger`'s Summary and the drawer card with `/reconciliation`; (3) open the nine menu items, then Lock; (4) on a phone, record one cash sale on the now-light POS, then once more with the shop PC off.
+
+**As built (2026-11-15).** Commits: `c2be7b4`, `c59bc30`, `a1039f5` (the code, pushed mid-increment for a hosted preview, before verification) and the completing commit named in the session log (tests, service worker, `offline.html`, documents, two colour fixes).
+
+- Delivered: every deliverable above. `DESIGN.md` was rewritten whole rather than amended, because most of the old text described the removed station, room and cursor; `PRODUCT.md` stays for 21d.
+- Differences from the text above, all presentation:
+  - The top bar names the page as a short trail ("Owner / Barber Ledger") beside today's date, and each page keeps its own heading and reload button under it, so the title is not printed twice as a heading.
+  - `/about` follows `/` (assumption 8): without owner access it queries nothing and renders only the approval or sign-in screen.
+  - End-of-Day Cash lost its links to `/shift-log` and `/pos` with its "Home" link: an owner screen links to no barber page (`test:nav`).
+  - The forecast on the dashboard is the existing `ForecastPanel`, which is a card of its own, so it is not wrapped in a second card.
+  - The per-barber table reads `rangeFigures` directly (the summary's own sales query); `rangeSummary` moved unchanged and returns no per-barber rows. `test:ledger-summary` checks the rows add up to the summary.
+  - Payment mix shows QR Ph when the gateway is on or the period holds QR Ph sales, so the shares always add up to the total.
+  - `BarList` takes an optional colour per bar; `ColumnChart` is unchanged.
+- Tests: `test:theme` 87 (found GCash and Maya text below 4.5:1 on the canvas; both darkened), `test:nav` 27, `test:approval-gate` 126 (A8, eight checks on `/`), `test:ledger-summary` 143 (22 dashboard checks: each period equals `GET ledger-summary?from&to` field for field, the drawer card equals End-of-Day Cash, `/` without owner access holds no barber or service name and no peso amount, a barber session is redirected), `test:authz` 318 (three checks named the old home page's "Paid sales today" text; they now name the dashboard, and the signed-out check also refuses any peso amount). Every other suite passed unchanged, except three that could not run here: attribution T17 (`TEST_ADMIN_DATABASE_URL` unset), `test:device-approval` (`DEVICE_APPROVAL_PIN` unset), `test:forecast` (ml-service not running). `npm run lint` and `npx tsc --noEmit` clean.
+- Checked in a desktop browser (dev server): the dashboard and its three periods; all nine menu items at 1440 px and, in a 360 px frame, `/`, `/ledger`, `/pos` and `/shift-log` (no sideways scroll); the phone menu (a choice navigates, Escape and Back close it, focus returns to its button); Lock; signing in on an owner page brings the menu up without a reload; the approval, sign-in choice, owner sign-in and barber sign-in screens with the logo.
+- Not checked, still owed: the POS and Shift Log behind the barber sign-in (the ticket, charge sheet and done screen) were not seen in light by anyone yet, and manual test step 4 (a cash sale on a phone, online and with the shop PC off) needs a real phone. `sw.js` VERSION 5 was not exercised against an installed phone.
 
 ### 5.2 Slice 21c: financial management (PR-5, screen half)
 
@@ -189,7 +204,9 @@ Every remaining screen uses the same components, and the app is consistent end t
 
 One pass over the whole app as each role, in every theme that ships, on a real phone and the shop PC; the app-screens catalog is captured again; the register rows are updated per increment (21a: PR-2, PR-3, PR-7; 21c: PR-5; 21b and 21d: PR-3).
 
-## 8. Assumptions for approval
+## 8. Assumptions (all answered 2026-11-15)
+
+Answers: 1 light is the default and the only theme offered until 21d has verified dark on every page; the switch is the first cut. 2 cash neutral. 3 the charge-sheet flow stays; no one-tap payment. 4 as written; only the period cards change. 5 `/pos` is the barber's home. 6 the existing mustache mark with the wordmark, on every screen including sign-in and approval. 7 presets and payout history in 21c; custom from/to optional and cut first; Insights keeps 7, 14 and 30 days. 8 as written. 9 Oswald and the system sans; no CDN. 10 no Shift Logs in the owner menu. 11 as written. 12 accepted; verification is not traded for the estimate.
 
 1. Light is the default and dark stays as a switch (Decision 1). The brief asks only for light; alternative: light only.
 2. Cash becomes neutral instead of crimson (Decision 2). The two design documents disagree (one crimson, one green).

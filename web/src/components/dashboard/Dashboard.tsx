@@ -166,11 +166,14 @@ export function Dashboard({ period }: { period: DashboardPeriod }) {
             </div>
           </div>
 
-          <Card title="Customer forecast" caption={`From today · ${longDay(today)}`} href="/forecast" linkLabel="Forecast">
-            <Suspense fallback={<CardSkeleton rows={6} />}>
+          {/* The forecast panel is a card of its own (with its link to the detailed forecast). */}
+          <div className="space-y-2">
+            <h3 className="rz-heading text-bone">Customer forecast</h3>
+            <p className="text-xs text-dust">From today · {longDay(today)}</p>
+            <Suspense fallback={<div className="rz-panel p-4 sm:p-5"><CardSkeleton rows={6} /></div>}>
               <ForecastCard forecast={forecast} today={today} />
             </Suspense>
-          </Card>
+          </div>
         </section>
       </div>
     </main>

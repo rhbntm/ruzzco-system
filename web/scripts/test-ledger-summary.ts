@@ -29,6 +29,9 @@ import { rangeFigures } from "../src/lib/range-figures";
 import { computeExpected } from "../src/lib/reconciliation";
 import { totalsForDate, type Base } from "../src/lib/payout-totals";
 import { countsOnDay } from "../src/lib/time-review";
+import { DASHBOARD_PERIODS, dashboardRange, loadPeriodBarbers, loadPeriodSummary, loadTodayDrawer, parseDashboardPeriod } from "../src/lib/dashboard";
+import { presetRange } from "../src/lib/date-range";
+import { peso } from "../src/lib/peso";
 
 loadEnvConfig(process.cwd());
 
@@ -232,6 +235,7 @@ async function integration() {
 
   await customAmounts();
   await ranges();
+  await dashboard();
 }
 
 type CustomList = {
@@ -326,6 +330,7 @@ const JAN = periodDates("2000-01-15", "month"); // all of January 2000
 const W_MON = "2000-01-10"; // a completed past week: Mon 2000-01-10 .. Sun 2000-01-16
 const W_SUN = "2000-01-16";
 let barberSessionCleanup: (() => Promise<void>) | null = null;
+let barberPageCookie = "";
 
 type RangeSummary = Summary & { date: string; heldForReview: number; commissionBase: string };
 const rangeSummary = (from: string, to: string, base = "LIST_PRICE", cookie = ownerCookie) =>
@@ -519,6 +524,7 @@ async function ranges() {
   check("no owner access → 401", (await rangeSummary(W_MON, W_SUN, "LIST_PRICE", "")).status === 401);
   const barber = await createTestBarberSession(BASE, prisma, BARBER, devices.headers(deviceKey), deviceKey, "sum");
   barberSessionCleanup = barber.cleanup;
+  barberPageCookie = barber.cookie;
   check("a barber session → 401", (await rangeSummary(W_MON, W_SUN, "LIST_PRICE", barber.cookie)).status === 401);
   const onPhone = await call("GET", `/api/v1/reports/ledger-summary?from=${W_MON}&to=${W_SUN}`, undefined, barber.cookie, devices.headers(deviceKey));
   check("a barber session on an approved phone → 401", onPhone.status === 401);
@@ -533,6 +539,77 @@ async function ranges() {
   check(`a 366-date range answers in under 10 seconds (${ms} ms)`, long.status === 200 && long.body.days.length === 366 && ms < 10_000, `HTTP ${long.status}`);
   check("…and holds January's sales", long.body.sales.total === (await rangeSummary(JAN[0], to)).body.sales.total);
   check("range requests write nothing (transactions, ledger rows, entries, reconciliations)", JSON.stringify(await counts()) === JSON.stringify(before));
+}
+
+// ── Part 5, slice 21a: the owner dashboard on `/` ────────────────────────────
+
+// The dashboard reads the ledger summary's own function (rangeSummary), so for the same dates its
+// figures are the route's answer. Read-only, on today's real dates: nothing is written here.
+async function dashboard() {
+  console.log("\nOwner dashboard (slice 21a)");
+  const today = manilaToday();
+  check("the period defaults to Today", parseDashboardPeriod(undefined) === "today" && parseDashboardPeriod("year") === "today" && parseDashboardPeriod(["week"]) === "today");
+  check("week and month are read as given", parseDashboardPeriod("week") === "week" && parseDashboardPeriod("month") === "month");
+  const week = dashboardRange("week", today);
+  const month = dashboardRange("month", today);
+  check("Today is today to today", JSON.stringify(dashboardRange("today", today)) === JSON.stringify({ from: today, to: today }));
+  check("This week is Monday to today (presetRange)", JSON.stringify(week) === JSON.stringify(presetRange("thisWeek", today)) && new Date(`${week.from}T00:00:00Z`).getUTCDay() === 1 && week.to === today, JSON.stringify(week));
+  check("This month is the 1st to today (presetRange)", month.from === `${today.slice(0, 7)}-01` && month.to === today, JSON.stringify(month));
+
+  const counts = () => Promise.all([prisma.transaction.count(), prisma.dailyPayoutLedger.count(), prisma.payoutEntry.count(), prisma.shiftReconciliation.count()]);
+  const before = await counts();
+  for (const period of DASHBOARD_PERIODS) {
+    const { from, to } = dashboardRange(period, today);
+    const [mine, route, barbers] = await Promise.all([loadPeriodSummary(period, today), rangeSummary(from, to), loadPeriodBarbers(period, today)]);
+    check(`${period}: the dashboard's summary = GET ledger-summary?from=${from}&to=${to}, field for field`, route.status === 200 && JSON.stringify(mine) === JSON.stringify(route.body), `\n${JSON.stringify(mine)}\n${JSON.stringify(route.body)}`);
+    const sum = (field: "revenue" | "commission" | "tips") => barbers.reduce((n, b) => n.add(b[field]), D(0));
+    check(
+      `${period}: the barber rows add up to the summary (sales, amount paid, commissions, tips)`,
+      barbers.reduce((n, b) => n + b.sales, 0) === mine.sales.count && sum("revenue").equals(mine.sales.total) && sum("commission").equals(mine.shared.commissions) && sum("tips").equals(mine.shared.tips),
+      `${sum("revenue")} ${mine.sales.total} ${sum("commission")} ${mine.shared.commissions}`
+    );
+  }
+  const weekDays = await Promise.all(datesBetween(week.from, week.to).map(async (d) => (await rangeSummary(d, d)).body.sales.total));
+  check("This week's sales are the sum of its days", weekDays.reduce((n, t) => n.add(t), D(0)).equals((await loadPeriodSummary("week", today)).sales.total));
+
+  const drawer = await loadTodayDrawer(today);
+  const eod = await call<{ success: boolean; expected: unknown; saved: unknown; staleness: unknown }>("GET", `/api/v1/reports/reconciliation?date=${today}`);
+  const plain = (value: unknown) => JSON.stringify(JSON.parse(JSON.stringify(value)));
+  check(
+    "the drawer card = End-of-Day Cash for today (expected, saved, staleness)",
+    eod.status === 200 && plain(drawer.expected) === plain(eod.body.expected) && plain(drawer.saved) === plain(eod.body.saved) && plain(drawer.staleness) === plain(eod.body.staleness),
+    `\n${plain(drawer.expected)}\n${plain(eod.body.expected)}`
+  );
+  check("the dashboard's loaders write nothing", JSON.stringify(await counts()) === JSON.stringify(before));
+
+  // The page itself. Without owner access: no roster, no price, no figure in the HTML.
+  const page = async (path: string, cookie: string) => {
+    const res = await fetch(`${BASE}${path}`, { headers: cookie ? { Cookie: cookie } : {}, redirect: "manual" });
+    return { status: res.status, html: await res.text() };
+  };
+  const [roster, services] = await Promise.all([
+    prisma.barber.findMany({ select: { fullName: true } }),
+    prisma.service.findMany({ select: { name: true } }),
+  ]);
+  const signedOut = await page("/", "");
+  const leaked = [...roster.map((b) => b.fullName), ...services.map((s) => s.name)].filter((name) => name.length >= 4 && signedOut.html.includes(name));
+  check("/ without owner access: 200, and no barber or service name in the HTML", signedOut.status === 200 && leaked.length === 0, leaked.join(", "));
+  check("/ without owner access: no peso amount and no dashboard in the HTML", !signedOut.html.includes("₱") && !/Expected drawer cash|Owed to barbers|Payment mix/.test(signedOut.html));
+  const owner = await page("/", ownerCookie);
+  const todaySummary = await loadPeriodSummary("today", today);
+  const CARDS = ["Sales per day", "Payment mix", "Services sold", "Owed to barbers", "Expected drawer cash", "Sales held for date review", "Phones", "Customer forecast"];
+  const missing = CARDS.filter((title) => !owner.html.includes(title));
+  check("/ with owner access: the dashboard and every card", owner.status === 200 && missing.length === 0, `${owner.status} ${missing.join(", ")}`);
+  check("/ with owner access: today's sales figure is the summary's", owner.html.includes(peso(Number(todaySummary.sales.total))), peso(Number(todaySummary.sales.total)));
+  check("/ with owner access: the drawer figure is End-of-Day Cash's", owner.html.includes(peso(Number(drawer.expected.expectedDrawerCash))));
+  const ownerWeek = await page("/?period=week", ownerCookie);
+  check("/?period=week: the week's sales figure is the summary's", ownerWeek.status === 200 && ownerWeek.html.includes(peso(Number((await loadPeriodSummary("week", today)).sales.total))));
+  check("the owner menu is on the page, with no link to /pos or /shift-log", owner.html.includes('href="/ledger"') && owner.html.includes('href="/staff"') && !/href="\/(pos|shift-log)"/.test(owner.html));
+  if (barberPageCookie) {
+    // The barber session made in ranges() is still signed in.
+    const asBarber = await page("/", barberPageCookie);
+    check("/ with a barber session: redirected to /pos, no figure rendered", asBarber.status >= 300 && asBarber.status < 400 && !asBarber.html.includes("₱"), String(asBarber.status));
+  }
 }
 
 async function cleanupDates() {
