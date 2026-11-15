@@ -145,8 +145,8 @@ export default function PaymentQrPage() {
                         )}
                       </div>
                       <div className="flex gap-2">
-                        {/* Crimson only where a QR is still missing; replacing one is the quieter action. */}
-                        <label className={`rz-btn ${qr ? "rz-btn-secondary" : "rz-btn-primary"} flex-1 pointer-coarse:min-h-11 ${working ? "opacity-50 pointer-events-none" : ""}`}>
+                        {/* Secondary everywhere: with several QRs missing, crimson would mark more than one primary action. */}
+                        <label className={`rz-btn rz-btn-secondary flex-1 pointer-coarse:min-h-11 ${working ? "opacity-50 pointer-events-none" : ""}`}>
                           <Upload className="w-4 h-4" />{working ? "Saving…" : qr ? "Replace" : "Upload"}
                           <input
                             type="file"
@@ -180,11 +180,12 @@ export default function PaymentQrPage() {
           ))}
           {/* While the codes load, the panel's shape instead of a blank page. */}
           {busy && barbers.length === 0 && (
-            <div aria-hidden="true" className="rz-panel p-5 space-y-4">
-              <div className="rz-skeleton h-6 w-40" />
+            <div role="status" className="rz-panel p-5 space-y-4">
+              <span className="sr-only">Loading the QR codes…</span>
+              <div aria-hidden="true" className="rz-skeleton h-6 w-40" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rz-skeleton h-56" />
-                <div className="rz-skeleton h-56" />
+                <div aria-hidden="true" className="rz-skeleton h-56" />
+                <div aria-hidden="true" className="rz-skeleton h-56" />
               </div>
             </div>
           )}

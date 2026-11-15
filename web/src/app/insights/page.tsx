@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  ArrowRight,
   Calculator,
   CheckCircle2,
   ChevronLeft,
@@ -27,6 +28,7 @@ import { MethodComparison } from "@/components/MethodComparison";
 import { ColumnChart } from "@/components/ColumnChart";
 import { BarList } from "@/components/BarList";
 import { InsightsPresentation } from "@/components/InsightsPresentation";
+import { peso as formatPeso, pesoWhole } from "@/lib/peso";
 
 // Owner-only and read-only. Every money figure comes from the code End-of-Day Cash
 // (computeExpected) and the Barber Ledger (totalsForDate) already use, so the pages agree.
@@ -102,7 +104,7 @@ export default async function InsightsPage({
             href={`#${section.id}`}
             className="rz-btn rz-btn-secondary rounded-full px-2 sm:px-4 pointer-coarse:min-h-11"
           >
-            <section.icon className="hidden sm:block w-4 h-4 text-crimson-ink" />
+            <section.icon aria-hidden="true" className="hidden sm:block w-4 h-4 text-dust" />
             {section.title}
           </a>
         ))}
@@ -178,8 +180,8 @@ function Dashboards({ data, showQrph, isToday }: { data: DayData; showQrph: bool
             : "No paid sales were recorded on this day. Use the arrows above to look at another day."}
         </p>
       )}
-      <div className="rz-strip grid-cols-2 lg:grid-cols-4 rz-stagger">
-        <Stat label="Revenue" value={peso(expected.totalRevenue)} note="Tips not included" accent="text-brass-bright" />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 rz-stagger">
+        <Stat label="Revenue" value={peso(expected.totalRevenue)} note="Tips not included" edge="bone" />
         <Stat label="Paid sales" value={String(expected.transactionCount)} />
         <Stat label="Average per sale" value={average ? peso(average) : "—"} />
         <Stat label="Tips to barbers" value={peso(data.tipsTotal)} note="All payment methods" />
@@ -196,6 +198,7 @@ function Dashboards({ data, showQrph, isToday }: { data: DayData; showQrph: bool
                   note: method.note,
                   valueText: peso(method.amount),
                   share: share(method.amount, expected.totalRevenue),
+                  barClassName: METHOD_BARS[method.method],
                 }))}
               />
               <Note>Bar length is each method&apos;s share of revenue. Only cash goes in the drawer.</Note>
@@ -307,8 +310,8 @@ function TrendsSection({
         </p>
       )}
 
-      <div className="rz-strip grid-cols-2 lg:grid-cols-4 rz-stagger">
-        <Stat label="Revenue" value={peso(totals.revenue)} accent="text-brass-bright" delta={change(totals.revenue, previous.revenue, days)} />
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 rz-stagger">
+        <Stat label="Revenue" value={peso(totals.revenue)} edge="bone" delta={change(totals.revenue, previous.revenue, days)} />
         <Stat
           label="Paid sales"
           value={String(totals.sales)}
@@ -417,6 +420,7 @@ function TrendsSection({
                     note: m.method === "CASH" ? "in the drawer" : "digital",
                     valueText: peso(m.revenue),
                     share: share(m.revenue, totals.revenue),
+                    barClassName: METHOD_BARS[m.method],
                   }))}
               />
             </Card>
@@ -445,7 +449,7 @@ function ForecastChart({ forecast, today }: { forecast: SerializedForecast | nul
           label: formatDate(d.date, { weekday: "short", month: "short", day: "numeric" }),
           value: d.customers ?? 0,
           valueText: `${(d.customers ?? 0).toFixed(1)} customers`,
-          detail: `${peso(d.revenue)} expected revenue`,
+          detail: `about ${pesoWhole(Number(d.revenue))} expected revenue`,
         }))}
         unit="count"
         summary={`Expected customers for the next ${days.length} days, from ${Math.min(...values).toFixed(1)} to ${Math.max(...values).toFixed(1)} a day.`}
@@ -690,7 +694,7 @@ function ForecastRevenueCalc({ forecast, today }: { forecast: SerializedForecast
             lines={[
               { label: `Expected customers, ${formatDate(first.date, { weekday: "short", month: "short", day: "numeric" })}`, value: customers.toFixed(1) },
               { op: "×", label: "Average paid per customer", value: peso(run.avgTicket) },
-              { op: "=", label: "Forecast revenue", value: peso(first.revenue) },
+              { op: "=", label: "Forecast revenue (rounded)", value: pesoWhole(Number(first.revenue)) },
             ]}
           />
           <Note>
@@ -718,12 +722,11 @@ function EvaluationBody({ run }: { run: NonNullable<SerializedForecast["run"]> }
   return (
     <>
       {run.comparison && <p className="text-xs font-semibold text-brass-bright">{basisLine(run.comparison, shortDate)}</p>}
-      <div className="rz-strip grid-cols-1 sm:grid-cols-3 rz-stagger">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4 rz-stagger">
         <Stat
           label="Forecast off by"
           value={typicalError.toFixed(2)}
           note={`customers a day, about ${wholePeso(new Prisma.Decimal(run.typicalErrorCustomers).mul(run.avgTicket))} of revenue`}
-          accent="text-crimson-ink"
         />
         <Stat label="Best simple guess off by" value={Number(run.bestBaselineError).toFixed(2)} note={`customers a day (${bestName})`} />
         <Stat
@@ -782,14 +785,15 @@ function EvaluationBody({ run }: { run: NonNullable<SerializedForecast["run"]> }
 function Shell({ action, children }: { action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="relative flex-1 overflow-x-hidden">
-      <main className="rz-page relative max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-12">
+      {/* The dashboard's page frame and heading size, so the owner pages read as one set. */}
+      <main className="rz-page relative max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-7 space-y-10">
         <header className="space-y-5">
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-            <div className="space-y-2">
-              <h1 className="rz-title text-4xl sm:text-5xl">
+            <div className="space-y-1.5">
+              <h1 className="rz-title text-3xl sm:text-4xl">
                 Insights
               </h1>
-              <p className="text-sm sm:text-base text-dust max-w-2xl leading-relaxed">
+              <p className="text-sm text-dust max-w-2xl leading-relaxed">
                 Dashboards, calculations and evaluations, from the same numbers as End-of-Day Cash, the Barber Ledger and the forecast.
               </p>
             </div>
@@ -828,7 +832,7 @@ function DateBar({ day, today, range }: { day: BusinessDay; today: string; range
           />
           <button
             type="submit"
-            className={`rz-btn rz-btn-primary ${control} px-4`}
+            className={`rz-btn rz-btn-secondary ${control} px-4`}
           >
             Show
           </button>
@@ -887,38 +891,40 @@ function SectionHeading({ title, blurb }: { title: string; blurb: string }) {
 
 function Card({ title, link, children }: { title: string; link?: { href: string; label: string }; children: React.ReactNode }) {
   return (
-    <div className="rz-panel p-5 space-y-4">
+    // The dashboard's card: heading on the left, the page that owns the figure on the right.
+    <section className="rz-panel min-w-0 p-4 sm:p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-display font-semibold uppercase tracking-[0.06em] text-base text-bone">{title}</h3>
+        <h3 className="rz-heading text-bone">{title}</h3>
         {link && (
-          // Padding with matching negative margins: a bigger target (28px, 44px on touch) without moving the layout.
+          // Padding with matching negative margins: a bigger target (44px on touch) without moving the layout.
           <Link
             href={link.href}
-            className="inline-flex items-center gap-0.5 -my-1.5 py-1.5 -mx-1.5 px-1.5 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 rounded-md text-xs font-semibold text-dust hover:text-crimson-ink shrink-0 transition-colors group"
+            className="group -my-2 inline-flex shrink-0 items-center gap-1 rounded-sm py-2 text-xs font-semibold text-dust transition-colors hover:text-bone pointer-coarse:-my-3.5 pointer-coarse:py-3.5"
           >
             {link.label}
-            <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 transition-transform duration-200 motion-safe:group-hover:translate-x-0.5" />
           </Link>
         )}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
 type Delta = { text: string; trend: "up" | "down" | "flat" };
 
-function Stat({ label, value, note, delta, accent = "text-bone" }: { label: string; value: string; note?: string; delta?: Delta; accent?: string }) {
+// A KPI tile as on the dashboard: a card with a coloured top edge (a token name), a caption and one figure.
+function Stat({ label, value, note, delta, edge = "seam-hover" }: { label: string; value: string; note?: string; delta?: Delta; edge?: string }) {
   return (
-    <div className="space-y-1.5 px-4 py-4">
+    <div className="rz-kpi space-y-1.5" style={{ "--kpi": `var(--color-${edge})` } as React.CSSProperties}>
       <div className="rz-label">{label}</div>
-      <div className={`rz-figure text-2xl sm:text-3xl ${accent}`}>{value}</div>
+      <div className="rz-figure truncate text-2xl text-bone tabular-nums sm:text-3xl">{value}</div>
       {note && <p className="text-xs text-dust leading-relaxed">{note}</p>}
       {/* Up is good for every figure that has a delta here: icon and words, not colour alone. */}
       {delta && (
         <p
           className={`flex items-start gap-1 text-xs ${
-            delta.trend === "up" ? "text-ok-ink" : delta.trend === "down" ? "text-crimson-ink" : "text-dust"
+            delta.trend === "up" ? "text-ok-ink" : delta.trend === "down" ? "text-warn-ink" : "text-dust"
           }`}
         >
           {delta.trend === "up" ? (
@@ -1027,11 +1033,11 @@ function ErrorCard({ children, retryHref }: { children: React.ReactNode; retryHr
 
 function paymentMethods(expected: ExpectedTotals, showQrph: boolean) {
   const methods = [
-    { label: "Cash", amount: expected.cashSales, note: "in the drawer", digital: false },
-    { label: "GCash", amount: expected.gcashTotal, note: "digital", digital: true },
-    { label: "Maya", amount: expected.mayaTotal, note: "digital", digital: true },
+    { method: "CASH" as PaymentMethod, label: "Cash", amount: expected.cashSales, note: "in the drawer", digital: false },
+    { method: "GCASH" as PaymentMethod, label: "GCash", amount: expected.gcashTotal, note: "digital", digital: true },
+    { method: "MAYA" as PaymentMethod, label: "Maya", amount: expected.mayaTotal, note: "digital", digital: true },
   ];
-  if (showQrph) methods.push({ label: "QR Ph", amount: expected.qrphTotal, note: "gateway, test mode", digital: true });
+  if (showQrph) methods.push({ method: "QRPH", label: "QR Ph", amount: expected.qrphTotal, note: "gateway, test mode", digital: true });
   return methods;
 }
 
@@ -1127,6 +1133,8 @@ function storyInput({
 }
 
 const METHOD_LABELS: Record<PaymentMethod, string> = { CASH: "Cash", GCASH: "GCash", MAYA: "Maya", QRPH: "QR Ph" };
+// Each method's own colour, as on the dashboard's payment mix (cash neutral).
+const METHOD_BARS: Record<PaymentMethod, string> = { CASH: "bg-cash", GCASH: "bg-gcash", MAYA: "bg-maya", QRPH: "bg-qrph" };
 
 // Percent of the whole to one decimal, or null when there is nothing to divide.
 function share(part: Decimal, whole: Decimal) {
@@ -1170,12 +1178,10 @@ function averagePerSale(revenue: Decimal, sales: number) {
   return sales > 0 ? revenue.div(sales).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP) : null;
 }
 
-const pesoFormat = new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-// ₱1,234.50; a negative amount as −₱1,234.50.
+// Amounts through lib/peso (slice 21d): ₱1,234.50, a negative one as -₱1,234.50. Decimal(10,2)
+// values convert to a number exactly enough for two decimals.
 function peso(value: Prisma.Decimal.Value) {
-  const amount = new Prisma.Decimal(value).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-  return `${amount.isNegative() && !amount.isZero() ? "−" : ""}₱${pesoFormat.format(amount.abs().toNumber())}`;
+  return formatPeso(new Prisma.Decimal(value).toNumber());
 }
 
 function signedPeso(value: Prisma.Decimal.Value) {
@@ -1183,8 +1189,9 @@ function signedPeso(value: Prisma.Decimal.Value) {
   return `${amount.gt(0) ? "+" : ""}${peso(amount)}`;
 }
 
+// An estimate (the forecast's error in pesos): whole pesos.
 function wholePeso(value: Prisma.Decimal.Value) {
-  return `₱${Math.round(new Prisma.Decimal(value).toNumber()).toLocaleString("en-PH")}`;
+  return pesoWhole(new Prisma.Decimal(value).toNumber());
 }
 
 function plural(count: number, word: string) {

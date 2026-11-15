@@ -11,8 +11,8 @@ import { ArrowRight, LineChart, LockKeyhole, RefreshCw, WifiOff } from "lucide-r
 import { ColumnChart } from "@/components/ColumnChart";
 import type { SerializedForecast } from "@/lib/forecast";
 import { FORECAST_HORIZONS, MAX_FORECAST_DAYS, forecastChart, type ForecastHorizon } from "@/lib/forecast-chart";
-
-const peso = (value: number) => `₱${Math.round(value).toLocaleString("en-PH")}`;
+// Forecast revenue is an estimate: whole pesos (slice 21d).
+import { pesoWhole as peso } from "@/lib/peso";
 
 // Dates are YYYY-MM-DD business dates; format them as calendar dates, not as instants.
 function formatDate(date: string, options: Intl.DateTimeFormatOptions) {

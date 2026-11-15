@@ -10,3 +10,14 @@ export function peso(value: number): string {
   // No "-₱0.00" for a value that rounds to nothing.
   return `${value < 0 && centavos > 0 ? "-" : ""}₱${whole}.${cents}`;
 }
+
+/**
+ * An estimate in whole pesos, "₱1,000" (slice 21d): forecast revenue and the forecast's error in
+ * pesos, which are approximations, so centavos would claim a precision they don't have. Exact
+ * amounts (sales, payouts, the drawer) always use `peso`.
+ */
+export function pesoWhole(value: number): string {
+  const rounded = Math.round(Math.abs(value));
+  const whole = rounded.toString().replace(/\B(?=(\d{3})+$)/g, ",");
+  return `${value < 0 && rounded > 0 ? "-" : ""}₱${whole}`;
+}

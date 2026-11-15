@@ -20,7 +20,7 @@ type Device = {
 };
 
 const when = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "never";
+  iso ? new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "never";
 
 export default function DevicesPage() {
   // null while the first load decides whether the owner cookie is there.
@@ -60,7 +60,17 @@ export default function DevicesPage() {
     await load();
   }
 
-  if (unlocked === null) return <main className="rz-page flex-1" />;
+  if (unlocked === null) {
+    return (
+      <main className="flex-1">
+        <div role="status" className="rz-page max-w-3xl mx-auto px-4 sm:px-6 py-5 space-y-3">
+          <span className="sr-only">Loading the phones…</span>
+          <div aria-hidden="true" className="rz-skeleton h-5 w-2/3" />
+          <div aria-hidden="true" className="rz-skeleton h-20" />
+        </div>
+      </main>
+    );
+  }
 
   if (!unlocked) {
     return <OwnerSignInPage title="Approved phones" what="see the approved phones and revoke a lost or replaced one" submitLabel="Unlock" onSignedIn={() => void load()} />;
@@ -102,7 +112,7 @@ export default function DevicesPage() {
                   <div className="text-xs text-dust">
                     Approved {when(d.approvedAt)} with the {d.approvedWith === "OWNER" ? "owner PIN" : "approval PIN"} · last seen {when(d.lastSeenAt)}
                   </div>
-                  <div className="text-xs text-dust/70 font-mono truncate">{d.deviceKey}</div>
+                  <div className="text-xs text-dust-2 font-mono truncate">{d.deviceKey}</div>
                 </div>
                 <button
                   type="button"
@@ -120,10 +130,10 @@ export default function DevicesPage() {
         {revoked.length > 0 && (
           <section className="space-y-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-dust">Revoked</h2>
-            <ul className="rz-panel divide-y divide-seam overflow-hidden opacity-75">
+            <ul className="rz-panel divide-y divide-seam overflow-hidden">
               {revoked.map((d) => (
                 <li key={d.deviceKey} className="p-4 text-sm space-y-0.5">
-                  <div className="font-semibold text-bone">{d.label ?? "Unnamed phone"}</div>
+                  <div className="flex flex-wrap items-center gap-2 font-semibold text-bone-2">{d.label ?? "Unnamed phone"}<span className="rz-pill uppercase tracking-wider text-[0.6875rem]">Revoked</span></div>
                   <div className="text-xs text-dust">Revoked {when(d.revokedAt)} · last seen {when(d.lastSeenAt)}</div>
                 </li>
               ))}

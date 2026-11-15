@@ -44,12 +44,12 @@ export function MethodComparison({ run }: { run: NonNullable<SerializedForecast[
                   <div
                     key={row.method}
                     className={`px-3 py-2.5 sm:grid sm:grid-cols-[1fr_8rem_8rem_8rem] sm:gap-2 sm:items-center text-sm transition-colors duration-150 ${
-                      row.served ? "bg-crimson/10 ring-1 ring-inset ring-crimson-bright/45" : "hover:bg-hover"
+                      row.served ? "bg-panel-3 ring-1 ring-inset ring-seam-strong" : "hover:bg-hover"
                     }`}
                   >
                     <div className="text-bone">
                       {row.name}
-                      {row.served && <span className="ml-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-crimson-ink">Used for this forecast</span>}
+                      {row.served && <span className="ml-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-bone">Used for this forecast</span>}
                     </div>
                     <div className="flex justify-between sm:block sm:text-right text-bone font-semibold">
                       <span className="sm:hidden text-xs font-normal text-dust">Typical miss (MAE)</span>

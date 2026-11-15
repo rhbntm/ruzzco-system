@@ -639,7 +639,7 @@ function Figure({ figure, delay, reduced }: { figure: StoryFigure; delay: number
       {/* Up is good for every figure that has a delta here: icon and words, not colour alone. */}
       {figure.delta && (
         <p
-          className={`flex items-start gap-1 text-xs sm:text-sm ${trend === "up" ? "text-ok-ink" : trend === "down" ? "text-crimson-ink" : "text-dust"}`}
+          className={`flex items-start gap-1 text-xs sm:text-sm ${trend === "up" ? "text-ok-ink" : trend === "down" ? "text-warn-ink" : "text-dust"}`}
           style={{ animation: `rz-fade 400ms ease-out ${delay + 640}ms both` }}
         >
           {trend === "up" ? (
@@ -660,7 +660,7 @@ function Figure({ figure, delay, reduced }: { figure: StoryFigure; delay: number
 // named for screen readers. Suggestions sit apart, under the facts.
 const TONES: Record<Exclude<Tone, "info" | "idea">, { icon: LucideIcon; className: string; spoken?: string }> = {
   up: { icon: TrendingUp, className: "text-ok-ink" },
-  down: { icon: TrendingDown, className: "text-crimson-ink" },
+  down: { icon: TrendingDown, className: "text-warn-ink" },
   flat: { icon: Minus, className: "text-dust" },
   good: { icon: CircleCheck, className: "text-ok-ink" },
   warn: { icon: AlertTriangle, className: "text-warn-ink", spoken: "Needs attention: " },

@@ -112,12 +112,12 @@ function RankedBars({ view }: { view: ReportView }) {
         {view.ranked.map((row) => (
           <li
             key={row.method}
-            className={`rounded-[10px] px-3 py-2.5 ${row.served ? "bg-crimson/10 ring-1 ring-inset ring-crimson-bright/45" : ""}`}
+            className={`rounded-[10px] px-3 py-2.5 ${row.served ? "bg-panel-3 ring-1 ring-inset ring-seam-strong" : ""}`}
           >
             <div className="sm:grid sm:grid-cols-[1fr_8rem_8rem] sm:gap-3 sm:items-baseline text-sm">
               <span className="text-bone">
                 {row.name}
-                {row.served && <span className="ml-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-crimson-ink">Used for this forecast</span>}
+                {row.served && <span className="ml-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-bone">Used for this forecast</span>}
                 {COMPARISON_ONLY.has(row.method) && <span className="ml-2 text-[0.6875rem] uppercase tracking-wider text-dust">for comparison only</span>}
               </span>
               <span className="mt-1 sm:mt-0 flex justify-between sm:block sm:text-right font-semibold text-bone tabular-nums">
@@ -131,7 +131,7 @@ function RankedBars({ view }: { view: ReportView }) {
             </div>
             <div className="mt-1.5 h-2 rounded-full bg-well ring-1 ring-inset ring-seam overflow-hidden">
               <div
-                className={`h-2 rounded-full ${row.served ? "bg-crimson" : "bg-dust/60"}`}
+                className={`h-2 rounded-full ${row.served ? "bg-bone" : "bg-dust/60"}`}
                 style={{ width: `${view.maxMean > 0 ? Math.max((row.mean / view.maxMean) * 100, 2) : 2}%` }}
               />
             </div>

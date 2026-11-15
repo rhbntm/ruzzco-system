@@ -25,7 +25,7 @@ type BarberOption = { id: string; fullName: string; isActive: boolean; accountId
 
 const json = { "Content-Type": "application/json" };
 const when = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "never";
+  iso ? new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "never";
 
 export function StaffAccounts({ isOwner }: { isOwner: boolean }) {
   const router = useRouter();
@@ -114,9 +114,9 @@ function StaffAccountsList() {
         {notice && <p role="status" className="rz-notice">{notice}</p>}
 
         <ul className="rz-panel divide-y divide-seam overflow-hidden">
-          {accounts.length === 0 && <li className="p-4 text-sm text-dust">No accounts yet.</li>}
+          {accounts.length === 0 && (busy ? <li role="status" className="p-4"><span className="sr-only">Loading the accounts…</span><div aria-hidden="true" className="rz-skeleton h-5 w-2/3" /></li> : <li className="p-4 text-sm text-dust">No accounts yet.</li>)}
           {accounts.map((account) => (
-            <li key={account.id} className={`p-4 space-y-3 ${account.isActive ? "" : "opacity-75"}`}>
+            <li key={account.id} className="p-4 space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-0.5">
                   <div className="flex items-center gap-2 font-semibold text-bone">

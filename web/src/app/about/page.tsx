@@ -6,6 +6,7 @@ import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { ApprovalGate } from "@/components/ApprovalScreen";
 import { ownerPageAccess } from "@/lib/owner-access";
 import { OwnerFrame } from "@/components/OwnerPageGate";
+import { peso } from "@/lib/peso";
 
 // How one sale is recorded, and what the system does so far. Both sat under the counter on the
 // home page; they live here so Open the POS stays near the top of the home screen on phones.
@@ -25,8 +26,6 @@ async function loadExample() {
     return null;
   }
 }
-
-const peso = (value: number) => `₱${value.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default async function AboutPage() {
   // Slice 21: nothing is queried or rendered without owner access (the approval or sign-in screen only).
@@ -58,8 +57,6 @@ export default async function AboutPage() {
             <BarberPoleIcon className="w-2.5 h-6" />
             About
           </h1>
-          {/* Balances the Home link, so the title stays centred. */}
-          <span aria-hidden="true" className="w-16 shrink-0" />
         </div>
       </header>
 
@@ -94,8 +91,8 @@ export default async function AboutPage() {
               <Step n={2} title="Saved on the phone" body="The sale is stored on the device first, so no connection is needed.">
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="rz-pill rz-pill-danger"><WifiOff className="w-3.5 h-3.5" /> Offline</span>
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-crimson-ink"><Clock className="w-3.5 h-3.5" /> Waiting to sync</span>
+                    <span className="rz-pill"><WifiOff className="w-3.5 h-3.5" /> Offline</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-bone-2"><Clock className="w-3.5 h-3.5" /> Waiting to sync</span>
                   </div>
                   <ExampleCut name={exampleName} amount={exampleAmount} synced={false} />
                 </div>
@@ -189,7 +186,7 @@ function Zone({
     <div className="flex flex-col">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-3.5 border-b border-seam-strong">
         <h3 className="rz-heading text-bone">
-          <Icon className="w-4 h-4 text-crimson-ink" />
+          <Icon aria-hidden="true" className="w-4 h-4 text-dust" />
           {title}
         </h3>
         <span className="text-xs text-dust">{note}</span>
@@ -225,11 +222,11 @@ function ExampleCut({ name, amount, synced }: { name: string; amount: string | n
     <div className="flex items-center justify-between gap-2 border-t border-seam pt-2.5 text-sm">
       <span className="font-medium text-bone truncate">{name}</span>
       <span className="flex items-center gap-2 shrink-0">
-        <span className="w-5 h-5 rounded-full bg-crimson/20 text-crimson-ink flex items-center justify-center">
+        <span className="w-5 h-5 rounded-full bg-cash/15 text-cash-ink flex items-center justify-center">
           <Banknote className="w-3 h-3" />
         </span>
         {amount && <span className="rz-figure text-base text-bone">{amount}</span>}
-        {synced ? <CheckCircle2 className="w-4 h-4 text-ok" /> : <Clock className="w-4 h-4 text-crimson-ink" />}
+        {synced ? <CheckCircle2 className="w-4 h-4 text-ok" /> : <Clock className="w-4 h-4 text-dust" />}
       </span>
     </div>
   );

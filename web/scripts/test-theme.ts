@@ -2,15 +2,15 @@
  * Slice 21a: the colour tokens. Pure, reads the source:
  *   npm run test:theme
  *
- * T1 every token of the light set is defined, and the dark set (kept for slice 21d, not
- *    selectable yet) defines the same names; every --color- or --rz- variable the stylesheet uses exists.
+ * T1 every token of the light set is defined, and the dark set (kept, not selectable: slice 21d cut
+ *    the switch) defines the same names; every --color- or --rz- variable the stylesheet uses exists.
  * T2 no colour literal outside the token blocks of globals.css, and none in any component or page
  *    (hex, rgb(), hsl(), Tailwind's black/white and default palette, scheme-dark, dark:).
  *    Exceptions, which must equal the light canvas: the theme-color in app/layout.tsx and
  *    app/manifest.ts (metadata can't read a CSS variable) and public/offline.html (self-contained).
  * T3 contrast of the light set: text at least 4.5:1 on the surfaces it is used on, control edges
  *    at least 3:1.
- * T4 nothing selects the dark set yet.
+ * T4 nothing selects the dark set (the switch was cut in slice 21d; light is the only theme).
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -144,7 +144,7 @@ pair("on-warn", rgb("on-warn"), "warn", rgb("warn"), 4.5);
 pair("chrome (field edge)", rgb("chrome"), "wall-raised", rgb("wall-raised"), 3);
 pair("chrome (field edge)", rgb("chrome"), "wall", rgb("wall"), 3);
 
-console.log("\nT4 the dark set is not selectable yet (slice 21d)");
+console.log("\nT4 the dark set is not selectable (the switch was cut in slice 21d)");
 const setters = files(join(ROOT, "src")).filter((file) => !file.endsWith(".css") && /data-theme|dataset\.theme/.test(readFileSync(file, "utf8")));
 check("nothing in src sets data-theme", setters.length === 0, setters.map((f) => relative(ROOT, f)).join(", "));
 check("the stylesheet's default colour scheme is light", /color-scheme:\s*light/.test(root.body));

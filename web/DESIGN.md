@@ -1,6 +1,6 @@
 ---
 name: Ruzzco Barbers System
-description: The shop's offline-first POS and end-of-day books as a plain, light POS. One token set, light by default; the earlier dark palette is kept under the same names and is not selectable yet.
+description: The shop's offline-first POS and end-of-day books as a plain, light POS. Light is the only theme offered; the earlier dark palette is kept under the same names and is not selectable.
 colors:
   wall: "#f6f7f8"
   wall-raised: "#ffffff"
@@ -83,7 +83,7 @@ Every screen is a working tool first: barbers ring up cuts one-handed at the cha
 
 Two experiences share the system. The **owner** works inside one shell (a sidebar from 1024px, a top bar and menu below it) and lands on a dashboard. The **barber** works on `/pos` and `/shift-log` only; those pages are stored on the phone and open with the shop PC off, so nothing on them may need the server to draw.
 
-Slice 21 is delivered in four increments: 21a the light theme, the owner shell and the dashboard; 21c the Barber Ledger and End-of-Day Cash layouts; 21b the barber header, POS tiles and the shift log's sale states. The remaining pages plus the theme switch (21d) still have their earlier layouts in the new colours.
+Slice 21 was delivered in four increments: 21a the light theme, the owner shell and the dashboard; 21c the Barber Ledger and End-of-Day Cash layouts; 21b the barber header, POS tiles and the shift log's sale states; 21d Insights in the dashboard's KPI tiles and cards, and Forecast, Payment QR, Phones, Staff accounts and About brought to the same rules. The theme switch was cut in 21d (the first cut of slice 21 §5.4): light is the only theme.
 
 ## Colors
 
@@ -93,9 +93,9 @@ Colours are tokens, defined once in `src/app/globals.css`: the light values in `
 - **Canvas and surfaces.** `wall` the page; `panel` a card; `panel-2` and `panel-3` raised or hovered controls; `well` a recessed area inside a card; `wall-raised` a field's fill.
 - **Hairlines.** `seam` card borders and dividers; `seam-strong` button borders and table header rules; `seam-hover` on hover and the rule over a total; `chrome` field borders (3:1 on the fill), `chrome-hover` on hover.
 - **Text.** `bone` primary text and every plain figure; `bone-2` secondary; `dust` muted text and labels; `dust-2` placeholders, IDs and the chart's context columns. All at least 4.5:1 on the surfaces they sit on.
-- **Crimson.** `crimson` the logo mark, the pole stripe, the primary button and the current menu item; `crimson-bright` its hover and a focused field's border; `crimson-deep` pressed; `crimson-ink` red text: an error, a shortfall, a downward trend. Text and icons on a crimson or wallet-solid fill are `on-accent`.
+- **Crimson.** `crimson` the logo mark, the pole stripe, the primary button and the current menu item; `crimson-bright` its hover and a focused field's border; `crimson-deep` pressed; `crimson-ink` red text: an error or a drawer shortfall. Text and icons on a crimson or wallet-solid fill are `on-accent`.
 - **Payment methods.** Cash is neutral (`cash`, `cash-ink`), so red never means both "cash" and "wrong". GCash, Maya and QR Ph keep their own colours: the base for icons, bars and words, `-ink` on a tint, `-solid` for a filled button with `on-accent` text. They are used for their payment methods and nothing else.
-- **States.** `ok` done (synced, saved, paid, balanced), `warn` waiting or needs attention (held for review, out of date, still owed), `over` cash over. Each has an `-ink` for text on its tint and always comes with an icon and a word, never colour alone. Text on a solid `warn` fill is `on-warn`.
+- **States.** `ok` done (synced, saved, paid, balanced), `warn` waiting or needs attention (held for review, out of date, still owed, a falling trend), `over` cash over. Each has an `-ink` for text on its tint and always comes with an icon and a word, never colour alone. Text on a solid `warn` fill is `on-warn`.
 - **Brass** (`brass`, `brass-bright`) belongs to the dark set. In light both are plain ink, so money totals are not coloured.
 - **Fixed.** `paper` the white a QR code sits on, in both sets; `pole-white` and `pole-blue` the pole's other stripes.
 
@@ -103,21 +103,21 @@ Colours are tokens, defined once in `src/app/globals.css`: the light values in `
 A state or wallet tint is mixed onto the solid panel (`color-mix(in srgb, var(--color-warn) 8%, var(--color-panel))`), never drawn as a translucent colour, so it reads the same on the canvas and on a card. Pills use 11% with a 38% border, notices 8% with a 35% border, wallet pay buttons 10% (18% on hover).
 
 ### Dark set
-The dark values are the app's colours before slice 21, unchanged, plus dark values for the tokens slice 21 added. Nothing sets `data-theme`; slice 21d adds the switch only once every page and state has been checked in dark. Until then dark is unreachable.
+The dark values are the app's colours before slice 21, unchanged, plus dark values for the tokens slice 21 added. Nothing sets `data-theme`, so dark is unreachable: the switch was cut in slice 21d (2026-11-16). Before anyone ships it: the dark set fails five of `test:theme`'s contrast pairs (crimson and crimson-bright as text on the canvas and on a card, QR Ph on a card), its `well` is translucent (the test needs to composite it), the inline script changes the stored `/pos` and `/shift-log` (a `sw.js` VERSION bump), and no page of the new layout has been checked in it.
 
 ## Typography
 
 **Display:** Oswald (variable 200–700, self-hosted at `src/app/fonts/Oswald-Variable.woff2`, Latin plus ₱, SIL OFL), uppercase, for page and section titles (`.rz-title`, `.rz-heading`), the logo wordmark, standalone figures (`.rz-figure`) and the POS checkout buttons (`.rz-pay`).
 **Body:** the platform's system sans, for everything read or typed: labels (`.rz-label`, uppercase micro), field labels (`.rz-field-label`, sentence case), tables and prose.
 
-Columns of money use the system sans with `tabular-nums` so decimals line up; Oswald's digits are proportional, so it is for standalone figures. Every peso amount on the pages slice 21 touches is printed by `lib/peso.ts` (thousands separators, two decimals). No font is loaded from a CDN: the build and the phones work offline.
+Columns of money use the system sans with `tabular-nums` so decimals line up; Oswald's digits are proportional, so it is for standalone figures. Every peso amount on the pages slice 21 touches is printed by `lib/peso.ts`: `peso` for exact amounts (thousands separators, two decimals, `-₱` for a negative) and `pesoWhole` for estimates (forecast revenue and the forecast's error in pesos), which are approximations and show no centavos. No font is loaded from a CDN: the build and the phones work offline.
 
 ## Layout
 
 - **Owner shell** (`OwnerShell`, rendered by `OwnerPageGate`, `/` and `/about` only after owner access was found on the server). From 1024px: a fixed 15rem sidebar (logo, the nine pages from `lib/owner-nav.ts`, Lock at its foot). Below: a 56px top bar with a menu button that opens the same list as a dialog; it closes on a choice, on Escape and on the phone's Back, and focus returns to its button. The top bar names the page and today's Manila date. The shell links to no barber page (`npm run test:nav`).
 - **Page header** (`.rz-banner`): a page's own title and its reload button, under the top bar. Pages no longer carry a "Home" link.
 - **Dashboard** (`/`, 78rem): a header with the Today / This week / This month switch; a row of four KPI tiles (two columns on phones); cards in a 3-column grid from 1024px, stacked below; then the cards that are always today's.
-- **Other pages** keep their widths: POS `max-w-6xl`, Shift Log `max-w-3xl`, End-of-Day Cash `max-w-2xl`, Ledger, Payment QR and Forecast `max-w-4xl`, Insights `max-w-5xl`. Side gutters 16px, 24px from `sm`.
+- **Other pages** keep their widths: POS, Ledger and Insights `max-w-6xl`, Shift Log, Phones and Staff `max-w-3xl`, End-of-Day Cash, Payment QR and Forecast `max-w-4xl`. Insights uses the dashboard's page frame (a 3xl–4xl title, its KPI tiles and cards). Side gutters 16px, 24px from `sm`.
 - Every control reaches 44px on touch screens (`pointer-coarse:min-h-11`); nothing scrolls sideways at 360px.
 
 ## Elevation
@@ -131,13 +131,14 @@ Flat by default: a card is a hairline and `--rz-shadow-card`. Three more steps e
 ## Components
 
 - **Logo** (`Logo`): the mustache mark from the shop's own logo in a crimson square with the RUZZCO BARBERS wordmark in Oswald; the interim logo until a vector one is delivered. Inline in the sidebar and phone menu, the mark alone in the top bar, stacked on the sign-in, approval and POS start screens. `RuzzcoLogoBanner` (the logo image) remains for the Insights presentation.
-- **Buttons** (`.rz-btn`): primary crimson (one per screen); secondary white on a hairline; ghost; warn (Retry, "Use date"); danger ("Tap again" to remove); `.rz-btn-gcash`, `.rz-btn-maya`, `.rz-btn-qrph` solid wallet buttons. Disabled is 45% opacity. Keyboard focus is a 2px ink outline at 2px offset on every control.
+- **Buttons** (`.rz-btn`): primary crimson (one per screen: a filter's Show and repeated per-item actions such as Upload are secondary); secondary white on a hairline; ghost; warn (Retry, "Use date"); danger ("Tap again" to remove); `.rz-btn-gcash`, `.rz-btn-maya`, `.rz-btn-qrph` solid wallet buttons. Disabled is 45% opacity. Keyboard focus is a 2px ink outline at 2px offset on every control.
 - **Fields** (`.rz-field`): white, a `chrome` border, 16px text; focus is a crimson border with a soft crimson ring.
 - **Segmented choice** (`.rz-seg`): a well of items; the chosen one is a white chip with a hairline. Tips, trend ranges, the dashboard's period.
 - **Card** (`.rz-panel`), **strip** (`.rz-strip`: figures in one card split by hairlines), **well** (`.rz-well`).
 - **KPI tile** (`.rz-kpi`): a card with a 3px coloured top edge (`--kpi`), an uppercase caption, one Oswald figure and a one-line note.
 - **Pills and notices** (`.rz-pill-*`, `.rz-notice-*`): a state or wallet tint with its ink, always with an icon or a word.
-- **Tables** (`.rz-table`): micro uppercase headers, hairline rows, a faint row hover, tabular numbers, totals under a stronger rule.
+- **Tables** (`.rz-table`): micro uppercase headers, hairline rows, a faint row hover, tabular numbers, totals under a stronger rule. A highlighted row (the forecast method in use) is `panel-3` with a `seam-strong` ring and an ink label, never crimson.
+- **Lists of records** (Phones, Staff accounts): one card with hairline rows; a revoked or deactivated record keeps full contrast and says so in a pill, never by fading the row.
 - **Charts**: `ColumnChart` (one value per column, hover, tap or arrow keys, "Show as table") and `BarList` (labelled share bars; `barClassName` gives a payment method its own colour). A chart states its unit and axes in words and carries a legend when it uses two colours.
 - **Barber pole** (`BarberPoleIcon`, `.rz-ribbon`): the state light. It turns while a page loads or a sync runs and stands still otherwise; the ribbon across the top of every page is the same stripe.
 - **Barber header** (`BarberHeader`, `/pos` and `/shift-log`): the logo (the mark alone below `sm`), "Sales on this phone: {barber}" (the phone's assignment, which decides attribution), a warn pill naming the signed-in account only when it is someone else's or nobody is signed in, connection, sync with its counts, settings (POS only) and a two-item `.rz-seg` switch whose links are the only ones it has. It reads nothing from the server.
