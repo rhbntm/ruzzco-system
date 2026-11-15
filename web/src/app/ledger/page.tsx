@@ -6,6 +6,7 @@ import { ArrowLeft, Check, Plus, RefreshCw, Scissors, TriangleAlert, Undo2 } fro
 import { manilaToday } from "@/lib/business-date";
 import { generateUUID } from "@/lib/db";
 import { createSubmitLock } from "@/lib/submit-lock";
+import { DEFAULT_CUSTOM_NOTE } from "@/lib/pricing";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
 
@@ -23,6 +24,11 @@ type Summary = {
   pettyCashMissingDays: number;
 };
 type Method = "CASH" | "GCASH";
+// Slice 16: one custom-amount sale on the picked date (GET /api/v1/reports/custom-amounts).
+type CustomSale = {
+  id: string; time: string; barberName: string; serviceName: string | null; amountPaid: string; note: string | null;
+  paymentMethod: string; paymentStatus: string; commission: string; menuPriceNow: string | null;
+};
 // Slice 18: one payout, never edited. A correction is stored negative and names the entry it undoes.
 type Entry = { id: string; method: Method; kind: "PAYOUT" | "CORRECTION" | "OPENING"; amount: string; correctsId: string | null; note: string | null; recordedAt: string; correctableLeft: string };
 type LedgerRow = {
@@ -45,6 +51,10 @@ export default function LedgerPage() {
   const [period, setPeriod] = useState<Period>("day");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  // Custom amounts load on their own: a failure there never blocks the rest of the page.
+  const [customSales, setCustomSales] = useState<CustomSale[] | null>(null);
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [customBusy, setCustomBusy] = useState(false);
   const [rows, setRows] = useState<LedgerRow[]>([]);
   // Sales stated on this date but held for the owner's date review (L5); not in these totals.
   const [heldForReview, setHeldForReview] = useState(0);
@@ -77,11 +87,31 @@ export default function LedgerPage() {
     finally { await summaryRequest; setBusy(false); }
   }, [date, base, period]);
 
+  // One business date at a time: the period and commission base never change this list.
+  const loadCustom = useCallback(async () => {
+    setCustomBusy(true); setCustomError(null);
+    try {
+      const res = await fetch(`/api/v1/reports/custom-amounts?date=${date}`);
+      const body = await res.json();
+      if (!res.ok || !body.success) throw new Error(body.error ?? "Could not load the custom amounts");
+      setCustomSales(body.sales);
+    } catch (err) {
+      setCustomSales(null);
+      setCustomError(err instanceof Error ? err.message : "Could not load the custom amounts");
+    } finally { setCustomBusy(false); }
+  }, [date]);
+
   useEffect(() => {
     if (!unlocked) return;
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [unlocked, load]);
+
+  useEffect(() => {
+    if (!unlocked) return;
+    const timer = window.setTimeout(() => void loadCustom(), 0);
+    return () => window.clearTimeout(timer);
+  }, [unlocked, loadCustom]);
 
   // Posts one entry; on success the card shows the row the server sent back.
   async function postEntry(barberId: string, body: Record<string, unknown>) {
@@ -151,7 +181,7 @@ export default function LedgerPage() {
             <BarberPoleIcon className="w-2.5 h-6" spinning={busy} />
             Daily payout ledger
           </h1>
-          <button onClick={() => void load()} aria-label="Reload the ledger" title="Reload" className="rz-btn rz-btn-ghost rz-btn-icon -my-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
+          <button onClick={() => { void load(); void loadCustom(); }} aria-label="Reload the ledger" title="Reload" className="rz-btn rz-btn-ghost rz-btn-icon -my-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
             <RefreshCw className={`w-4 h-4 ${busy ? "animate-spin" : ""}`} />
           </button>
         </div>
@@ -192,6 +222,7 @@ export default function LedgerPage() {
         )}
         {summaryError && <div role="alert" className="animate-rise rz-notice rz-notice-danger">Summary: {summaryError}</div>}
         {summary && <SummarySection summary={summary} />}
+        <CustomAmountsSection date={date} sales={customSales} error={customError} busy={customBusy} />
 
         <div className="space-y-4 rz-stagger">
           {rows.map((row) => {
@@ -393,6 +424,54 @@ function SummarySection({ summary }: { summary: Summary }) {
           </div>
         )}
       </div>
+    </section>
+  );
+}
+
+const PAYMENT_NAMES: Record<string, string> = { CASH: "Cash", GCASH: "GCash", MAYA: "Maya", QRPH: "QR Ph" };
+const STATUS_NAMES: Record<string, string> = { PENDING: "Payment pending" };
+// DEFAULT_CUSTOM_NOTE is what the POS stores when a custom amount has no note.
+const noteText = (note: string | null) => (!note?.trim() || note.trim() === DEFAULT_CUSTOM_NOTE ? "(no note)" : note);
+
+// Slice 16, Decision 4: custom amounts skip the server's price check, so the owner sees each one
+// here, for the picked date only. Text only (the note is typed by a barber; React escapes it).
+// The commission is the stored snapshot; the base toggle doesn't change it.
+function CustomAmountsSection({ date, sales, error, busy }: { date: string; sales: CustomSale[] | null; error: string | null; busy: boolean }) {
+  return (
+    <section className="rz-panel p-4 sm:p-5 space-y-3 text-sm">
+      <div className="space-y-1">
+        <h2 className="rz-title text-xl">Custom amounts</h2>
+        <p className="text-xs text-dust">
+          {date === manilaToday() ? "Today" : shortDate(date)} only. Sales with a typed amount instead of the menu price; each shows the commission recorded when it synced.
+        </p>
+      </div>
+      {error ? (
+        <p role="alert" className="rz-notice rz-notice-danger">Custom amounts: {error}</p>
+      ) : sales === null ? (
+        <p className="text-dust">{busy ? "Loading…" : "Not loaded."}</p>
+      ) : sales.length === 0 ? (
+        <p className="text-dust">No custom amounts on this date.</p>
+      ) : (
+        <ul className="divide-y divide-seam">
+          {sales.map((sale) => (
+            <li key={sale.id} className="py-2 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-bone-2 break-words">
+                  <span className="tabular-nums">{manilaTime(sale.time)}</span> · {sale.barberName} · {sale.serviceName ?? "Unknown service"}
+                </p>
+                <p className="text-xs text-dust break-words">{noteText(sale.note)}</p>
+                <p className="text-xs text-dust tabular-nums break-words">
+                  {PAYMENT_NAMES[sale.paymentMethod] ?? sale.paymentMethod}
+                  {sale.paymentStatus !== "PAID" && <> · {STATUS_NAMES[sale.paymentStatus] ?? sale.paymentStatus}</>}
+                  {" "}· Commission recorded {peso(sale.commission)}
+                  {sale.menuPriceNow !== null && <> · Menu price now {peso(sale.menuPriceNow)}</>}
+                </p>
+              </div>
+              <span className="tabular-nums text-bone shrink-0">{peso(sale.amountPaid)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

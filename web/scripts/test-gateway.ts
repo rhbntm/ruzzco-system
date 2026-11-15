@@ -87,7 +87,8 @@ const commission = async () =>
 function sale(time: string, paymentMethod: string, amount = 200, extra: Record<string, unknown> = {}) {
   const id = randomUUID();
   txIds.push(id);
-  return { id, barberId: BARBER, serviceId: SERVICE_ID, totalAmount: amount, listPrice: amount, amountPaid: amount, paymentMethod, transactionTime: AT(time), ...extra };
+  // A custom amount (slice 16): the server checks menu prices, and ₱200 is not one.
+  return { id, barberId: BARBER, serviceId: SERVICE_ID, totalAmount: amount, listPrice: amount, amountPaid: amount, customAmount: true, paymentMethod, transactionTime: AT(time), ...extra };
 }
 
 // Builds a PayMongo-shaped event and signs it like PayMongo: te = HMAC-SHA256(secret, `${t}.${body}`).

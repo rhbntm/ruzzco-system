@@ -11,6 +11,9 @@
  *   npm run test:sync-rejections      (TEST_BASE_URL overrides http://localhost:3000)
  *
  * Uses throwaway barbers, device keys and assignments; everything is deleted at the end.
+ * Slice 16: the fixtures are custom amounts (₱150 is no price on the list), so the server's price
+ * check passes them; the price cases set customAmount: false. T12 calls the real insert
+ * (src/lib/record-sale.ts) against MySQL directly.
  * Sync and bind need an approved phone (slice 15): every device key is approved as a scratch
  * device through the real approve route (OWNER_PIN from web/.env, never printed), each request
  * carries its phone's key and secret, the client part runs as approved device 1, and those
@@ -19,7 +22,9 @@
 import "fake-indexeddb/auto";
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
+import { isSaleDataError, recordSale } from "../src/lib/record-sale";
 import type { LocalTransaction } from "../src/lib/db";
 import { createTestDevices, groupByDevice } from "./lib/test-devices";
 
@@ -122,6 +127,8 @@ function sale({ barberId, assignmentId, deviceKey, id, ...extra }: SaleOpts) {
     totalAmount: 150,
     listPrice: 150,
     amountPaid: 150,
+    // A custom amount (slice 16): ₱150 is not a price on the list.
+    customAmount: true,
     paymentMethod: "CASH",
     transactionTime: new Date().toISOString(),
     ...(deviceKey ? { deviceKey } : {}),
@@ -232,7 +239,7 @@ async function main() {
     ["amount over Decimal(10,2)", t4hugeAmount],
     ["payment reference too long", t4longRef],
     ["assignmentId without deviceKey", t4noDevice],
-    ["unknown service (database rejects it)", t4unknownService],
+    ["unknown service (custom amount; refused before the insert)", t4unknownService],
   ] as const) {
     check(`T4: ${label} rejected INVALID`, reasonOf(t4.body, bad.id) === "INVALID");
     await expectNoRows(`T5/T4 ${label}`, bad.id);
@@ -267,18 +274,71 @@ async function main() {
   console.log("\nT11 / T12 mismatch log only for sales that were actually inserted");
   const t11ok = sale({ barberId: BARBERS.B.id, assignmentId: idA, deviceKey: dev1 }); // claims B, assignment says A
   const t11wrongDevice = sale({ barberId: BARBERS.B.id, assignmentId: idA, deviceKey: dev2 }); // claim differs AND wrong device (sent from dev2: the assignment check rejects it)
-  const t11unknownService = sale({ barberId: BARBERS.B.id, assignmentId: idA, deviceKey: dev1, serviceId: "no-such-service" }); // claim differs; insert fails
+  const t11unknownService = sale({ barberId: BARBERS.B.id, assignmentId: idA, deviceKey: dev1, serviceId: "no-such-service" }); // claim differs; refused before the insert (slice 16)
   const t11 = await sync([t11ok, t11wrongDevice, t11unknownService]);
   check("T11: the inserted mismatched sale is attributed to the assignment's barber", (await prisma.transaction.findUnique({ where: { id: t11ok.id } }))?.barberId === BARBERS.A.id);
   const okLogs = await prisma.syncMismatchLog.findMany({ where: { transactionId: t11ok.id } });
   check("T11: exactly one mismatch log for it (claimed B, resolved A)", okLogs.length === 1 && okLogs[0].claimedBarberId === BARBERS.B.id && okLogs[0].resolvedBarberId === BARBERS.A.id);
   check("T12: rejected DEVICE_MISMATCH item left no mismatch log", reasonOf(t11.body, t11wrongDevice.id) === "DEVICE_MISMATCH" && (await rowCounts(t11wrongDevice.id)).mismatchLogs === 0);
-  check("T12: insert failure rolled its mismatch log back", reasonOf(t11.body, t11unknownService.id) === "INVALID" && (await rowCounts(t11unknownService.id)).mismatchLogs === 0);
-  await expectNoRows("T12 failed insert", t11unknownService.id);
+  check("T11: an unknown service is INVALID and never reaches the insert (no mismatch log)", reasonOf(t11.body, t11unknownService.id) === "INVALID" && (await rowCounts(t11unknownService.id)).mismatchLogs === 0);
+  await expectNoRows("T11 unknown service", t11unknownService.id);
+
+  // T12 (slice 16): the price check now refuses an unknown service before the insert, so the
+  // insert's own rollback is tested by calling it directly. MySQL refuses the line item's foreign
+  // key (P2003, no mock); the whole $transaction, mismatch log included, must roll back.
+  const t12id = track(randomUUID());
+  let t12error: unknown = null;
+  try {
+    await recordSale({
+      id: t12id, barberId: BARBERS.A.id, cashierId: BARBERS.A.id, assignmentId: idA, userId: null,
+      serviceId: `no-such-service-${RUN}`, totalAmount: 150, listPrice: 150, discountType: "NONE", discountAmount: 0,
+      amountPaid: 150, tipAmount: 0, customAmount: true, customAmountNote: null,
+      commissionAmount: new Prisma.Decimal("75.00"), commissionRate: new Prisma.Decimal("0.5"), commissionBase: "LIST_PRICE",
+      paymentMethod: "CASH", paymentReference: null, transactionTime: new Date(), timeFlag: null, clockSkewSeconds: null,
+      mismatch: { deviceKey: dev1, claimedBarberId: BARBERS.B.id },
+    });
+  } catch (error) {
+    t12error = error;
+  }
+  check("T12: the insert with a missing service throws a sale-data error (P2003)", isSaleDataError(t12error) && (t12error as { code?: string }).code === "P2003", String(t12error));
+  await expectNoRows("T12 failed insert rolled back, mismatch log included", t12id);
   const orphaned = await prisma.syncMismatchLog.findMany({ where: { transactionId: { in: txIds } } });
   const orphanIds: string[] = [];
   for (const log of orphaned) if ((await prisma.transaction.count({ where: { id: log.transactionId } })) === 0) orphanIds.push(log.transactionId);
   check("T12: no mismatch log in this run points at a missing transaction", orphanIds.length === 0, orphanIds.join(","));
+
+  // ── Slice 16: the server's price check ──
+  console.log("\nP price check (slice 16)");
+  const haircut = (extra: Record<string, unknown> = {}) =>
+    sale({ barberId: BARBERS.A.id, assignmentId: idA, deviceKey: dev1, customAmount: false, totalAmount: 250, listPrice: 250, amountPaid: 250, ...extra });
+  const p1ok = haircut();
+  const p1bad = haircut({ totalAmount: 500, listPrice: 500, amountPaid: 500 }); // edge case 1
+  const p1loyalty = haircut({ discountType: "PERCENT", discountAmount: 125, amountPaid: 125, totalAmount: 125 }); // edge case 2
+  const p1 = await syncFrom(dev1, [p1ok, p1bad, p1loyalty]);
+  check("P1: a ₱500 men's haircut is the only sale refused, PRICE_MISMATCH", p1.status === 200 && reasonOf(p1.body, p1bad.id) === "PRICE_MISMATCH" && p1.body.rejected.length === 1, JSON.stringify(p1.body));
+  check("P1: the ₱250 haircut and the loyalty sale beside it are synced", p1.body.syncedIds.includes(p1ok.id) && p1.body.syncedIds.includes(p1loyalty.id) && p1.body.processedCount === 2);
+  await expectNoRows("P1 price mismatch", p1bad.id);
+  const loyaltyRow = await prisma.transaction.findUnique({ where: { id: p1loyalty.id } });
+  check("P1: the loyalty sale's commission is from the ₱250 list price (125.00 at 0.50)", loyaltyRow?.barberCommissionAmount.toFixed(2) === "125.00" && loyaltyRow.listPrice?.toFixed(2) === "250.00");
+
+  const p2 = haircut({ barberId: BARBERS.B.id, totalAmount: 500, listPrice: 500, amountPaid: 500 }); // claims B and a wrong price
+  const p2res = await syncFrom(dev1, [p2]);
+  check("P2: a price-mismatched sale with a mismatched barberId is PRICE_MISMATCH", reasonOf(p2res.body, p2.id) === "PRICE_MISMATCH", JSON.stringify(p2res.body));
+  await expectNoRows("P2 price mismatch with a barber mismatch (no orphan mismatch log)", p2.id);
+
+  const p3 = sale({ barberId: BARBERS.A.id, assignmentId: idA, deviceKey: dev2, customAmount: false, totalAmount: 500, listPrice: 500, amountPaid: 500 });
+  const p3res = await syncFrom(dev2, [p3]);
+  check("P3: a price-mismatched sale with another phone's assignment stays DEVICE_MISMATCH (Decision 6)", reasonOf(p3res.body, p3.id) === "DEVICE_MISMATCH", JSON.stringify(p3res.body));
+  await expectNoRows("P3", p3.id);
+
+  const p4 = sale({ barberId: BARBERS.A.id, assignmentId: idA, deviceKey: dev1, serviceId: "no-such-service", customAmount: true });
+  const p4res = await syncFrom(dev1, [p4]);
+  check("P4: an unknown service on a custom sale is INVALID", reasonOf(p4res.body, p4.id) === "INVALID", JSON.stringify(p4res.body));
+  await expectNoRows("P4", p4.id);
+
+  const p5res = await syncFrom(dev1, [{ ...p1ok, totalAmount: 900, listPrice: 900, amountPaid: 900 }]);
+  check("P5: a recorded sale synced again with another price is an idempotent skip, never re-checked (edge case 7)", p5res.body.syncedIds.includes(p1ok.id) && p5res.body.duplicatesSkipped === 1 && p5res.body.rejected.length === 0, JSON.stringify(p5res.body));
+  check("P5: its stored price is unchanged (₱250)", (await prisma.transaction.findUnique({ where: { id: p1ok.id } }))?.listPrice?.toFixed(2) === "250.00");
 
   // ── QR Ph switched off: QRPH sales are refused, the rest of the batch is not ──
   console.log("\nQRPH with the gateway off");
@@ -289,7 +349,8 @@ async function main() {
     const qrphId = track(randomUUID());
     const cashId = track(randomUUID());
     const at = new Date().toISOString();
-    const base = { barberId: BARBERS.A.id, serviceId: SERVICE_ID, totalAmount: 200, transactionTime: at };
+    // A custom amount (slice 16): ₱200 is no longer a price on the list.
+    const base = { barberId: BARBERS.A.id, serviceId: SERVICE_ID, totalAmount: 200, customAmount: true, transactionTime: at };
     const off = await sync([{ ...base, id: qrphId, paymentMethod: "QRPH" }, { ...base, id: cashId, paymentMethod: "CASH" }]);
     check("the QRPH sale is refused with GATEWAY_DISABLED", off.body.rejected.some((r) => r.id === qrphId && r.reason === "GATEWAY_DISABLED"), JSON.stringify(off.body.rejected));
     check("the QRPH sale is not stored", !(await prisma.transaction.findUnique({ where: { id: qrphId } })));
@@ -338,6 +399,7 @@ async function main() {
     listPrice: 150,
     amountPaid: 150,
     tipAmount: 20,
+    customAmount: true, // slice 16: ₱150 is not a price on the list
     paymentMethod: "GCASH",
     paymentReference: "REF-123",
     transactionTime: new Date().toISOString(),
@@ -413,6 +475,11 @@ async function main() {
   const zServer = await prisma.transaction.findUnique({ where: { id: Lz.id } });
   check("T9: the server has it under the same barber and id, legacy attribution (cashierId null)", zServer?.barberId === BARBERS.Z.id && zServer?.cashierId === null && Number(zServer?.barberCommissionAmount) === 45);
   check("T9: the sale's own fields never changed", JSON.stringify(withoutSyncFields(zAfter)) === JSON.stringify(zSnapshot));
+
+  console.log("\nPRICE_MISMATCH on the phone (slice 16)");
+  check("its label is: Price doesn't match the price list", sync_.rejectLabel("PRICE_MISMATCH") === "Price doesn't match the price list");
+  check("its hint says Retry won't fix it by itself", sync_.rejectHint("PRICE_MISMATCH") === "Needs review. Retrying will not fix this by itself.");
+  check("it needs review, like DEVICE_MISMATCH", sync_.needsReview("PRICE_MISMATCH") && sync_.needsReview("DEVICE_MISMATCH") && !sync_.needsReview("UNKNOWN_BARBER"));
 
   console.log("\nClient sync requests carry the phone's key and secret");
   const wantAuth = `${dev1} Bearer ${devices.secretOf(dev1)}`;

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { commissionFor } from "@/lib/commission";
 import { readJson, serverError } from "@/lib/api";
 import { isUniqueViolation } from "@/lib/prisma-errors";
+import { checkSalePrice, decimalCentavos } from "@/lib/price-check";
+import { isSaleDataError, recordSale } from "@/lib/record-sale";
 import { gatewayStatus } from "@/lib/gateway";
 import { detectTimeAnomaly } from "@/lib/time-anomaly";
 import { authenticateDevice, deviceNotApprovedResponse } from "@/lib/device-auth";
@@ -15,16 +17,6 @@ import {
 } from "@/lib/schemas";
 
 export const dynamic = "force-dynamic";
-
-// Errors caused by the sale's own data (unknown service, value too long, value out of
-// range). They fail the same way on every retry, so they reject that sale only.
-// Anything else (connection loss, deadlock) is transient and still fails the request.
-function isSaleDataError(error: unknown) {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    (error.code === "P2003" || error.code === "P2000" || error.code === "P2020")
-  );
-}
 
 // One entry per item in the request, in order. `item` is null when the item is
 // malformed; `id` is then whatever string id it carried, if any.
@@ -76,8 +68,9 @@ export async function POST(request: NextRequest) {
     // with this reason, and stops retrying it automatically. `id` is null only for a
     // malformed item that carried no string id.
     const rejected: { id: string | null; reason: SyncRejectReason }[] = [];
-    const reject = (id: string | null, reason: SyncRejectReason) => {
-      console.warn(`[sync] rejected ${id ?? "(item without id)"}: ${reason}`);
+    // `why` (the price check's detail) goes to the server log only, never to the phone.
+    const reject = (id: string | null, reason: SyncRejectReason, why?: string) => {
+      console.warn(`[sync] rejected ${id ?? "(item without id)"}: ${reason}${why ? ` (${why})` : ""}`);
       rejected.push({ id, reason });
     };
 
@@ -109,6 +102,14 @@ export async function POST(request: NextRequest) {
     const assignments = new Map(
       (await prisma.deviceAssignment.findMany({ where: { id: { in: referencedIds } }, select: assignmentSelect }))
         .map((a) => [a.id, a])
+    );
+
+    // The price list (slice 16): each new sale's service, read once, inactive services included
+    // (a sale made just before a service was switched off is still valid). In centavos.
+    const serviceIds = [...new Set(pending.map((t) => t.serviceId))];
+    const servicePrices = new Map(
+      (await prisma.service.findMany({ where: { id: { in: serviceIds } }, select: { id: true, standardPrice: true } }))
+        .map((service) => [service.id, decimalCentavos(service.standardPrice)])
     );
 
     // The signed-in account on each sale (slice 19, Decision 12) is stored only when it names an
@@ -216,12 +217,20 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // Price check (slice 16), after the device, gateway, barber and assignment checks, so a
+      // sale that fails several keeps the reason it had before. An unknown service is INVALID
+      // here (it used to fail at the insert, also after those checks). The amounts it returns
+      // are the ones stored: what is checked is what is stored.
+      const price = checkSalePrice(item, servicePrices.get(item.serviceId) ?? null);
+      if (!price.ok) {
+        reject(item.id, price.reason, price.why);
+        continue;
+      }
+      const { listPrice, amountPaid } = price.amounts;
+
       // The rate is the barber's rate now, when the server first records the sale. It is
       // stored with the sale and never recalculated (duplicates are skipped above).
       const commissionRate = barberRates.get(resolvedBarberId)!;
-      const amountPaid = item.amountPaid ?? item.totalAmount;
-      // Custom amount: list price is the entered amount (also fixes older queued payloads that carried the service price).
-      const listPrice = item.customAmount ? amountPaid : (item.listPrice ?? item.totalAmount);
       const tipAmount = item.tipAmount ?? 0;
       const commissionBase = "LIST_PRICE" as const;
       const commissionAmount = commissionFor(listPrice, commissionRate);
@@ -237,62 +246,34 @@ export async function POST(request: NextRequest) {
       }
 
       // Mismatch log, transaction, line item and commission log commit together, so a
-      // failed insert never leaves an orphan log.
+      // failed insert never leaves an orphan log (src/lib/record-sale.ts).
       try {
-        await prisma.$transaction([
-          ...(mismatch
-            ? [
-                prisma.syncMismatchLog.create({
-                  data: {
-                    transactionId: item.id,
-                    deviceKey: item.deviceKey!, // required by the schema when assignmentId is present
-                    claimedBarberId: item.barberId,
-                    resolvedBarberId,
-                  },
-                }),
-              ]
-            : []),
-          prisma.transaction.create({
-            data: {
-              id: item.id,
-              barberId: resolvedBarberId,
-              cashierId,
-              assignmentId: item.assignmentId ?? null,
-              userId: item.userId && knownUserIds.has(item.userId) ? item.userId : null,
-              totalAmount: item.totalAmount,
-              listPrice,
-              discountType: item.discountType,
-              discountAmount: item.discountAmount,
-              amountPaid,
-              tipAmount,
-              customAmount: item.customAmount,
-              customAmountNote: item.customAmountNote ?? null,
-              barberCommissionAmount: commissionAmount,
-              commissionRate,
-              commissionBase,
-              paymentMethod: item.paymentMethod,
-              paymentReference: item.paymentReference ?? null,
-              // Only the gateway (webhook or status check) can mark a QRPH sale PAID.
-              paymentStatus: item.paymentMethod === "QRPH" ? "PENDING" : "PAID",
-              transactionTime: new Date(item.transactionTime),
-              syncedAt: new Date(),
-              timeFlag: anomaly?.flag ?? null,
-              clockSkewSeconds: anomaly?.skewSeconds ?? null,
-              items: {
-                create: {
-                  serviceId: item.serviceId,
-                  priceAtSale: item.totalAmount,
-                },
-              },
-              commissionLogs: {
-                create: {
-                  barberId: resolvedBarberId,
-                  amount: commissionAmount,
-                },
-              },
-            },
-          }),
-        ]);
+        await recordSale({
+          id: item.id,
+          barberId: resolvedBarberId,
+          cashierId,
+          assignmentId: item.assignmentId ?? null,
+          userId: item.userId && knownUserIds.has(item.userId) ? item.userId : null,
+          serviceId: item.serviceId,
+          totalAmount: price.amounts.totalAmount,
+          listPrice,
+          discountType: item.discountType,
+          discountAmount: item.discountAmount,
+          amountPaid,
+          tipAmount,
+          customAmount: item.customAmount,
+          customAmountNote: item.customAmountNote ?? null,
+          commissionAmount,
+          commissionRate,
+          commissionBase,
+          paymentMethod: item.paymentMethod,
+          paymentReference: item.paymentReference ?? null,
+          transactionTime: new Date(item.transactionTime),
+          timeFlag: anomaly?.flag ?? null,
+          clockSkewSeconds: anomaly?.skewSeconds ?? null,
+          // deviceKey is required by the schema when assignmentId is present
+          mismatch: mismatch ? { deviceKey: item.deviceKey!, claimedBarberId: item.barberId } : null,
+        });
       } catch (error) {
         if (isSaleDataError(error)) {
           // Rolled back with its mismatch log: a rejected sale leaves no rows behind.

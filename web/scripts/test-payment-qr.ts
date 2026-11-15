@@ -156,7 +156,8 @@ async function main() {
     method: "POST",
     headers: devices.headers(phone),
     body: JSON.stringify({ transactions: [{
-      id, barberId: BARBER, serviceId: SERVICE_ID, totalAmount: 200, listPrice: 200, amountPaid: 200, tipAmount: 20,
+      // A custom amount (slice 16): ₱200 is not a price on the list.
+      id, barberId: BARBER, serviceId: SERVICE_ID, totalAmount: 200, listPrice: 200, amountPaid: 200, tipAmount: 20, customAmount: true,
       paymentMethod: "GCASH", paymentReference: `REF-${RUN}`, transactionTime: "2000-01-22T03:00:00.000Z",
     }] }),
   });

@@ -11,6 +11,9 @@
  * past business date; its sales, ledger rows (for every barber on that date), assignments,
  * approved test devices and barbers are deleted at the end.
  *
+ * Slice 16: the server checks prices on sync, so the ₱150 sales are custom amounts and the
+ * discounted sale (C1) is the loyalty haircut (list ₱250, ₱125 off, paid ₱125).
+ *
  * Bind and sync need an approved device (slice 15): the suite approves a default phone for
  * its legacy sales (no deviceKey) and the C10 phone, and sends each sale from its own phone.
  */
@@ -120,6 +123,8 @@ function sale({ barberId, time, list = 150, paid = list, ...extra }: SaleOpts) {
     totalAmount: paid,
     listPrice: list,
     amountPaid: paid,
+    // A custom amount (slice 16): ₱150 is not a price on the list. Menu-priced sales pass false.
+    customAmount: true,
     paymentMethod: "CASH",
     transactionTime: AT(time),
     ...extra,
@@ -163,14 +168,14 @@ async function main() {
     check(`${base} × ${rate} = ${want}`, got.toFixed(2) === want, `got ${got.toFixed(2)}`);
   }
 
-  console.log("\nC1/C2/C4 discounted sale is snapshotted on list price at the server-side rate");
-  const s1 = sale({ barberId: BARBERS.A.id, time: "09:00", list: 150, paid: 120, discountType: "PERCENT", discountAmount: 30 });
+  console.log("\nC1/C2/C4 discounted (loyalty) sale is snapshotted on list price at the server-side rate");
+  const s1 = sale({ barberId: BARBERS.A.id, time: "09:00", list: 250, paid: 125, discountType: "PERCENT", discountAmount: 125, customAmount: false });
   let res = await sync([s1]);
   check("C1: sale accepted", res.status === 200 && res.body.syncedIds.includes(s1.id), JSON.stringify(res.body));
   let tx = await stored(s1.id);
   check("C1: commissionRate stored as 0.40", eq(tx?.commissionRate, "0.40"), `got ${tx?.commissionRate}`);
-  check("C2/C4: barberCommissionAmount is 60.00 (150 list × 0.40, not 120 paid)", eq(tx?.barberCommissionAmount, "60.00") && tx?.commissionBase === "LIST_PRICE", `got ${tx?.barberCommissionAmount}`);
-  check("C4: amountPaid stays 120.00", eq(tx?.amountPaid, "120.00"));
+  check("C2/C4: barberCommissionAmount is 100.00 (250 list × 0.40, not 125 paid)", eq(tx?.barberCommissionAmount, "100.00") && tx?.commissionBase === "LIST_PRICE", `got ${tx?.barberCommissionAmount}`);
+  check("C4: amountPaid stays 125.00", eq(tx?.amountPaid, "125.00"));
 
   console.log("\nC14 sync uses the same half-up helper");
   const sRound = sale({ barberId: BARBERS.B.id, time: "09:10", list: 2.01, customAmount: true });
@@ -181,9 +186,9 @@ async function main() {
   console.log("\nC3 a rate change does not rewrite the past");
   await setRate(BARBERS.A.id, 0.6);
   let rows = await ledger();
-  check("C3: ledger commission for A still 60.00 after the rate went to 0.60", rowFor(rows, BARBERS.A.id)?.commissionTotal === "60.00", JSON.stringify(rowFor(rows, BARBERS.A.id)));
+  check("C3: ledger commission for A still 100.00 after the rate went to 0.60", rowFor(rows, BARBERS.A.id)?.commissionTotal === "100.00", JSON.stringify(rowFor(rows, BARBERS.A.id)));
   tx = await stored(s1.id);
-  check("C3: stored snapshot unchanged (0.40, 60.00)", eq(tx?.commissionRate, "0.40") && eq(tx?.barberCommissionAmount, "60.00"));
+  check("C3: stored snapshot unchanged (0.40, 100.00)", eq(tx?.commissionRate, "0.40") && eq(tx?.barberCommissionAmount, "100.00"));
 
   console.log("\nC5/C6 a later sale uses the new rate; mixed rates add up");
   const s2 = sale({ barberId: BARBERS.A.id, time: "11:00", list: 150 });
@@ -191,27 +196,27 @@ async function main() {
   tx = await stored(s2.id);
   check("C5: new sale stored at 0.60 = 90.00", eq(tx?.commissionRate, "0.60") && eq(tx?.barberCommissionAmount, "90.00"), `got ${tx?.commissionRate} / ${tx?.barberCommissionAmount}`);
   rows = await ledger();
-  check("C6: ledger commission for A is 150.00 (60 + 90)", rowFor(rows, BARBERS.A.id)?.commissionTotal === "150.00", JSON.stringify(rowFor(rows, BARBERS.A.id)));
+  check("C6: ledger commission for A is 190.00 (100 + 90)", rowFor(rows, BARBERS.A.id)?.commissionTotal === "190.00", JSON.stringify(rowFor(rows, BARBERS.A.id)));
 
   console.log("\nAMOUNT_PAID view is display-only and uses the snapshotted rates");
   rows = await ledger("AMOUNT_PAID");
-  check("view shows 138.00 (120 × 0.40 + 150 × 0.60)", rowFor(rows, BARBERS.A.id)?.commissionTotal === "138.00", JSON.stringify(rowFor(rows, BARBERS.A.id)));
+  check("view shows 140.00 (125 × 0.40 + 150 × 0.60)", rowFor(rows, BARBERS.A.id)?.commissionTotal === "140.00", JSON.stringify(rowFor(rows, BARBERS.A.id)));
   const dbRow = await prisma.dailyPayoutLedger.findFirst({ where: { barberId: BARBERS.A.id } });
-  check("stored ledger commissionTotal still the LIST_PRICE 150.00", eq(dbRow?.commissionTotal, "150.00") && eq(dbRow?.totalOwed, "150.00"), `got ${dbRow?.commissionTotal}`);
+  check("stored ledger commissionTotal still the LIST_PRICE 190.00", eq(dbRow?.commissionTotal, "190.00") && eq(dbRow?.totalOwed, "190.00"), `got ${dbRow?.commissionTotal}`);
 
   console.log("\nC7 a paid day does not show additional owed after a rate change");
-  const paidA = await pay(BARBERS.A.id, 150);
+  const paidA = await pay(BARBERS.A.id, 190);
   check("C7: payout saved for A", paidA.status === 200 && paidA.body.row.paid && !paidA.body.row.additionalOwed, JSON.stringify(paidA.body));
   await setRate(BARBERS.A.id, 0.8);
   rows = await ledger();
   const a = rowFor(rows, BARBERS.A.id);
-  check("C7: after the rate went to 0.80, A is still 150.00 owed, paid, no additional owed", a?.totalOwed === "150.00" && a.paid && !a.additionalOwed, JSON.stringify(a));
+  check("C7: after the rate went to 0.80, A is still 190.00 owed, paid, no additional owed", a?.totalOwed === "190.00" && a.paid && !a.additionalOwed, JSON.stringify(a));
 
   console.log("\nC11 a duplicate re-sync after a rate change keeps the original snapshot");
   res = await sync([s1, { ...s1, listPrice: 500, totalAmount: 500, amountPaid: 500, barberId: BARBERS.B.id }]);
   check("C11: both copies acknowledged as duplicates", res.body.syncedIds.filter((id) => id === s1.id).length === 2 && res.body.duplicatesSkipped === 2, JSON.stringify(res.body));
   tx = await stored(s1.id);
-  check("C11: still A, 0.40, 60.00, list 150", tx?.barberId === BARBERS.A.id && eq(tx.commissionRate, "0.40") && eq(tx.barberCommissionAmount, "60.00") && eq(tx.listPrice, "150.00"));
+  check("C11: still A, 0.40, 100.00, list 250", tx?.barberId === BARBERS.A.id && eq(tx.commissionRate, "0.40") && eq(tx.barberCommissionAmount, "100.00") && eq(tx.listPrice, "250.00"));
 
   console.log("\nC8 an inactive barber with sales stays visible and payable");
   const sI = sale({ barberId: BARBERS.I.id, time: "12:00", list: 150, tipAmount: 20 });
@@ -257,7 +262,7 @@ async function main() {
   }
 
   console.log("\nC17 loyalty haircut (slice 13): list ₱250, ₱125 off, paid ₱125, the shop absorbs the discount");
-  const sL = sale({ barberId: BARBERS.L.id, time: "15:00", list: 250, paid: 125, discountType: "PERCENT", discountAmount: 125, tipAmount: 50 });
+  const sL = sale({ barberId: BARBERS.L.id, time: "15:00", list: 250, paid: 125, discountType: "PERCENT", discountAmount: 125, tipAmount: 50, customAmount: false });
   res = await sync([sL]);
   check("C17: loyalty sale accepted", res.body.syncedIds.includes(sL.id) && res.body.rejected.length === 0, JSON.stringify(res.body));
   tx = await stored(sL.id);

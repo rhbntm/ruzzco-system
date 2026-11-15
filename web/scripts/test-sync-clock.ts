@@ -52,7 +52,8 @@ async function sync(items: unknown[], sentAt?: unknown) {
   return { status: res.status, body: (await res.json()) as SyncResponse };
 }
 
-function sale(at: Date, amount = 200) {
+// ₱250: the haircut's menu price, so the server's price check (slice 16) passes the oldest payload shape.
+function sale(at: Date, amount = 250) {
   const id = randomUUID();
   txIds.push(id);
   return { id, barberId: BARBER, serviceId: SERVICE_ID, totalAmount: amount, paymentMethod: "CASH", transactionTime: at.toISOString() };
@@ -91,7 +92,7 @@ async function main() {
   check("a sale one hour ahead is synced, not rejected", res.body.syncedIds.includes(ahead.id) && res.body.rejected.length === 0);
   check("it is flagged FUTURE_TIMESTAMP with about +3600 s", row?.timeFlag === "FUTURE_TIMESTAMP" && Math.abs((row.clockSkewSeconds ?? 0) - 3600) < 120, `${row?.timeFlag} ${row?.clockSkewSeconds}`);
   check("its timestamp is stored exactly as sent", row?.transactionTime.toISOString() === ahead.transactionTime);
-  check("its commission snapshot is recorded as usual", Number(row?.barberCommissionAmount) === 100 && Number(row?.commissionRate) === 0.5);
+  check("its commission snapshot is recorded as usual (₱250 × 0.5)", Number(row?.barberCommissionAmount) === 125 && Number(row?.commissionRate) === 0.5);
 
   const slightly = sale(new Date(Date.now() + 3 * MIN));
   await sync([slightly], now().toISOString());
@@ -106,7 +107,7 @@ async function main() {
   check("an old sale from a phone that sends no sentAt is not flagged", (await stored(oldLegacy.id))?.timeFlag === null);
 
   const behindA = sale(new Date(Date.now() - YEARS_2 - HOUR));
-  const behindB = sale(new Date(Date.now() - YEARS_2 - 2 * HOUR), 150);
+  const behindB = sale(new Date(Date.now() - YEARS_2 - 2 * HOUR));
   res = await sync([behindA, behindB], new Date(Date.now() - YEARS_2).toISOString());
   const [rowA, rowB] = [await stored(behindA.id), await stored(behindB.id)];
   check("a phone clock two years behind: both sales synced", res.body.syncedIds.includes(behindA.id) && res.body.syncedIds.includes(behindB.id));

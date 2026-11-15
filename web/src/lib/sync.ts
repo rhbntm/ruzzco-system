@@ -333,6 +333,7 @@ const REJECT_LABELS: Record<string, string> = {
   DEVICE_MISMATCH: "Device/assignment mismatch",
   ASSIGNMENT_UNAVAILABLE: "Barber assignment not found",
   GATEWAY_DISABLED: "QR Ph is switched off on the server",
+  PRICE_MISMATCH: "Price doesn't match the price list",
 };
 
 /** Understandable text for a stored rejection reason (unknown reasons are shown as-is). */
@@ -340,14 +341,17 @@ export function rejectLabel(reason: string | undefined): string {
   return (reason && REJECT_LABELS[reason]) || reason || "Rejected";
 }
 
-/** A mismatch can't be fixed by retrying: the assignment doesn't belong to this device. */
+/**
+ * Retrying can't fix these by itself: the assignment doesn't belong to this device, or the sale's
+ * price isn't the price list's (slice 16). Retry stays available and may be rejected again.
+ */
 export function needsReview(reason: string | undefined): boolean {
-  return reason === "DEVICE_MISMATCH";
+  return reason === "DEVICE_MISMATCH" || reason === "PRICE_MISMATCH";
 }
 
 /** Extra guidance under a rejection, or null. */
 export function rejectHint(reason: string | undefined): string | null {
-  if (reason === "DEVICE_MISMATCH") return "Needs review. Retrying will not fix this by itself.";
+  if (reason === "DEVICE_MISMATCH" || reason === "PRICE_MISMATCH") return "Needs review. Retrying will not fix this by itself.";
   if (reason === "GATEWAY_DISABLED") return "Retry when QR Ph is back on; the QR payment opens after it syncs.";
   return null;
 }

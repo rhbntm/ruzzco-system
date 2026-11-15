@@ -77,7 +77,8 @@ const review = (transactionId: string, choice: string, owner = true) => request<
 function sale(transactionTime: string, amount: number) {
   const id = randomUUID();
   txIds.push(id);
-  return { id, barberId: BARBER, serviceId: SERVICE_ID, totalAmount: amount, paymentMethod: "CASH", transactionTime };
+  // A custom amount (slice 16): the server checks menu prices; these amounts are invented.
+  return { id, barberId: BARBER, serviceId: SERVICE_ID, totalAmount: amount, customAmount: true, paymentMethod: "CASH", transactionTime };
 }
 
 // sentAt is the phone's clock at sending. Sending a 2000-dated sale with a 2000 clock makes

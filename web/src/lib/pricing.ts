@@ -34,6 +34,15 @@ export interface PricedSale {
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
+/**
+ * The loyalty card's discount in pesos: LOYALTY_PERCENT of the list price, rounded to the centavo.
+ * The one formula for the POS (priceSale, discountLabel) and the server's price check (slice 16),
+ * so the two can never round differently.
+ */
+export function loyaltyDiscount(listPrice: number): number {
+  return round2((listPrice * LOYALTY_PERCENT) / 100);
+}
+
 /** Whether the loyalty switch may apply: men's haircut at its own price (no custom amount). */
 export function loyaltyApplies(serviceId: string | undefined, customAmountInput: string): boolean {
   return serviceId === LOYALTY_SERVICE_ID && !isCustomAmountInput(customAmountInput);
@@ -51,7 +60,7 @@ export function priceSale({ standardPrice, customAmountInput, tipChoice, customT
   // The only discount is the loyalty card, on a men's haircut at its own price. Anywhere else
   // the switch is ignored (the POS also hides or disables it there).
   const isLoyalty = loyalty && loyaltyApplies(serviceId, customAmountInput);
-  const discountAmount = isLoyalty ? round2((listPrice * LOYALTY_PERCENT) / 100) : 0;
+  const discountAmount = isLoyalty ? loyaltyDiscount(listPrice) : 0;
   const amountPaid = round2(Math.max(0, listPrice - discountAmount));
   const parsedCustomTip = Number(customTipInput);
   // Tips are never discounted.
@@ -89,7 +98,7 @@ export function customNoteFor(isCustomAmount: boolean, note: string): string | n
  */
 export function discountLabel(sale: { discountType?: string | null; discountAmount?: number | null; listPrice?: number | null }): string | null {
   if (!sale.discountType || sale.discountType === "NONE") return null;
-  const loyaltyOff = sale.listPrice ? round2((sale.listPrice * LOYALTY_PERCENT) / 100) : null;
+  const loyaltyOff = sale.listPrice ? loyaltyDiscount(sale.listPrice) : null;
   const isLoyalty = sale.discountType === "PERCENT" && loyaltyOff !== null && Math.abs(Number(sale.discountAmount ?? 0) - loyaltyOff) < 0.005;
   return isLoyalty ? `Loyalty ${LOYALTY_PERCENT}%` : "Discount";
 }

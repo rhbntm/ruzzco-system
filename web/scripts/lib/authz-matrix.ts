@@ -44,6 +44,7 @@ export const AUTHZ_MATRIX: MatrixRow[] = [
   { route: "v1/reports/reconciliation", method: "GET", access: "owner", note: "day figures" },
   { route: "v1/reports/reconciliation", method: "POST", access: "owner", note: "readJson" },
   { route: "v1/reports/ledger-summary", method: "GET", access: "owner", note: "day/week/month summary" },
+  { route: "v1/reports/custom-amounts", method: "GET", access: "owner", note: "slice 16: the day's custom-amount sales, read-only" },
   { route: "v1/reports/time-review", method: "POST", access: "owner", note: "readJson" },
   { route: "v1/forecast", method: "GET", access: "owner", note: "latest saved forecast" },
   { route: "v1/forecast/refresh", method: "POST", access: "owner", note: "C1: application/json and exactly {}, before the ml-service call" },

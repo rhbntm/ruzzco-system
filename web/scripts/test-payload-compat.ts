@@ -53,7 +53,7 @@ const legacyDefaults = { discountType: "NONE", discountAmount: 0, tipAmount: 0, 
 console.log("Historic shapes still parse");
 
 expectParses(
-  "Original cash sale (no paymentMethod field)",
+  "Original cash sale (no paymentMethod field; slice 16 edge case 6 shape: its price is checked on the server, not here)",
   { id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 200, transactionTime: time },
   { paymentMethod: "CASH", ...legacyDefaults, listPrice: undefined, amountPaid: undefined }
 );

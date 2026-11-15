@@ -14,7 +14,9 @@ const MONEY_MAX = 99_999_999.99;
 
 /** Why the server did not record a sale. Sent per item; the sale stays queued on the phone. */
 // GATEWAY_DISABLED: a QRPH sale while QR Ph is off or misconfigured on the server.
-export type SyncRejectReason = "INVALID" | "UNKNOWN_BARBER" | "DEVICE_MISMATCH" | "ASSIGNMENT_UNAVAILABLE" | "GATEWAY_DISABLED";
+// PRICE_MISMATCH (slice 16): a non-custom sale whose list price isn't its service's price, a
+// discount other than the loyalty discount, or amounts that don't add up (src/lib/price-check.ts).
+export type SyncRejectReason = "INVALID" | "UNKNOWN_BARBER" | "DEVICE_MISMATCH" | "ASSIGNMENT_UNAVAILABLE" | "GATEWAY_DISABLED" | "PRICE_MISMATCH";
 
 export const syncTransactionItemSchema = z.object({
   id: z.string().uuid("Invalid transaction UUID"),

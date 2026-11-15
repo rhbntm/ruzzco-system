@@ -1,6 +1,7 @@
 /**
  * Slice 10: the ledger summary. Part 1 is pure (periods and arithmetic, invented numbers).
- * Part 2 calls the REAL route on a running dev server.
+ * Part 2 calls the REAL route on a running dev server. Part 3 (slice 16) checks the read-only
+ * custom-amounts route (GET /api/v1/reports/custom-amounts) on the same fixtures' barber.
  *
  *   npm run dev                     (in another terminal)
  *   npm run test:ledger-summary     (TEST_BASE_URL overrides http://localhost:3000)
@@ -216,6 +217,94 @@ async function integration() {
   check("service sales + Discounts = revenue with the old sale too", withLegacy.services.reduce((n, s) => n.add(s.listSales), D(0)).add(withLegacy.serviceGap).equals(withLegacy.sales.total));
   const loyaltyWeek = (await summary(LOYALTY_DAY, "week")).body;
   check("over the week too: service sales + Discounts = revenue", loyaltyWeek.services.reduce((n, s) => n.add(s.listSales), D(0)).add(loyaltyWeek.serviceGap).equals(loyaltyWeek.sales.total), `${JSON.stringify(loyaltyWeek.services)} ${loyaltyWeek.serviceGap} ${loyaltyWeek.sales.total}`);
+
+  await customAmounts();
+}
+
+type CustomList = {
+  success: boolean; date: string;
+  sales: { id: string; time: string; barberName: string; serviceName: string | null; amountPaid: string; note: string | null; paymentMethod: string; paymentStatus: string; commission: string; menuPriceNow: string | null }[];
+};
+
+// Slice 16, Decision 4: the read-only custom-amounts list for one business date.
+async function customAmounts() {
+  console.log("\nCustom amounts (slice 16)");
+  const DAY = "2000-02-16"; // a Wednesday with no other fixtures
+  const BEFORE = "2000-02-15";
+  const AFTER = "2000-02-17";
+  const list = (date: string, cookie = ownerCookie) => call<CustomList>("GET", `/api/v1/reports/custom-amounts?date=${date}`, undefined, cookie);
+  const ids = async (date: string) => (await list(date)).body.sales?.map((s) => s.id) ?? [];
+
+  // Authorization
+  const signedOut = await list(DAY, "");
+  check("custom amounts: 401 without owner access", signedOut.status === 401, String(signedOut.status));
+  const ownerAnswer = await list(DAY);
+  check("custom amounts: 200 with owner access", ownerAnswer.status === 200 && ownerAnswer.body.success && Array.isArray(ownerAnswer.body.sales), JSON.stringify(ownerAnswer.body));
+
+  // Fixtures: synced sales (PAID) and, for the other statuses and the date review, Prisma inserts.
+  const onDay = { ...sale(DAY, "15:00:00.000", 400), customAmountNote: "test note" };
+  const onBefore = sale(BEFORE, "15:00:00.000", 410);
+  const onAfter = sale(AFTER, "15:00:00.000", 420);
+  const menuSale = { ...sale(DAY, "16:00:00.000", 250), customAmount: false }; // a ₱250 haircut, not custom
+  const synced = await sync([onDay, onBefore, onAfter, menuSale]);
+  check("setup: custom and menu-price sales synced", synced.status === 200 && synced.body.rejected.length === 0, JSON.stringify(synced.body));
+
+  const insert = async (status: "PENDING" | "EXPIRED" | "FAILED" | "PAID", at: string, extra: Partial<Prisma.TransactionUncheckedCreateInput> = {}) => {
+    const id = randomUUID();
+    txIds.push(id);
+    await prisma.transaction.create({
+      data: {
+        id, barberId: BARBER, totalAmount: 300, listPrice: 300, amountPaid: 300, customAmount: true, customAmountNote: `status ${status}`,
+        barberCommissionAmount: 150, commissionRate: 0.5, paymentMethod: status === "PAID" ? "CASH" : "QRPH", paymentStatus: status,
+        transactionTime: new Date(at), ...extra,
+        items: { create: { serviceId: SERVICE_ID, priceAtSale: 300 } },
+        commissionLogs: { create: { barberId: BARBER, amount: 150 } },
+      },
+    });
+    return id;
+  };
+  const pending = await insert("PENDING", AT(DAY, "17:00:00.000"));
+  const expired = await insert("EXPIRED", AT(DAY, "17:10:00.000"));
+  const failed = await insert("FAILED", AT(DAY, "17:20:00.000"));
+  // Stamped on the day before by a phone whose clock was off, received on DAY: held for review.
+  const flagged = await insert("PAID", AT(BEFORE, "18:00:00.000"), { timeFlag: "DEVICE_CLOCK_SKEW", clockSkewSeconds: -86400, syncedAt: new Date(AT(DAY, "18:00:00.000")) });
+
+  // Date filtering
+  const dayIds = await ids(DAY);
+  check("date: a custom sale on the date is listed", dayIds.includes(onDay.id), JSON.stringify(dayIds));
+  check("date: custom sales on the day before and after are not", !dayIds.includes(onBefore.id) && !dayIds.includes(onAfter.id));
+  check("date: the day before lists its own sale only", (await ids(BEFORE)).includes(onBefore.id) && !(await ids(BEFORE)).includes(onDay.id));
+  check("date: a flagged sale waiting for review is listed on no day", !dayIds.includes(flagged) && !(await ids(BEFORE)).includes(flagged));
+  const reviewed = await call<{ success: boolean }>("POST", "/api/v1/reports/time-review", { transactionId: flagged, choice: "RECEIVED_DATE" });
+  check("setup: the flagged sale's received date confirmed", reviewed.status === 200 && reviewed.body.success, JSON.stringify(reviewed.body));
+  check("date: after review it is listed on its confirmed date only", (await ids(DAY)).includes(flagged) && !(await ids(BEFORE)).includes(flagged));
+
+  // Status filtering
+  check("status: custom PAID and PENDING are listed", dayIds.includes(onDay.id) && dayIds.includes(pending));
+  check("status: EXPIRED and FAILED are not", !dayIds.includes(expired) && !dayIds.includes(failed));
+  check("status: a non-custom sale on the date is not", !dayIds.includes(menuSale.id));
+  const times = (await list(DAY)).body.sales.map((s) => s.time);
+  check("order: newest first", times.length >= 3 && times.every((v, i) => i === 0 || times[i - 1] >= v), JSON.stringify(times));
+
+  // Values
+  await prisma.barber.update({ where: { id: BARBER }, data: { commissionRate: 0.3 } });
+  const rows = (await list(DAY)).body.sales;
+  const row = rows.find((s) => s.id === onDay.id);
+  check("values: the commission is the stored snapshot (200.00 at 50%) after the rate changed to 30%", row?.commission === "200.00", JSON.stringify(row));
+  const menuNow = (await prisma.service.findUniqueOrThrow({ where: { id: SERVICE_ID }, select: { standardPrice: true } })).standardPrice.toFixed(2);
+  check(`values: "Menu price now" is the service's current price (${menuNow})`, row?.menuPriceNow === menuNow);
+  check("values: amount paid, note, payment method and status as stored", row?.amountPaid === "400.00" && row.note === "test note" && row.paymentMethod === "CASH" && row.paymentStatus === "PAID" && row.barberName === `Test Summary ${RUN}`, JSON.stringify(row));
+  check("values: a PENDING sale says so", rows.find((s) => s.id === pending)?.paymentStatus === "PENDING");
+
+  // Read-only
+  const counts = () => Promise.all([prisma.transaction.count(), prisma.dailyPayoutLedger.count(), prisma.payoutEntry.count()]);
+  const before = await counts();
+  await list(DAY);
+  await list(BEFORE);
+  await list("2000-02-20");
+  check("read-only: a GET writes nothing (transactions, payout ledger rows, payout entries unchanged)", JSON.stringify(await counts()) === JSON.stringify(before));
+  check("read-only: an impossible date answers 400", (await list("2000-02-30")).status === 400);
+  check("read-only: a missing date answers 400", (await call("GET", "/api/v1/reports/custom-amounts")).status === 400);
 }
 
 async function cleanupDates() {

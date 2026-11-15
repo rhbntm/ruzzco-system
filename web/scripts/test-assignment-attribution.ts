@@ -88,6 +88,8 @@ function sale({ barber, assignmentId, deviceKey, id }: SaleOpts) {
     totalAmount: 150,
     listPrice: 150,
     amountPaid: 150,
+    // A custom amount (slice 16): ₱150 is not a price on the list; keeps the commission table.
+    customAmount: true,
     paymentMethod: "CASH",
     transactionTime: new Date().toISOString(),
     ...(deviceKey ? { deviceKey } : {}),
@@ -133,17 +135,17 @@ async function stored(id: string) {
   return prisma.transaction.findUnique({ where: { id }, include: { commissionLogs: true } });
 }
 
-async function expectAttributed(label: string, id: string, barber: Key, assignmentId: string | null) {
+async function expectAttributed(label: string, id: string, barber: Key, assignmentId: string | null, commission: number = COMMISSION[barber]) {
   const tx = await stored(id);
   const want = BARBERS[barber].id;
   check(`${label}: attributed to ${barber}`, tx?.barberId === want, `got ${tx?.barberId}`);
   check(`${label}: assignmentId ${assignmentId ? "kept" : "null"}`, (tx?.assignmentId ?? null) === assignmentId, `got ${tx?.assignmentId}`);
   check(
-    `${label}: commission ${COMMISSION[barber]} logged to ${barber}`,
-    Number(tx?.barberCommissionAmount) === COMMISSION[barber] &&
+    `${label}: commission ${commission} logged to ${barber}`,
+    Number(tx?.barberCommissionAmount) === commission &&
       tx?.commissionLogs.length === 1 &&
       tx.commissionLogs[0].barberId === want &&
-      Number(tx.commissionLogs[0].amount) === COMMISSION[barber],
+      Number(tx.commissionLogs[0].amount) === commission,
     `got ${tx?.barberCommissionAmount}`
   );
 }
@@ -323,10 +325,11 @@ async function main() {
   console.log("\nT14 legacy sale with no assignmentId and no deviceKey");
   // Sent from an approved phone (dev1, slice 15); it still keeps its stamped barber.
   const l2 = sale({ barber: "B" });
-  // Exactly the shape older clients sent (no listPrice/amountPaid either).
-  const t14 = await sync([{ id: l2.id, barberId: l2.barberId, serviceId: SERVICE_ID, totalAmount: 150, paymentMethod: "CASH", transactionTime: l2.transactionTime }]);
-  check("T14: old payload shape validates", t14.status === 200, JSON.stringify(t14.body));
-  await expectAttributed("T14", l2.id, "B", null);
+  // Exactly the shape older clients sent (no listPrice/amountPaid/customAmount either), at today's
+  // ₱250 haircut: slice 16 checks it on totalAmount (edge case 6), so its commission is 250 × 0.40.
+  const t14 = await sync([{ id: l2.id, barberId: l2.barberId, serviceId: SERVICE_ID, totalAmount: 250, paymentMethod: "CASH", transactionTime: l2.transactionTime }]);
+  check("T14: old payload shape validates and is recorded", t14.status === 200 && t14.body.syncedIds.includes(l2.id) && t14.body.rejected.length === 0, JSON.stringify(t14.body));
+  await expectAttributed("T14", l2.id, "B", null, 100);
   check("T14: cashierId null", (await stored(l2.id))?.cashierId === null);
 
   console.log("\nT15 deleting an assignment referenced by a transaction");
