@@ -74,6 +74,31 @@ const shellHrefs = [...shell.matchAll(/href=(?:"([^"]+)"|\{([^}]+)\})/g)].map((m
 check("the shell's only other link is the logo, to /", shellHrefs.every((href) => href === "/" || href === "item.href"), shellHrefs.join(", "));
 check("the shell checks no access itself (pages and routes do)", !/ownerPageAccess|hasOwnerAccess/.test(shell));
 
+console.log("\nN4 the barber's header and pages (slice 21b)");
+const headerFile = join(SRC, "components", "BarberHeader.tsx");
+const header = readFileSync(headerFile, "utf8");
+const headerLinks = [...header.matchAll(/href:\s*"([^"]+)"/g)].map((m) => m[1]);
+check("the switch lists exactly /pos and /shift-log", headerLinks.length === 2 && headerLinks.includes("/pos") && headerLinks.includes("/shift-log"), headerLinks.join(", "));
+const headerHrefs = [...header.matchAll(/href=(?:"([^"]+)"|\{([^}]+)\})/g)].map((m) => m[1] ?? m[2]);
+check("the header's only links come from that list", headerHrefs.every((href) => href === "page.href"), headerHrefs.join(", "));
+check("the header names no owner page", !OWNER_NAV.some((item) => item.href !== "/" && header.includes(`"${item.href}"`)) && !/OWNER_NAV|owner-nav/.test(header));
+const barberFiles = [headerFile, join(SRC, "app", "pos", "page.tsx"), join(SRC, "app", "shift-log", "page.tsx")];
+for (const file of barberFiles) {
+  const name = relative(SRC, file).split(sep).join("/");
+  check(`${name} links to no owner page`, !OWNER_NAV.some((item) => item.href !== "/" && new RegExp(`href=["{\`]*${item.href}["}\`]`).test(readFileSync(file, "utf8"))));
+}
+const SERVER_CHECK = /ownerPageAccess|hasOwnerAccess|@\/lib\/owner-access|@\/lib\/session["']|next\/headers|["']server-only["']/;
+for (const file of [...barberFiles, join(SRC, "app", "layout.tsx")]) {
+  const name = relative(SRC, file).split(sep).join("/");
+  check(`${name} imports no server access check`, !SERVER_CHECK.test(readFileSync(file, "utf8")));
+}
+const signInGate = readFileSync(join(SRC, "components", "SignInGate.tsx"), "utf8");
+check("the barber sign-in links to no page (its Back is history only)", !/href=/.test(signInGate) && /<BackButton\s*\/>/.test(signInGate));
+// Code only: the comments name pages while explaining the rule.
+const backButton = readFileSync(join(SRC, "components", "BackButton.tsx"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+check("Back names no page itself (history, or the fallback it is given)", !/["'`]\/[a-z-]*["'`]/.test(backButton) && [...backButton.matchAll(/href=\{([^}]+)\}/g)].every((m) => m[1] === "fallbackHref"));
+check("both barber pages use the header",barberFiles.slice(1).every((file) => /<BarberHeader\b/.test(readFileSync(file, "utf8"))));
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   for (const f of failures) console.log(`  FAIL ${f}`);

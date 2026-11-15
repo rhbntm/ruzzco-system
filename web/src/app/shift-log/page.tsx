@@ -3,19 +3,18 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Scissors,
   Clock,
   CheckCircle2,
-  RefreshCw,
   Banknote,
   Smartphone,
   QrCode,
   TriangleAlert,
+  HardDrive,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { db, type LocalTransaction } from "@/lib/db";
+import { db, getOrCreateDeviceKey, type LocalTransaction } from "@/lib/db";
 import { DEFAULT_CUSTOM_NOTE, discountLabel } from "@/lib/pricing";
 import { collectedTotal } from "@/lib/charge";
 import { peso } from "@/lib/peso";
@@ -25,9 +24,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { RejectedSales } from "@/components/RejectedSales";
 import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
-import { SignInGate } from "@/components/SignInGate";
+import { SignInGate, useStaffSession } from "@/components/SignInGate";
+import { BarberHeader } from "@/components/BarberHeader";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
-import { ConnectionBadge, ShopPcReminder, useShopPc } from "@/components/ShopPcStatus";
+import { ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
 
 function subscribeOnline(callback: () => void) {
@@ -57,6 +57,12 @@ export default function ShiftLogPageWithSignIn() {
 
 function ShiftLogPage() {
   const mounted = useMounted();
+  const staff = useStaffSession();
+  // The phone's assignment, read from the phone itself: whose sales it records (the header says so).
+  const binding = useLiveQuery(async () => {
+    if (typeof window === "undefined") return null;
+    return (await db.deviceBindings.get(getOrCreateDeviceKey()).catch(() => undefined)) ?? null;
+  }, []);
   const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, () => true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
@@ -162,6 +168,9 @@ function ShiftLogPage() {
 
   // ...and when the shop PC answers again after being down (the phone may have stayed online).
   const shopPc = useShopPc(handleSync);
+  // An unsynced sale is "saved on this phone" while the phone can't reach the shop PC, and
+  // "waiting to sync" once it can.
+  const cannotSyncNow = !isOnline || isShopPcDown(shopPc);
 
   // The page number is clamped, so a list that shrank still shows a page that exists.
   const shown = paginate(localTransactions ?? [], page);
@@ -186,50 +195,20 @@ function ShiftLogPage() {
         />
       )}
 
-      {/* Header: the black banner */}
-      <header className="rz-banner sticky top-0 z-40">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-2 px-4 py-2.5">
-          <Link
-            href="/pos"
-            className="inline-flex items-center gap-1.5 text-sm text-dust hover:text-bone transition-colors py-1.5 pr-2 pointer-coarse:min-h-11 group shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
-            <span>POS Station</span>
-          </Link>
-
-          <div className="flex items-center gap-2 min-w-0">
-            {/* The station light: it turns while a sync is running. */}
-            <BarberPoleIcon className="w-2.5 h-6" spinning={isSyncing} />
-            <h1 className="font-display font-semibold tracking-wide sm:tracking-widest text-[0.9375rem] sm:text-lg leading-none text-bone uppercase truncate">
-              RUZZCO SHIFT LOG
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <ConnectionBadge isOnline={isOnline} shopPc={shopPc} />
-            {/* The counts are in the button's name; the badges only show them. */}
-            <button
-              onClick={handleSync}
-              disabled={isSyncing || !isOnline}
-              title="Sync pending transactions"
-              aria-label={`Sync now${(pendingCount ?? 0) > 0 ? `, ${pendingCount} waiting` : ""}${(rejectedSales?.length ?? 0) > 0 ? `, ${rejectedSales?.length} need attention` : ""}`}
-              className="rz-btn rz-btn-secondary rz-btn-icon relative pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-crimson-ink" : ""}`} />
-              {(pendingCount ?? 0) > 0 && (
-                <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-crimson text-on-accent text-xs font-bold ring-2 ring-wall flex items-center justify-center animate-pulse">
-                  {pendingCount}
-                </span>
-              )}
-              {(rejectedSales?.length ?? 0) > 0 && (
-                <span aria-hidden="true" title="Sales needing attention" className="absolute -bottom-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-warn text-on-warn text-xs font-bold ring-2 ring-wall flex items-center justify-center">
-                  {rejectedSales?.length}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* The barber's header (slice 21b): shared with the POS. */}
+      <BarberHeader
+        current="/shift-log"
+        title="Shift log"
+        width="max-w-3xl"
+        assignedBarber={binding ? { id: binding.barberId, name: binding.barberName } : null}
+        account={staff.session}
+        isOnline={isOnline}
+        shopPc={shopPc}
+        isSyncing={isSyncing}
+        onSync={() => void handleSync()}
+        pendingCount={pendingCount ?? 0}
+        rejectedCount={rejectedSales?.length ?? 0}
+      />
 
       <div className="rz-page relative max-w-3xl mx-auto px-4 py-5 space-y-5">
         {/* Announces sync results to screen readers; out of the layout flow. */}
@@ -349,6 +328,7 @@ function ShiftLogPage() {
                       </span>
                       <span className="font-mono text-dust-2">{tx.id.slice(0, 8)}…</span>
                     </div>
+                    <SyncState state={syncStateOf(tx, cannotSyncNow)} />
                     {/* Slice 13: a loyalty sale says so; a custom amount shows its note. */}
                     {(discount || tx.customAmount) && (
                       <div className="text-xs text-bone-2 whitespace-normal break-words">
@@ -402,36 +382,6 @@ function ShiftLogPage() {
                       {collected.tip > 0 && <span className="block text-xs text-dust tabular-nums">incl. {peso(collected.tip)} tip</span>}
                     </span>
 
-                    {/* Sync status dot */}
-                    {/* Sync status: icon and colour for sighted users, a name for screen readers. */}
-                    {tx.synced === 1 ? (
-                      <span
-                        role="img"
-                        aria-label="Synced to server"
-                        title="Synced to server"
-                        className="w-6 h-6 rounded-full bg-ok/10 text-ok border border-ok/30 flex items-center justify-center"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                      </span>
-                    ) : isRejected(tx) ? (
-                      <span
-                        role="img"
-                        aria-label="Needs attention"
-                        title="Needs attention"
-                        className="w-6 h-6 rounded-full bg-warn/10 text-warn border border-warn/35 flex items-center justify-center"
-                      >
-                        <TriangleAlert className="w-3.5 h-3.5" />
-                      </span>
-                    ) : (
-                      <span
-                        role="img"
-                        aria-label="Pending sync"
-                        title="Pending sync"
-                        className="w-6 h-6 rounded-full bg-crimson/12 text-crimson-ink border border-crimson-bright/35 flex items-center justify-center"
-                      >
-                        <Clock className="w-3.5 h-3.5" />
-                      </span>
-                    )}
                   </div>
                 </li>
                 );
@@ -462,6 +412,34 @@ function ShiftLogPage() {
           )}
         </section>
       </div>
+    </div>
+  );
+}
+
+// The four states a sale on this phone can be in, each with an icon and a word (slice 21b).
+type SaleSyncState = "synced" | "attention" | "waiting" | "on-phone";
+
+function syncStateOf(tx: LocalTransaction, cannotSyncNow: boolean): SaleSyncState {
+  if (tx.synced === 1) return "synced";
+  if (isRejected(tx)) return "attention";
+  return cannotSyncNow ? "on-phone" : "waiting";
+}
+
+const SYNC_STATES: Record<SaleSyncState, { label: string; title: string; className: string; icon: typeof Clock }> = {
+  synced: { label: "Synced", title: "Synced to the shop PC", className: "rz-pill-ok", icon: CheckCircle2 },
+  attention: { label: "Needs attention", title: "The shop PC did not accept this sale; see the notice above", className: "rz-pill-warn", icon: TriangleAlert },
+  waiting: { label: "Waiting to sync", title: "Saved on this phone; it is sent by itself", className: "", icon: Clock },
+  "on-phone": { label: "Saved on this phone", title: "Saved on this phone only until it reaches the shop PC", className: "", icon: HardDrive },
+};
+
+function SyncState({ state }: { state: SaleSyncState }) {
+  const { label, title, className, icon: Icon } = SYNC_STATES[state];
+  return (
+    <div>
+      <span title={title} className={`rz-pill mt-1 ${className}`}>
+        <Icon aria-hidden="true" className="w-3 h-3" />
+        {label}
+      </span>
     </div>
   );
 }

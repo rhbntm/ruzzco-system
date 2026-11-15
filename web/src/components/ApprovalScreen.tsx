@@ -12,6 +12,7 @@ import { isWaitingForApproval, subscribeApproval } from "@/lib/sync";
 import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { Logo } from "@/components/Logo";
+import { BackButton } from "@/components/BackButton";
 
 /** The approval step: the approve-this-phone banner, and on non-POS pages a link to the owner sign-in. */
 export function ApprovalScreen({ title, ownerSignIn, message }: {
@@ -23,6 +24,8 @@ export function ApprovalScreen({ title, ownerSignIn, message }: {
   return (
     <main className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6 w-full">
       <div className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5">
+        {/* Through history only, never a link: /pos and /shift-log link to no other page. */}
+        <BackButton />
         <div className="flex flex-col items-center text-center gap-3">
           <Logo stacked />
           <h1 className="rz-title text-2xl break-words">{title}</h1>

@@ -83,7 +83,7 @@ Every screen is a working tool first: barbers ring up cuts one-handed at the cha
 
 Two experiences share the system. The **owner** works inside one shell (a sidebar from 1024px, a top bar and menu below it) and lands on a dashboard. The **barber** works on `/pos` and `/shift-log` only; those pages are stored on the phone and open with the shop PC off, so nothing on them may need the server to draw.
 
-Slice 21 is delivered in four increments. After 21a the whole app reads in light and the owner has the shell and the dashboard; the Barber Ledger and End-of-Day Cash layouts (21c), the barber header and POS tiles (21b), and the remaining pages plus the theme switch (21d) still have their earlier layouts in the new colours.
+Slice 21 is delivered in four increments: 21a the light theme, the owner shell and the dashboard; 21c the Barber Ledger and End-of-Day Cash layouts; 21b the barber header, POS tiles and the shift log's sale states. The remaining pages plus the theme switch (21d) still have their earlier layouts in the new colours.
 
 ## Colors
 
@@ -140,6 +140,10 @@ Flat by default: a card is a hairline and `--rz-shadow-card`. Three more steps e
 - **Tables** (`.rz-table`): micro uppercase headers, hairline rows, a faint row hover, tabular numbers, totals under a stronger rule.
 - **Charts**: `ColumnChart` (one value per column, hover, tap or arrow keys, "Show as table") and `BarList` (labelled share bars; `barClassName` gives a payment method its own colour). A chart states its unit and axes in words and carries a legend when it uses two colours.
 - **Barber pole** (`BarberPoleIcon`, `.rz-ribbon`): the state light. It turns while a page loads or a sync runs and stands still otherwise; the ribbon across the top of every page is the same stripe.
+- **Barber header** (`BarberHeader`, `/pos` and `/shift-log`): the logo (the mark alone below `sm`), "Sales on this phone: {barber}" (the phone's assignment, which decides attribution), a warn pill naming the signed-in account only when it is someone else's or nobody is signed in, connection, sync with its counts, settings (POS only) and a two-item `.rz-seg` switch whose links are the only ones it has. It reads nothing from the server.
+- **Sale states** (Shift Log): Synced (ok), Needs attention (warn), Waiting to sync (the PC can be reached), Saved on this phone (it can't); each a pill with an icon and the word.
+- **Sign-in cards** (barber sign-in, owner sign-in, approval): a Back at the top (`BackButton`: browser history; hidden on the barber and approval screens when there is no earlier page, a link to `/` on the owner sign-in), and "Approve this phone" (`ApprovePhoneButton`) under the barber sign-in and on `/login`.
+- **Service tiles** (POS): an icon chosen from the service's name (scissors, droplets, sparkles, palette; scissors for anything unrecognised), the name and the price; decoration only.
 
 ## Dashboard cards
 

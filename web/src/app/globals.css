@@ -778,6 +778,7 @@ body {
   }
 
   .rz-seg-item[aria-current="true"],
+  .rz-seg-item[aria-current="page"],
   .rz-seg-item[aria-pressed="true"] {
     background-color: var(--color-seg-on);
     border-color: var(--color-seam-strong);

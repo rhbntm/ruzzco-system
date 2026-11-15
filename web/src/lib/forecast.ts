@@ -135,7 +135,9 @@ export async function saveForecast(forecast: ForecastResponse) {
       );
     }
     return { run, days };
-  });
+    // 30 days of upserts in one transaction ran past Prisma's 5 s default against the hosted
+    // (Vercel) database; the values saved are unchanged.
+  }, { timeout: 30000, maxWait: 10000 });
 }
 
 // The latest run and the saved days from today (Manila) for `days` days (default 7). Database only.

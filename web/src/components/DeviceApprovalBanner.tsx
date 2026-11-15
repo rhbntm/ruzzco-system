@@ -12,11 +12,37 @@ import { approveThisDevice, isWaitingForApproval, subscribeApproval } from "@/li
 export function DeviceApprovalBanner({ onApproved, message }: { onApproved?: () => void; message?: string }) {
   // The server render (and the first client render) never shows it: approval lives in localStorage.
   const waiting = useSyncExternalStore(subscribeApproval, isWaitingForApproval, () => false);
+  if (!waiting) return null;
+
+  return (
+    <div role="status" className="animate-drop rz-notice rz-notice-warn text-sm flex-wrap">
+      <TriangleAlert className="w-4.5 h-4.5 text-warn shrink-0 mt-px" />
+      <span className="flex-1 min-w-48">
+        {message ?? "This phone isn't approved yet. Sales are saved on this phone and will be sent once Bayani or Mart approves it."}
+      </span>
+      <ApprovePhoneButton onApproved={onApproved} className="rz-btn rz-btn-secondary text-sm pointer-coarse:min-h-11" />
+    </div>
+  );
+}
+
+/**
+ * "Approve this phone" and its PIN dialog, wherever a phone may need approving: the banner above,
+ * and (slice 21b) the barber sign-in on /pos and the owner sign-in on /login, where the phone may
+ * already be approved. Approving again only replaces this phone's secret (slice 15); its barber,
+ * its sales and its queue stay as they are. The PIN is checked on the server, never here.
+ */
+export function ApprovePhoneButton({ onApproved, className, label = "Approve this phone" }: {
+  onApproved?: () => void;
+  className: string;
+  label?: string;
+}) {
+  const waiting = useSyncExternalStore(subscribeApproval, isWaitingForApproval, () => true);
   const [open, setOpen] = useState(false);
   const [pin, setPin] = useState("");
-  const [label, setLabel] = useState("");
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
 
   // Escape closes the dialog, like its Cancel button.
   useEffect(() => {
@@ -26,38 +52,29 @@ export function DeviceApprovalBanner({ onApproved, message }: { onApproved?: () 
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  if (!waiting) return null;
-
   async function submit() {
     setBusy(true);
     setError(null);
-    const result = await approveThisDevice(pin, label);
+    const result = await approveThisDevice(pin, name);
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
     setPin("");
-    setLabel("");
+    setName("");
     setOpen(false);
+    setDone(true);
     onApproved?.();
   }
 
   return (
     <>
-      <div role="status" className="animate-drop rz-notice rz-notice-warn text-sm flex-wrap">
-        <TriangleAlert className="w-4.5 h-4.5 text-warn shrink-0 mt-px" />
-        <span className="flex-1 min-w-48">
-          {message ?? "This phone isn't approved yet. Sales are saved on this phone and will be sent once Bayani or Mart approves it."}
-        </span>
-        <button
-          type="button"
-          onClick={() => { setError(null); setOpen(true); }}
-          className="rz-btn rz-btn-secondary text-sm pointer-coarse:min-h-11"
-        >
-          Approve this phone
-        </button>
-      </div>
+      <button type="button" onClick={() => { setError(null); setDone(false); setOpen(true); }} className={className}>
+        <ShieldCheck aria-hidden="true" className="w-4 h-4" />
+        {label}
+      </button>
+      {done && !waiting && <p role="status" className="sr-only">This phone is approved.</p>}
 
       {open && (
         <div className="rz-overlay items-center">
@@ -74,7 +91,10 @@ export function DeviceApprovalBanner({ onApproved, message }: { onApproved?: () 
               </span>
               <h2 id="approve-phone-title" className="rz-title text-xl">Approve this phone</h2>
             </div>
-            <p className="text-sm text-dust leading-relaxed">Bayani or Mart: type the approval PIN on this phone.</p>
+            <p className="text-sm text-dust leading-relaxed">
+              Bayani or Mart: type the approval PIN on this phone.
+              {!waiting && " This phone is already approved; approving it again gives it a new key and keeps its barber and sales."}
+            </p>
             <input
               autoFocus
               type="password"
@@ -90,8 +110,8 @@ export function DeviceApprovalBanner({ onApproved, message }: { onApproved?: () 
               type="text"
               maxLength={60}
               aria-label="Phone name (optional)"
-              value={label}
-              onChange={(event) => setLabel(event.target.value)}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
               className="rz-field min-h-11"
               placeholder="Phone name, e.g. Vince's phone (optional)"
             />

@@ -32,6 +32,8 @@ import { gateScreen } from "@/lib/approval-gate";
 import { ApprovalScreen } from "@/components/ApprovalScreen";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { Logo } from "@/components/Logo";
+import { BackButton } from "@/components/BackButton";
+import { ApprovePhoneButton } from "@/components/DeviceApprovalBanner";
 
 type GateContext = {
   /** Today's sign-in on this phone; null while the sign-in screen is up. */
@@ -239,9 +241,18 @@ function SignInScreen({ title, onSignedIn }: { title: string; onSignedIn: (sessi
         className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5"
         aria-labelledby="staff-sign-in-title"
       >
+        {/* Through history only: the POS links to no other page (slice 19 §7.13). */}
+        <BackButton />
         <div className="flex flex-col items-center text-center gap-3">
           <Logo stacked />
-          <h1 id="staff-sign-in-title" className="rz-title text-3xl">{title}</h1>
+          <h1 id="staff-sign-in-title" className="rz-title text-2xl">{title}</h1>
+          {/* Whose sales this phone records, before anyone signs in (slice 21b): the phone's assignment. */}
+          {bound && (
+            <p className="rz-pill bg-panel-2 text-bone max-w-full">
+              <span className="text-dust font-medium">Sales on this phone:</span>
+              <span className="truncate">{bound.barberName}</span>
+            </p>
+          )}
           <p className="text-sm text-dust leading-relaxed">
             {bound ? `Sign in with ${bound.barberName}'s account to start today's sales.` : "Sign in with your own account to start today's sales."}
           </p>
@@ -278,6 +289,8 @@ function SignInScreen({ title, onSignedIn }: { title: string; onSignedIn: (sessi
         <p className="text-xs text-dust text-center leading-relaxed">
           With the shop PC off, the phone checks the password itself if this account has signed in here before. Forgot it? The owner resets it on Staff accounts.
         </p>
+        {/* Slice 21b: approval stays reachable once the phone is approved (re-approval replaces its key). */}
+        <ApprovePhoneButton className="rz-btn rz-btn-ghost w-full min-h-11 text-sm text-dust hover:text-bone" />
       </form>
     </main>
   );

@@ -6,11 +6,11 @@
 // GET /api/v1/auth/session); a PIN unlock refused with OWNER_ACCOUNT_EXISTS switches the form.
 // Nothing typed here is stored.
 
-import { useEffect, useId, useState } from "react";
-import Link from "next/link";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { LockKeyhole } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { BackButton } from "@/components/BackButton";
 import { endBarberSessionForOwner } from "@/lib/local-session";
 
 type Mode = "ACCOUNT" | "PIN";
@@ -158,31 +158,37 @@ const promptFor = (mode: Mode | null, what: string) =>
   mode === "PIN" ? `Enter the owner PIN to ${what}.` : `Sign in with the owner account to ${what}.`;
 
 /** A whole page: what /ledger, /devices, /payment-qr and /login show until the owner signs in. */
-export function OwnerSignInPage({ title, what, submitLabel, onSignedIn }: {
+export function OwnerSignInPage({ title, what, submitLabel, onSignedIn, footer }: {
   title: string;
   /** Finishes "Sign in with the owner account to …". */
   what: string;
   submitLabel: string;
   onSignedIn: () => void;
+  /** Under the form, outside it (/login: approve this phone). */
+  footer?: ReactNode;
 }) {
   const router = useRouter();
   // The layout renders again with the new session, so the owner's menu appears around the page.
   const form = useOwnerSignIn(onSignedIn, () => router.refresh());
   return (
     <main className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6">
-      <form onSubmit={(event) => { event.preventDefault(); void form.submit(); }} className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5">
-        <div className="flex flex-col items-center text-center gap-3">
-          <Logo stacked />
-          <h1 className="rz-title text-2xl">{title}</h1>
-          <p className="text-sm text-dust leading-relaxed">{promptFor(form.mode, what)}</p>
-        </div>
-        <Fields form={form} />
-        <button disabled={form.busy || !form.ready} className="rz-btn rz-btn-primary w-full min-h-12">
-          {form.busy ? "Checking…" : submitLabel}
-        </button>
-        {form.error && <p role="alert" className="animate-rise rz-notice rz-notice-danger">{form.error}</p>}
-        <Link href="/" className="block py-2 pointer-coarse:py-3.5 text-center text-sm text-dust hover:text-bone transition-colors">Back to home</Link>
-      </form>
+      <div className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5">
+        {/* The previous page, or `/` when there is none (slice 21b). */}
+        <BackButton fallbackHref="/" />
+        <form onSubmit={(event) => { event.preventDefault(); void form.submit(); }} className="space-y-5">
+          <div className="flex flex-col items-center text-center gap-3">
+            <Logo stacked />
+            <h1 className="rz-title text-2xl">{title}</h1>
+            <p className="text-sm text-dust leading-relaxed">{promptFor(form.mode, what)}</p>
+          </div>
+          <Fields form={form} />
+          <button disabled={form.busy || !form.ready} className="rz-btn rz-btn-primary w-full min-h-12">
+            {form.busy ? "Checking…" : submitLabel}
+          </button>
+          {form.error && <p role="alert" className="animate-rise rz-notice rz-notice-danger">{form.error}</p>}
+        </form>
+        {footer}
+      </div>
     </main>
   );
 }

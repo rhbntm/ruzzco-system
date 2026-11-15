@@ -14,12 +14,13 @@ import {
   CheckCircle2,
   Clock,
   TriangleAlert,
-  User,
   Sparkles,
   Layers,
   Banknote,
   Smartphone,
-  Settings,
+  Scissors,
+  Palette,
+  Droplets,
   LogOut,
   List,
   X,
@@ -83,10 +84,11 @@ import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
 import { OwnerPinDialog } from "@/components/OwnerPinDialog";
 import { SignInGate, useStaffSession } from "@/components/SignInGate";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
-import { ConnectionBadge, ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
+import { ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
+import { BarberHeader } from "@/components/BarberHeader";
 import { createSubmitLock } from "@/lib/submit-lock";
 import { useLiveQuery } from "dexie-react-hooks";
-import { MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { Logo } from "@/components/Logo";
 
 // After a sale is saved, further payment taps are ignored this long, so a double tap
@@ -850,10 +852,10 @@ function MobilePOSPage() {
                   key={barber.id}
                   onClick={() => handleBindDevice(barber)}
                   disabled={isBinding}
-                  className="rz-press w-full min-h-16 px-4 py-3.5 text-left flex items-center justify-between gap-3 group transition-[background-color,transform] duration-200 hover:bg-crimson/10 disabled:opacity-50"
+                  className="rz-press w-full min-h-16 px-4 py-3.5 text-left flex items-center justify-between gap-3 group transition-[background-color,transform] duration-200 hover:bg-panel-2 disabled:opacity-50"
                 >
                   <span className="flex items-center gap-3 min-w-0">
-                    <span className="w-11 h-11 rounded-full bg-panel-2 ring-1 ring-seam-strong text-bone flex items-center justify-center font-display font-semibold text-lg shrink-0 transition-colors duration-200 group-hover:bg-crimson group-hover:ring-crimson-bright group-hover:text-on-accent">
+                    <span className="w-11 h-11 rounded-full bg-panel-2 ring-1 ring-seam-strong text-bone flex items-center justify-center font-display font-semibold text-lg shrink-0 transition-colors duration-200 group-hover:ring-bone">
                       {barber.fullName.charAt(0)}
                     </span>
                     <span className="min-w-0">
@@ -863,7 +865,7 @@ function MobilePOSPage() {
                       </span>
                     </span>
                   </span>
-                  <ChevronRight className="w-4 h-4 text-dust shrink-0 transition-[color,transform] duration-200 group-hover:text-crimson-ink group-hover:translate-x-0.5" />
+                  <ChevronRight className="w-4 h-4 text-dust shrink-0 transition-[color,transform] duration-200 group-hover:text-bone group-hover:translate-x-0.5" />
                 </button>
               ))}
             </div>
@@ -1186,7 +1188,7 @@ function MobilePOSPage() {
               onClick={() => { setShowSettings(false); setShowBindModal(true); }}
               className="rz-btn rz-btn-secondary w-full min-h-12 group"
             >
-              <Repeat className="w-4 h-4 text-crimson-ink" />
+              <Repeat className="w-4 h-4 text-dust" />
               Change the barber for this phone
               <ChevronRight className="w-4 h-4 text-dust transition-transform duration-200 group-hover:translate-x-0.5" />
             </button>
@@ -1196,75 +1198,27 @@ function MobilePOSPage() {
               onClick={() => { setShowSettings(false); endStaffSession(); }}
               className="rz-btn rz-btn-secondary w-full min-h-12"
             >
-              <LogOut className="w-4 h-4 text-crimson-ink" />
+              <LogOut className="w-4 h-4 text-dust" />
               Sign out{staff.session ? ` ${staff.session.username}` : ""}
             </button>
           </div>
         </div>
       )}
 
-      {/* Header — full width: the black banner */}
-      <header className="rz-banner sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 px-4 py-2.5">
-          <h1 className="sr-only">Point of sale</h1>
-          {/* Not a link: only barbers use the POS, and they open /pos and /shift-log only (slice 19b correction). */}
-          <span className="inline-flex items-center gap-2 sm:gap-2.5 shrink-0 pointer-coarse:min-h-11 text-bone">
-            {/* The station light: it turns while a sync is running. */}
-            <BarberPoleIcon className="w-3 h-7" spinning={isSyncing} />
-            <span className="flex items-center gap-1.5">
-              <span className="font-display font-semibold whitespace-nowrap tracking-[0.06em] sm:tracking-[0.12em] text-base sm:text-lg leading-none uppercase">
-                RUZZCO POS
-              </span>
-              <MustacheIcon className="w-4 h-2 text-crimson hidden sm:inline-block" />
-            </span>
-          </span>
-
-          {/* Bound barber badge */}
-          {binding && (
-            // One line: on narrow phones the name is shortened here (title has it in full); the card below shows it whole.
-            <div title={binding.barberName} className="rz-pill min-w-0 bg-panel-2 text-bone">
-              <User className="w-3.5 h-3.5 shrink-0 text-crimson-ink" />
-              <span className="font-semibold truncate">{binding.barberName}</span>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
-            {/* Network badge */}
-            <ConnectionBadge isOnline={isOnline} shopPc={shopPc} />
-
-            {/* Manual sync. The counts are in the button's name; the badges only show them. */}
-            <button
-              onClick={() => void triggerSync()}
-              disabled={isSyncing || !isOnline}
-              title="Sync pending transactions"
-              aria-label={`Sync now${(pendingCount ?? 0) > 0 ? `, ${pendingCount} waiting` : ""}${(rejectedSales?.length ?? 0) > 0 ? `, ${rejectedSales?.length} need attention` : ""}`}
-              className="rz-btn rz-btn-secondary rz-btn-icon relative pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-crimson-ink" : ""}`} />
-              {(pendingCount ?? 0) > 0 && (
-                <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-crimson text-on-accent text-xs font-bold ring-2 ring-wall flex items-center justify-center animate-pulse">
-                  {pendingCount}
-                </span>
-              )}
-              {(rejectedSales?.length ?? 0) > 0 && (
-                <span aria-hidden="true" title="Sales needing attention" className="absolute -bottom-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-warn text-on-warn text-xs font-bold ring-2 ring-wall flex items-center justify-center">
-                  {rejectedSales?.length}
-                </span>
-              )}
-            </button>
-
-            {/* Phone settings: changing the barber ("Not you?"). */}
-            <button
-              onClick={() => setShowSettings(true)}
-              title="Phone settings"
-              aria-label="Phone settings and change barber"
-              className="rz-btn rz-btn-secondary rz-btn-icon pointer-coarse:min-h-11 pointer-coarse:min-w-11 text-dust"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* The barber's header (slice 21b): shared with the shift log. */}
+      <BarberHeader
+        current="/pos"
+        title="Point of sale"
+        assignedBarber={binding ? { id: binding.barberId, name: binding.barberName } : null}
+        account={staff.session}
+        isOnline={isOnline}
+        shopPc={shopPc}
+        isSyncing={isSyncing}
+        onSync={() => void triggerSync()}
+        pendingCount={pendingCount ?? 0}
+        rejectedCount={rejectedSales?.length ?? 0}
+        onSettings={() => setShowSettings(true)}
+      />
 
       {/* ── Layout: 1-col mobile → 2-col tablet → 3-col desktop ── */}
       {/* On phones, room at the end of the page for the payment bar fixed to the bottom. */}
@@ -1321,7 +1275,7 @@ function MobilePOSPage() {
           {/* ── Col 1: Services, as tiles (slice 17) ── */}
           <section aria-labelledby="services-title" className="space-y-3 sm:col-span-1">
             <h2 id="services-title" className="rz-heading">
-              <Layers className="w-4 h-4 text-crimson-ink" />
+              <Layers className="w-4 h-4 text-dust" />
               Services
             </h2>
 
@@ -1343,7 +1297,10 @@ function MobilePOSPage() {
                     {/* The chosen tile is edged along the top by the barber pole. */}
                     {isSelected && <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1.5 rz-stripes" />}
                     {/* Two lines on a narrow phone rather than "Shave / Facial / Ma…". */}
-                    <span className="block font-semibold text-[0.9375rem] leading-snug text-bone line-clamp-2 break-words">{service.name}</span>
+                    <span className="flex items-start gap-2">
+                      <ServiceIcon name={service.name} className={`w-4.5 h-4.5 mt-0.5 shrink-0 ${isSelected ? "text-bone" : "text-dust"}`} />
+                      <span className="block min-w-0 font-semibold text-[0.9375rem] leading-snug text-bone line-clamp-2 break-words">{service.name}</span>
+                    </span>
                     <span className={`rz-figure text-xl ${isSelected ? "text-bone" : "text-bone-2"}`}>
                       {peso(service.standardPrice)}
                     </span>
@@ -1356,7 +1313,7 @@ function MobilePOSPage() {
           {/* ── Col 2: The ticket (slice 17): what this sale is, its total, and Charge ── */}
           <section aria-labelledby="ticket-title" className="space-y-3 sm:col-span-1">
             <h2 id="ticket-title" className="rz-heading">
-              <Receipt className="w-4 h-4 text-crimson-ink" />
+              <Receipt className="w-4 h-4 text-dust" />
               Ticket
               {binding && <span className="ml-auto normal-case tracking-normal text-xs font-normal text-dust truncate">for {binding.barberName}</span>}
             </h2>
@@ -1479,7 +1436,7 @@ function MobilePOSPage() {
           <section className="space-y-3 sm:col-span-2 lg:col-span-1">
             <div className="flex items-center justify-between">
               <h2 className="rz-heading">
-                <List className="w-4 h-4 text-crimson-ink" />
+                <List className="w-4 h-4 text-dust" />
                 Recent Cuts
               </h2>
               {/* Padding with matching negative margins: a bigger target without moving the layout. */}
@@ -1490,7 +1447,7 @@ function MobilePOSPage() {
               >
                 View all
                 {(pendingCount ?? 0) > 0 && (
-                  <span className="ml-1 min-w-5 px-1.5 py-0.5 rounded-full bg-crimson text-on-accent text-xs font-bold text-center">
+                  <span className="ml-1 min-w-5 px-1.5 py-0.5 rounded-full bg-bone text-wall text-xs font-bold text-center">
                     {pendingCount}
                   </span>
                 )}
@@ -1541,7 +1498,7 @@ function MobilePOSPage() {
                         ) : isRejected(tx) ? (
                           <span role="img" aria-label="Needs attention" title="Needs attention"><TriangleAlert className="w-4 h-4 text-warn" /></span>
                         ) : (
-                          <span role="img" aria-label="Waiting to sync" title="Waiting to sync"><Clock className="w-4 h-4 text-crimson-ink" /></span>
+                          <span role="img" aria-label="Waiting to sync" title="Waiting to sync"><Clock className="w-4 h-4 text-dust" /></span>
                         )}
                       </div>
                     </li>
@@ -1557,7 +1514,7 @@ function MobilePOSPage() {
                 href="/shift-log"
                 className="rz-btn rz-btn-secondary w-full pointer-coarse:min-h-11 group"
               >
-                <List className="w-4 h-4 text-crimson-ink" />
+                <List className="w-4 h-4 text-dust" />
                 Full Shift Log &amp; EOD Summary
                 <ChevronRight className="w-4 h-4 text-dust transition-transform duration-200 group-hover:translate-x-0.5" />
               </Link>
@@ -1593,9 +1550,9 @@ function Switch({ checked, onChange, labelledBy, describedBy, disabled = false }
     >
       <span
         aria-hidden="true"
-        className={`relative w-12 h-7 rounded-full ring-1 transition-colors duration-200 ${checked ? "bg-crimson ring-crimson-bright" : "bg-panel-2 ring-seam-strong"}`}
+        className={`relative w-12 h-7 rounded-full ring-1 transition-colors duration-200 ${checked ? "bg-bone ring-bone" : "bg-panel-2 ring-seam-strong"}`}
       >
-        <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-bone shadow transition-transform duration-200 ${checked ? "translate-x-5" : ""}`} />
+        <span className={`absolute top-1 left-1 w-5 h-5 rounded-full shadow transition-transform duration-200 ${checked ? "translate-x-5 bg-panel" : "bg-bone"}`} />
       </span>
     </button>
   );
@@ -1647,4 +1604,12 @@ function TicketLines({ serviceName, sale, note }: { serviceName: string; sale: P
       </div>
     </dl>
   );
+}
+
+// A tile's icon, from the service's name (the menu is data, so this only recognises words; any
+// other service gets the scissors). Decoration only: the name and the price say what it is.
+function ServiceIcon({ name, className }: { name: string; className: string }) {
+  const text = name.toLowerCase();
+  const Icon = /colou?r|dye/.test(text) ? Palette : /shave|facial|massage/.test(text) ? Sparkles : /shampoo|wash/.test(text) ? Droplets : Scissors;
+  return <Icon aria-hidden="true" className={className} />;
 }
