@@ -63,7 +63,7 @@ async function submitOwnerSignIn(mode: Mode, username: string, secret: string): 
  * The fields and the submit button. Asks the server which sign-in applies; an owner who is
  * already signed in with the account goes straight through (`onSignedIn`).
  */
-function useOwnerSignIn(onSignedIn: () => void) {
+function useOwnerSignIn(onSignedIn: () => void, afterSubmit?: () => void) {
   const [mode, setMode] = useState<Mode | null>(null);
   const [username, setUsername] = useState("");
   const [secret, setSecret] = useState("");
@@ -97,7 +97,11 @@ function useOwnerSignIn(onSignedIn: () => void) {
     setSecret("");
     if (result.mode) setMode(result.mode);
     if (result.error) setError(result.error);
-    else onSignedIn();
+    else {
+      onSignedIn();
+      // Only after a sign-in made here, not when the owner was already signed in.
+      afterSubmit?.();
+    }
   }
 
   return { mode, username, setUsername, secret, setSecret, busy, error, submit, ready };
@@ -163,7 +167,7 @@ export function OwnerSignInPage({ title, what, submitLabel, onSignedIn }: {
 }) {
   const router = useRouter();
   // The layout renders again with the new session, so the owner's menu appears around the page.
-  const form = useOwnerSignIn(() => { onSignedIn(); router.refresh(); });
+  const form = useOwnerSignIn(onSignedIn, () => router.refresh());
   return (
     <main className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6">
       <form onSubmit={(event) => { event.preventDefault(); void form.submit(); }} className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5">

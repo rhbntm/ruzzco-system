@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import {
-  Scissors,
   Banknote,
   Smartphone,
   CheckCircle2,
@@ -15,6 +14,7 @@ import {
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { OwnerSignInDialog } from "@/components/OwnerSignIn";
 import { manilaToday } from "@/lib/business-date";
+import { peso } from "@/lib/peso";
 
 interface ExpectedTotals {
   cashTotal: string;
@@ -84,8 +84,16 @@ interface NeedsReviewSale {
 const manilaTime = (iso: string) =>
   new Date(iso).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
+// Amounts arrive as fixed-2 strings; lib/peso.ts prints them ("₱1,000.00", "-₱50.00").
+const pesoOf = (amount: string) => peso(Number(amount));
+// A variance or a change with its sign: "+₱50.00", "-₱50.00", "₱0.00".
+const signedPeso = (amount: number) => `${amount > 0.004 ? "+" : ""}${peso(amount)}`;
+
 // The save message ends in a "✓" glyph; the notice already draws a real check icon.
 const withoutTick = (text: string) => text.replace(/\s*✓$/, "");
+
+// A KPI tile's coloured top edge (--kpi in globals.css).
+const kpiEdge = (color: string) => ({ "--kpi": `var(--color-${color})` }) as CSSProperties;
 
 export default function ReconciliationPage() {
   const todayStr = manilaToday(); // business date, whatever the device's timezone
@@ -247,18 +255,18 @@ export default function ReconciliationPage() {
 
       {/* Header: the black banner */}
       <header className="rz-banner">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-2 px-4 py-3">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2 px-4 sm:px-6 py-3">
           <div className="flex items-center gap-2 min-w-0">
             {/* The station light: it turns while the totals load. */}
             <BarberPoleIcon className="w-2.5 h-6" spinning={isLoading} />
             <h1 className="font-display font-semibold tracking-wide sm:tracking-widest text-[0.9375rem] sm:text-lg leading-none text-bone uppercase truncate">
-              EOD CASH RECONCILIATION
+              End-of-Day Cash
             </h1>
           </div>
         </div>
       </header>
 
-      <div className="rz-page relative max-w-2xl mx-auto px-4 py-5 space-y-5">
+      <div className="rz-page relative max-w-4xl mx-auto px-4 sm:px-6 py-5 space-y-5">
         {/* Date picker */}
         <div className="rz-panel flex items-center gap-3 p-3">
           <label htmlFor="reconciliation-date" className="rz-label shrink-0">
@@ -293,13 +301,14 @@ export default function ReconciliationPage() {
           </div>
         )}
 
-        {/* While the register totals load: the strip's shape, not a spinner. */}
+        {/* While the register totals load: the KPI row's shape, not a spinner. */}
         {isLoading && !expected && (
-          <div aria-hidden="true" className="rz-strip grid-cols-2 sm:grid-cols-6">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <div key={i} className={`space-y-2.5 ${i < 3 ? "sm:col-span-2" : "sm:col-span-3"} last:col-span-2 sm:last:col-span-3`}>
+          <div aria-hidden="true" className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="rz-kpi space-y-2.5">
                 <div className="rz-skeleton h-3 w-20" />
-                <div className="rz-skeleton h-6 w-24" />
+                <div className="rz-skeleton h-7 w-28" />
+                <div className="rz-skeleton h-3 w-24" />
               </div>
             ))}
           </div>
@@ -311,24 +320,64 @@ export default function ReconciliationPage() {
             <h2 className="rz-heading">
               Synced Totals From Register
             </h2>
-            {/* Sales by method on top; the two totals the drawer is checked against below them. */}
-            <div className="rz-strip grid-cols-2 sm:grid-cols-6 rz-stagger">
-              {/* Cash is neutral (slice 21): red is kept for "cash short". */}
-              {[
-                { label: "Cash Sales", value: `₱${expected.cashTotal}`, icon: Banknote, color: "text-bone", iconColor: "text-cash" },
-                { label: "GCash Sales", value: `₱${expected.gcashTotal}`, icon: Smartphone, color: "text-gcash-ink", iconColor: "text-gcash-ink" },
-                { label: "Maya Sales", value: `₱${expected.mayaTotal}`, icon: Smartphone, color: "text-maya-ink", iconColor: "text-maya-ink" },
-                { label: "Expected Drawer", value: `₱${expected.expectedDrawerCash}`, icon: Banknote, color: "text-brass-bright", iconColor: "text-brass-bright" },
-                { label: "Total Revenue", value: `₱${expected.totalRevenue}`, icon: Scissors, color: "text-bone", iconColor: "text-dust" },
-              ].map((c, i) => (
-                <div key={c.label} className={`space-y-1 ${i < 3 ? "sm:col-span-2" : "sm:col-span-3"} last:col-span-2 sm:last:col-span-3`}>
-                  <div className="rz-label flex items-center gap-1.5">
-                    <c.icon className={`w-3.5 h-3.5 shrink-0 ${c.iconColor}`} />
-                    {c.label}
-                  </div>
-                  <div className={`rz-figure text-2xl ${c.color}`}>{c.value}</div>
+            {/* The four figures the close-out turns on. Cash is neutral (slice 21): red is kept for "cash short". */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 rz-stagger">
+              <div className="rz-kpi" style={kpiEdge("bone")}>
+                <p className="rz-label flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5 shrink-0 text-cash" />Expected drawer</p>
+                <p className="rz-figure mt-2 truncate text-2xl sm:text-[1.75rem] text-bone tabular-nums">{pesoOf(expected.expectedDrawerCash)}</p>
+                <p className="mt-1 text-xs text-dust">Cash that should be in the drawer</p>
+              </div>
+              <div className="rz-kpi" style={kpiEdge(!saved ? "seam-hover" : staleness?.stale ? "warn" : "ok")}>
+                <p className="rz-label flex items-center gap-1.5"><ClipboardCheck className="w-3.5 h-3.5 shrink-0 text-dust" />Counted</p>
+                <p className="rz-figure mt-2 truncate text-2xl sm:text-[1.75rem] text-bone tabular-nums">{saved ? pesoOf(saved.countedCash) : "—"}</p>
+                <p className={`mt-1 flex items-center gap-1 text-xs ${!saved ? "text-dust" : staleness?.stale ? "text-warn-ink" : "text-ok-ink"}`}>
+                  {saved && (staleness?.stale ? <AlertTriangle className="w-3 h-3 shrink-0" /> : <CheckCircle2 className="w-3 h-3 shrink-0" />)}
+                  {!saved ? "Not counted yet" : staleness?.stale ? "Out of date: count again" : `Saved, revision ${saved.revision}`}
+                </p>
+              </div>
+              <div className="rz-kpi" style={kpiEdge(variance === null ? "seam-hover" : Math.abs(variance) < 0.01 ? "ok" : variance < 0 ? "crimson" : "over")}>
+                <p className="rz-label">{staleness?.stale ? "Variance when saved" : "Variance"}</p>
+                <p className={`rz-figure mt-2 truncate text-2xl sm:text-[1.75rem] tabular-nums ${variance === null || Math.abs(variance) < 0.01 ? "text-bone" : variance < 0 ? "text-crimson-ink" : "text-over-ink"}`}>
+                  {variance === null ? "—" : signedPeso(variance)}
+                </p>
+                <p className="mt-1 text-xs text-dust">
+                  {variance === null ? "Counted − expected, once saved" : Math.abs(variance) < 0.01 ? "Balanced" : variance < 0 ? "Cash short" : "Cash over"}
+                </p>
+              </div>
+              <div className="rz-kpi" style={kpiEdge("gcash")}>
+                <p className="rz-label flex items-center gap-1.5"><Smartphone className="w-3.5 h-3.5 shrink-0 text-dust" />Digital, not in the drawer</p>
+                <p className="rz-figure mt-2 truncate text-2xl sm:text-[1.75rem] text-bone tabular-nums">{pesoOf(expected.digitalTotal)}</p>
+                <p className="mt-1 text-xs text-dust tabular-nums">
+                  <span className="text-gcash-ink">GCash {pesoOf(expected.gcashTotal)}</span> · <span className="text-maya-ink">Maya {pesoOf(expected.mayaTotal)}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* The one definition of expected drawer cash, term by term. */}
+            <div className="rz-panel p-4 sm:p-5">
+              <h3 className="rz-label">How expected drawer cash is worked out</h3>
+              <dl className="mt-3 grid grid-cols-2 sm:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr_auto_1.2fr] gap-x-3 gap-y-3 items-end">
+                {[
+                  { sign: "", label: "Cash sales", value: expected.cashTotal },
+                  { sign: "+", label: "Cash tips", value: expected.cashTips },
+                  { sign: "−", label: "Cash payouts", value: expected.cashPayouts },
+                  { sign: "−", label: "Petty cash", value: expected.pettyCash },
+                ].flatMap((term) => [
+                  ...(term.sign ? [<span key={`${term.label}-sign`} aria-hidden="true" className="hidden sm:block pb-0.5 text-lg font-semibold text-dust">{term.sign}</span>] : []),
+                  <div key={term.label} className="min-w-0">
+                    <dt className="text-xs text-dust"><span className="sm:hidden font-semibold">{term.sign} </span>{term.label}</dt>
+                    <dd className="rz-figure text-lg text-bone tabular-nums">{pesoOf(term.value)}</dd>
+                  </div>,
+                ])}
+                <span aria-hidden="true" className="hidden sm:block pb-0.5 text-lg font-semibold text-dust">=</span>
+                <div className="col-span-2 sm:col-span-1 min-w-0 border-t border-seam-hover pt-2 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4">
+                  <dt className="text-xs font-semibold text-bone"><span className="sm:hidden">= </span>Expected in the drawer</dt>
+                  <dd className="rz-figure text-2xl text-bone tabular-nums">{pesoOf(expected.expectedDrawerCash)}</dd>
                 </div>
-              ))}
+              </dl>
+              <p className="mt-3 text-xs text-dust leading-relaxed">
+                Cash payouts are the cash entries recorded on the Barber Ledger for this date. Petty cash is recorded with the count below{saved ? "" : " (none saved yet)"}. Total revenue {pesoOf(expected.totalRevenue)}: cash, GCash, Maya{parseFloat(expected.qrphTotal) > 0 ? " and QR Ph" : ""}, tips not included.
+              </p>
             </div>
             {(parseFloat(expected.qrphTotal) > 0 || expected.gatewaySales.length > 0) && (
               <div className="rz-panel p-3.5 space-y-2.5 border-qrph/30">
@@ -336,7 +385,7 @@ export default function ReconciliationPage() {
                   <span className="flex items-center gap-1.5 text-qrph-ink font-semibold">
                     <QrCode className="w-4 h-4" /> QR Ph (PayMongo test) collected
                   </span>
-                  <span className="rz-figure text-lg text-qrph-ink">₱{expected.qrphTotal}</span>
+                  <span className="rz-figure text-lg text-qrph-ink">{pesoOf(expected.qrphTotal)}</span>
                 </div>
                 <p className="text-xs text-dust">Gateway money is not in the drawer. Only paid QR sales count.</p>
                 <ul className="rz-well overflow-hidden divide-y divide-seam empty:hidden">
@@ -350,7 +399,7 @@ export default function ReconciliationPage() {
                         <span className={`rz-pill ${g.status === "PAID" ? "rz-pill-ok" : g.status === "PENDING" ? "rz-pill-warn" : "rz-pill-danger"}`}>
                           {g.status}{g.late ? " · late confirmation" : ""}
                         </span>
-                        <span className={`rz-figure text-sm ${g.status === "PAID" ? "text-bone" : "text-dust line-through"}`}>₱{g.amount}</span>
+                        <span className={`rz-figure text-sm ${g.status === "PAID" ? "text-bone" : "text-dust line-through"}`}>{pesoOf(g.amount)}</span>
                       </span>
                     </li>
                   ))}
@@ -358,7 +407,7 @@ export default function ReconciliationPage() {
               </div>
             )}
             <p className="text-xs text-dust">
-              {expected.transactionCount} paid synced transactions on {date}
+              {expected.transactionCount} paid synced {expected.transactionCount === 1 ? "transaction" : "transactions"} on {date}
             </p>
           </section>
         )}
@@ -379,7 +428,7 @@ export default function ReconciliationPage() {
               <div key={sale.id} className="p-3 rounded-lg bg-well border border-warn/20 text-xs space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-bone">{sale.barberName} · {sale.paymentMethod}</span>
-                  <span className="rz-figure text-sm text-bone">₱{sale.amount}</span>
+                  <span className="rz-figure text-sm text-bone">{pesoOf(sale.amount)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs text-dust">
                   <div>Phone said: <span className="text-bone-2">{manilaTime(sale.transactionTime)}</span></div>
@@ -453,8 +502,7 @@ export default function ReconciliationPage() {
               )}
               <span>
                 Variance:{" "}
-                {previewVariance > 0 ? "+" : ""}
-                ₱{previewVariance.toFixed(2)}{" "}
+                {signedPeso(previewVariance)}{" "}
                 {Math.abs(previewVariance) < 0.01
                   ? "— Drawer is balanced"
                   : previewVariance < 0
@@ -543,7 +591,7 @@ export default function ReconciliationPage() {
                     <p>{staleness.lateReviewedCount} sale{staleness.lateReviewedCount === 1 ? " was" : "s were"} confirmed onto this date after it was saved.</p>
                   )}
                   {staleness.staleReasons.includes("EXPECTED_CASH_CHANGED") && (
-                    <p>Expected drawer cash is now ₱{expected?.expectedDrawerCash} ({parseFloat(staleness.expectedCashDelta) > 0 ? "+" : ""}₱{staleness.expectedCashDelta}).</p>
+                    <p>Expected drawer cash is now {expected ? pesoOf(expected.expectedDrawerCash) : "—"} ({signedPeso(parseFloat(staleness.expectedCashDelta))}).</p>
                   )}
                   <p>The variance below was correct when saved. Count the drawer again and save a new revision.</p>
                 </div>
@@ -551,12 +599,12 @@ export default function ReconciliationPage() {
             )}
             <div className="rz-well grid grid-cols-1 sm:grid-cols-2 overflow-hidden">
               {[
-                { label: "Expected Cash", value: `₱${saved.expectedCash}` },
-                { label: "Petty Cash", value: `₱${saved.pettyCashAmount}` },
-                { label: "Counted Cash", value: `₱${saved.countedCash}` },
-                { label: "GCash Total", value: `₱${saved.gcashTotal}` },
-                { label: "Maya Total", value: `₱${saved.mayaTotal}` },
-                { label: "Total Revenue", value: `₱${saved.totalRevenue}` },
+                { label: "Expected Cash", value: pesoOf(saved.expectedCash) },
+                { label: "Petty Cash", value: pesoOf(saved.pettyCashAmount) },
+                { label: "Counted Cash", value: pesoOf(saved.countedCash) },
+                { label: "GCash Total", value: pesoOf(saved.gcashTotal) },
+                { label: "Maya Total", value: pesoOf(saved.mayaTotal) },
+                { label: "Total Revenue", value: pesoOf(saved.totalRevenue) },
               ].map((r) => (
                 <div key={r.label} className="flex items-baseline justify-between gap-3 px-3.5 py-2.5 text-sm shadow-[0_1px_0_var(--color-seam),1px_0_0_var(--color-seam)]">
                   <span className="text-dust">{r.label}</span>
@@ -579,7 +627,7 @@ export default function ReconciliationPage() {
                 <AlertTriangle className="w-4 h-4 shrink-0" />
               )}
               <span>
-                {staleness?.stale ? "Variance when saved" : "Variance"}: {variance !== null && variance > 0 ? "+" : ""}₱{saved.variance}{" "}
+                {staleness?.stale ? "Variance when saved" : "Variance"}: {signedPeso(parseFloat(saved.variance))}{" "}
                 {variance !== null && Math.abs(variance) < 0.01
                   ? "— Balanced"
                   : variance !== null && variance < 0

@@ -7,7 +7,8 @@
  * today; queried with `gte` the start of `from` and `lt` the start of the day after `to`.
  */
 import { manilaToday } from "../src/lib/business-date";
-import { MAX_RANGE_DATES, parseRange, presetRange, type DateRange, type RangeError } from "../src/lib/date-range";
+import { MAX_RANGE_DATES, PRESETS, parseRange, presetRange, type DateRange, type RangeError } from "../src/lib/date-range";
+import { presetOptions, rangeText } from "../src/components/DateRangeBar";
 
 let passed = 0;
 const failures: string[] = [];
@@ -113,6 +114,18 @@ for (const [today, label, t, y, w, m, l7] of cases) {
   check(`${label}: This month = the 1st to today`, same(got.thisMonth, m.from, m.to), fmt(got.thisMonth));
   check(`${label}: Last 7 days = today and the 6 before`, same(got.last7Days, l7.from, l7.to), fmt(got.last7Days));
   check(`${label}: every preset is a valid range for that today`, Object.values(got).every((p) => parseRange(p.from, p.to, today).ok));
+}
+
+console.log("\nThe range bar's options (slice 21c)");
+{
+  const today = "2026-11-15"; // a Sunday
+  const options = presetOptions(today);
+  check("one option per preset, in the presets' order", options.map((o) => o.key).join() === PRESETS.join());
+  check("each option is its preset's range", options.every((o) => { const r = presetRange(o.key as (typeof PRESETS)[number], today); return o.from === r.from && o.to === r.to; }));
+  check("every option is a valid range that ends today or before", options.every((o) => parseRange(o.from, o.to, today).ok && o.to <= today));
+  check("every option has its own label", new Set(options.map((o) => o.label)).size === options.length && options.every((o) => o.label.length > 0));
+  check("a one-day range is printed as one date", rangeText(today, today) === "Sun, Nov 15, 2026", rangeText(today, today));
+  check("a longer range names both ends", rangeText("2026-11-09", today) === "Mon, Nov 9, 2026 to Sun, Nov 15, 2026", rangeText("2026-11-09", today));
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
