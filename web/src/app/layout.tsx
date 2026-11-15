@@ -3,7 +3,6 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { HistoryFade } from "@/components/HistoryFade";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
-import { ShopAmbience } from "@/components/ShopAmbience";
 
 // Oswald (SIL OFL 1.1, see fonts/Oswald-OFL.txt), the condensed caps of the shop's logo.
 // Subset to Latin and the peso sign and served by this app, so neither the build nor the
@@ -22,12 +21,12 @@ export const metadata: Metadata = {
   title: "Ruzzco Barbers — POS & Revenue Forecasting DSS",
   description: "Offline-First Mobile POS and Decision Support System for Ruzzco Barbers (Caloocan)",
   // iPhones: Safari > Share > Add to Home Screen opens the system full screen, without Safari's
-  // bars, named "Ruzzco" under its icon. The status bar stays black and the pages start below it.
+  // bars, named "Ruzzco" under its icon. The status bar keeps the system colours and the pages start below it.
   // Works over plain HTTP too; opening offline needs HTTPS (npm run https).
   appleWebApp: {
     capable: true,
     title: "Ruzzco",
-    statusBarStyle: "black",
+    statusBarStyle: "default",
   },
   // Next writes `capable` as mobile-web-app-capable; older iPhones look for the apple- name.
   other: {
@@ -35,9 +34,9 @@ export const metadata: Metadata = {
   },
 };
 
-// Phone browsers tint their toolbar to the shop's black.
+// Phone browsers tint their toolbar to the app's canvas (the light theme's --color-wall).
 export const viewport: Viewport = {
-  themeColor: "#0c0b0a",
+  themeColor: "#f6f7f8",
 };
 
 export default function RootLayout({
@@ -48,7 +47,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${oswald.variable} h-full antialiased dark`}
+      className={`${oswald.variable} h-full antialiased`}
     >
       <body
         className="min-h-full flex flex-col"
@@ -56,9 +55,6 @@ export default function RootLayout({
         // to <body> before React loads; that is not a mismatch in our markup. This tag only.
         suppressHydrationWarning
       >
-        {/* The shop at night behind every page (its light, the clippings and dust in the air) and
-            the shears cursor; both stay put across navigations. Off on the POS (slice 17). */}
-        <ShopAmbience />
         {/* The barber-pole ribbon across the top of every page */}
         <div aria-hidden="true" className="rz-ribbon shrink-0" />
         {children}
