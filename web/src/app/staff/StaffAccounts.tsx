@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, KeyRound, RefreshCw, UserPlus, UserRound } from "lucide-react";
+import { KeyRound, RefreshCw, UserPlus, UserRound } from "lucide-react";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
 
@@ -97,7 +96,6 @@ function StaffAccountsList() {
     <main className="flex-1">
       <header className="rz-banner">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
-          <Link href="/" className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-sm text-dust hover:text-bone transition-colors group"><ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />Home</Link>
           <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
             <BarberPoleIcon className="w-2.5 h-6" spinning={busy} />
             Staff accounts
@@ -115,7 +113,7 @@ function StaffAccountsList() {
         {error && <p role="alert" className="rz-notice rz-notice-danger">{error}</p>}
         {notice && <p role="status" className="rz-notice">{notice}</p>}
 
-        <ul className="rz-panel divide-y divide-white/8 overflow-hidden">
+        <ul className="rz-panel divide-y divide-seam overflow-hidden">
           {accounts.length === 0 && <li className="p-4 text-sm text-dust">No accounts yet.</li>}
           {accounts.map((account) => (
             <li key={account.id} className={`p-4 space-y-3 ${account.isActive ? "" : "opacity-75"}`}>

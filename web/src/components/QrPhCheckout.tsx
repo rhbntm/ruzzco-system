@@ -198,7 +198,7 @@ export function QrPhCheckout({
           <div className="animate-fade space-y-3">
             {qr ? (
               /* eslint-disable-next-line @next/next/no-img-element -- base64 data URL from PayMongo */
-              <img src={imageSrc(qr.imageUrl)} alt="QR Ph code" className="w-full aspect-square rounded-xl bg-white p-2.5 shadow-[0_12px_28px_-14px_rgb(0_0_0/0.9)]" />
+              <img src={imageSrc(qr.imageUrl)} alt="QR Ph code" className="w-full aspect-square rounded-xl bg-paper p-2.5 border border-seam rz-shadow-float" />
             ) : (
               <p className="text-sm text-dust">Waiting for payment. The QR is no longer shown; press Check status.</p>
             )}
@@ -209,11 +209,11 @@ export function QrPhCheckout({
               <p className="text-center text-sm text-bone-2">Expires in <span className="rz-figure text-base text-bone tabular-nums">{formatCountdown(remaining)}</span></p>
             )}
             {qr?.testUrl && (
-              <a href={qr.testUrl} target="_blank" rel="noreferrer" className="block text-center text-xs text-qrph-ink underline hover:text-white transition-colors">
+              <a href={qr.testUrl} target="_blank" rel="noreferrer" className="block text-center text-xs text-qrph-ink underline hover:text-bone transition-colors">
                 Open PayMongo test page to simulate payment
               </a>
             )}
-            <button type="button" onClick={checkStatus} disabled={checking} className="rz-btn w-full min-h-11 bg-[#7c3aed] hover:bg-[#8b4cf2] text-white border-white/10 shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_22px_-12px_rgb(0_0_0/0.9)]">
+            <button type="button" onClick={checkStatus} disabled={checking} className="rz-btn rz-btn-qrph w-full min-h-11">
               <RefreshCw className={`w-4 h-4 ${checking ? "animate-spin" : ""}`} /> Check status
             </button>
           </div>

@@ -110,7 +110,7 @@ export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading
           {columns.map((column, index) => (
             <div
               key={column.key}
-              className={`flex h-full flex-1 items-end justify-center transition-colors duration-150 ${active === index ? "bg-white/5" : ""}`}
+              className={`flex h-full flex-1 items-end justify-center transition-colors duration-150 ${active === index ? "bg-hover" : ""}`}
             >
               <div
                 className={`w-3/5 max-w-6 rounded-t-[3px] origin-bottom transition-[filter] duration-150 ${!hasEmphasis || column.emphasis ? "bg-crimson-bright" : "bg-dust-2"} ${active === index ? "brightness-125" : ""}`}
@@ -153,7 +153,7 @@ export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading
             }}
           >
             <div
-              className="w-max rounded-md border border-seam-strong bg-panel-3 px-2 py-0.5 text-xs font-semibold text-bone tabular-nums shadow-[0_8px_18px_-10px_rgb(0_0_0/0.95)]"
+              className="w-max rounded-md border border-seam-strong bg-panel-3 px-2 py-0.5 text-xs font-semibold text-bone tabular-nums rz-shadow-float"
               style={{ animation: `rz-drop 360ms var(--ease-out-expo) ${delay + 760}ms both` }}
             >
               {callout.text}
@@ -163,7 +163,7 @@ export function ColumnChart({ columns, unit, summary, labelHeading, valueHeading
 
         {current && (
           <div
-            className="animate-fade pointer-events-none absolute top-1 z-10 w-max max-w-48 rounded-lg border border-seam-strong bg-panel-3 px-2.5 py-1.5 text-xs shadow-[0_12px_28px_-12px_rgb(0_0_0/0.95)]"
+            className="animate-fade pointer-events-none absolute top-1 z-10 w-max max-w-48 rounded-lg border border-seam-strong bg-panel-3 px-2.5 py-1.5 text-xs rz-shadow-float"
             style={{ left: `calc(3rem + (100% - 3rem) * ${position})`, transform: `translateX(${shift}%)` }}
           >
             <div className="font-semibold text-bone tabular-nums">{current.valueText}</div>

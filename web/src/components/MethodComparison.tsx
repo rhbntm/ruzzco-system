@@ -44,7 +44,7 @@ export function MethodComparison({ run }: { run: NonNullable<SerializedForecast[
                   <div
                     key={row.method}
                     className={`px-3 py-2.5 sm:grid sm:grid-cols-[1fr_8rem_8rem_8rem] sm:gap-2 sm:items-center text-sm transition-colors duration-150 ${
-                      row.served ? "bg-crimson/12 shadow-[inset_0_0_0_1px_rgb(218_44_53/0.45)]" : "hover:bg-white/2.5"
+                      row.served ? "bg-crimson/10 ring-1 ring-inset ring-crimson-bright/45" : "hover:bg-hover"
                     }`}
                   >
                     <div className="text-bone">

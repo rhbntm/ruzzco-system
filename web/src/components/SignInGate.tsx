@@ -30,7 +30,8 @@ import { browserRandom, browserStorage, browserSubtle, checkSessionOnline, login
 import { createLocalAssignment, isWaitingForApproval, registerPendingAssignment, subscribeApproval } from "@/lib/sync";
 import { gateScreen } from "@/lib/approval-gate";
 import { ApprovalScreen } from "@/components/ApprovalScreen";
-import { BarberPoleIcon, RuzzcoLogoBanner } from "@/components/RuzzcoBrand";
+import { BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { Logo } from "@/components/Logo";
 
 type GateContext = {
   /** Today's sign-in on this phone; null while the sign-in screen is up. */
@@ -239,7 +240,7 @@ function SignInScreen({ title, onSignedIn }: { title: string; onSignedIn: (sessi
         aria-labelledby="staff-sign-in-title"
       >
         <div className="flex flex-col items-center text-center gap-3">
-          <RuzzcoLogoBanner className="w-48" alt="" />
+          <Logo stacked />
           <h1 id="staff-sign-in-title" className="rz-title text-3xl">{title}</h1>
           <p className="text-sm text-dust leading-relaxed">
             {bound ? `Sign in with ${bound.barberName}'s account to start today's sales.` : "Sign in with your own account to start today's sales."}

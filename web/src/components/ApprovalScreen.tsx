@@ -6,11 +6,12 @@
 
 import { useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
-import { LockKeyhole, Scissors, ShieldCheck } from "lucide-react";
+import { LockKeyhole, Scissors } from "lucide-react";
 import { BARBER_HOME, gateScreen, ownerSignInHref } from "@/lib/approval-gate";
 import { isWaitingForApproval, subscribeApproval } from "@/lib/sync";
 import { DeviceApprovalBanner } from "@/components/DeviceApprovalBanner";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { Logo } from "@/components/Logo";
 
 /** The approval step: the approve-this-phone banner, and on non-POS pages a link to the owner sign-in. */
 export function ApprovalScreen({ title, ownerSignIn, message }: {
@@ -23,10 +24,8 @@ export function ApprovalScreen({ title, ownerSignIn, message }: {
     <main className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6 w-full">
       <div className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5">
         <div className="flex flex-col items-center text-center gap-3">
-          <span aria-hidden="true" className="w-14 h-14 rounded-full bg-brass/10 ring-1 ring-brass/45 text-brass-bright flex items-center justify-center">
-            <ShieldCheck className="w-6 h-6" />
-          </span>
-          <h1 className="rz-title text-3xl break-words">{title}</h1>
+          <Logo stacked />
+          <h1 className="rz-title text-2xl break-words">{title}</h1>
           <p className="text-sm text-dust leading-relaxed">
             {ownerSignIn
               ? "This browser isn't an approved shop phone. Approve it first, or sign in as the owner."
@@ -55,10 +54,8 @@ export function SignInChoiceScreen({ title, ownerSignIn }: { title: string; owne
     <main className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6 w-full">
       <div className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5">
         <div className="flex flex-col items-center text-center gap-3">
-          <span aria-hidden="true" className="w-14 h-14 rounded-full bg-brass/10 ring-1 ring-brass/45 text-brass-bright flex items-center justify-center">
-            <LockKeyhole className="w-6 h-6" />
-          </span>
-          <h1 className="rz-title text-3xl break-words">{title}</h1>
+          <Logo stacked />
+          <h1 className="rz-title text-2xl break-words">{title}</h1>
           <p className="text-sm text-dust leading-relaxed">
             Sign in to continue. Barbers sign in on the POS; this page is for the owner.
           </p>

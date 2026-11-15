@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Check, ImageOff, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Check, ImageOff, RefreshCw, Trash2, Upload } from "lucide-react";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
 
@@ -102,7 +101,6 @@ export default function PaymentQrPage() {
     <main className="flex-1">
       <header className="rz-banner">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
-          <Link href="/" className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-sm text-dust hover:text-bone transition-colors group"><ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />Home</Link>
           <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
             {/* The station light: it turns while the codes load. */}
             <BarberPoleIcon className="w-2.5 h-6" spinning={busy} />
@@ -138,10 +136,10 @@ export default function PaymentQrPage() {
                   return (
                     <div key={method} className="rz-well p-3.5 space-y-3">
                       <div className={`text-sm font-semibold ${accent}`}>{label} QR</div>
-                      <div className="mx-auto w-40 aspect-square rounded-lg bg-black/30 border border-dashed border-seam-strong flex items-center justify-center overflow-hidden">
+                      <div className="mx-auto w-40 aspect-square rounded-lg bg-well border border-dashed border-seam-strong flex items-center justify-center overflow-hidden">
                         {qr ? (
                           // eslint-disable-next-line @next/next/no-img-element -- owner-uploaded image served by our API
-                          <img src={`${qrUrl(barber.id, method)}?v=${qr.sha256}`} alt={`${label} QR for ${barber.fullName}`} className="animate-fade w-full h-full object-contain bg-white p-1.5" />
+                          <img src={`${qrUrl(barber.id, method)}?v=${qr.sha256}`} alt={`${label} QR for ${barber.fullName}`} className="animate-fade w-full h-full object-contain bg-paper p-1.5" />
                         ) : (
                           <div className="text-center text-xs text-dust space-y-1.5"><ImageOff className="w-5 h-5 mx-auto" /><div>No {label} QR yet</div></div>
                         )}

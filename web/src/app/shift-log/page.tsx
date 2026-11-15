@@ -217,12 +217,12 @@ function ShiftLogPage() {
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-crimson-ink" : ""}`} />
               {(pendingCount ?? 0) > 0 && (
-                <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-crimson text-white text-xs font-bold ring-2 ring-wall flex items-center justify-center animate-pulse">
+                <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-crimson text-on-accent text-xs font-bold ring-2 ring-wall flex items-center justify-center animate-pulse">
                   {pendingCount}
                 </span>
               )}
               {(rejectedSales?.length ?? 0) > 0 && (
-                <span aria-hidden="true" title="Sales needing attention" className="absolute -bottom-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-warn text-black text-xs font-bold ring-2 ring-wall flex items-center justify-center">
+                <span aria-hidden="true" title="Sales needing attention" className="absolute -bottom-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-warn text-on-warn text-xs font-bold ring-2 ring-wall flex items-center justify-center">
                   {rejectedSales?.length}
                 </span>
               )}
@@ -330,7 +330,7 @@ function ShiftLogPage() {
                 return (
                 <li
                   key={tx.id}
-                  className="px-3.5 py-3 flex items-center justify-between gap-3 text-sm transition-colors duration-150 hover:bg-white/2.5"
+                  className="px-3.5 py-3 flex items-center justify-between gap-3 text-sm transition-colors duration-150 hover:bg-hover"
                 >
                   <div className="space-y-0.5 truncate min-w-0">
                     <div className="font-semibold text-bone truncate flex items-center gap-1.5">

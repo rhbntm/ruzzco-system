@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Check, Plus, RefreshCw, Scissors, TriangleAlert, Undo2 } from "lucide-react";
+import { Check, Plus, RefreshCw, Scissors, TriangleAlert, Undo2 } from "lucide-react";
 import { manilaToday } from "@/lib/business-date";
 import { generateUUID } from "@/lib/db";
 import { createSubmitLock } from "@/lib/submit-lock";
@@ -173,9 +173,6 @@ export default function LedgerPage() {
     <main className="flex-1">
       <header className="rz-banner">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
-          <Link href="/" className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-sm text-dust hover:text-bone transition-colors group">
-            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />Home
-          </Link>
           <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
             {/* The station light: it turns while the ledger loads. */}
             <BarberPoleIcon className="w-2.5 h-6" spinning={busy} />
@@ -190,7 +187,7 @@ export default function LedgerPage() {
       <div className="rz-page max-w-4xl mx-auto p-4 sm:p-6 space-y-5">
         <div className="rz-panel flex flex-wrap gap-x-5 gap-y-3 items-center p-3 sm:p-4">
           <label className="flex items-center gap-2 text-sm text-dust">
-            Business date <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={`scheme-dark w-auto ${field}`} />
+            Business date <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={`w-auto ${field}`} />
           </label>
           <label className="flex items-center gap-2 text-sm text-dust">
             Commission base{" "}
@@ -216,7 +213,7 @@ export default function LedgerPage() {
           <div className="animate-rise rz-notice rz-notice-warn">
             <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
             <p>
-              {heldForReview} {heldForReview === 1 ? "sale stamped on this date is" : "sales stamped on this date are"} held for date review and not in these totals. Confirm {heldForReview === 1 ? "its" : "their"} date on <Link href="/reconciliation" className="underline hover:text-white">End-of-Day Cash</Link>.
+              {heldForReview} {heldForReview === 1 ? "sale stamped on this date is" : "sales stamped on this date are"} held for date review and not in these totals. Confirm {heldForReview === 1 ? "its" : "their"} date on <Link href="/reconciliation" className="underline hover:text-bone">End-of-Day Cash</Link>.
             </p>
           </div>
         )}
@@ -259,11 +256,11 @@ export default function LedgerPage() {
                 <div className="grid grid-cols-2 gap-3 text-[0.8125rem] font-medium text-bone-2">
                   <div>
                     Paid so far
-                    <div className="mt-1.5 min-h-10 px-3 flex items-center rounded-[10px] bg-black/30 border border-seam rz-figure text-lg text-bone">{peso(row.paidTotal)}</div>
+                    <div className="mt-1.5 min-h-10 px-3 flex items-center rounded-[10px] bg-well border border-seam rz-figure text-lg text-bone">{peso(row.paidTotal)}</div>
                   </div>
                   <div>
                     Remaining to pay
-                    <div className={`mt-1.5 min-h-10 px-3 flex items-center rounded-[10px] bg-black/30 border border-seam rz-figure text-lg transition-colors duration-300 ${remaining > 0 ? "text-warn-ink" : "text-ok-ink"}`}>
+                    <div className={`mt-1.5 min-h-10 px-3 flex items-center rounded-[10px] bg-well border border-seam rz-figure text-lg transition-colors duration-300 ${remaining > 0 ? "text-warn-ink" : "text-ok-ink"}`}>
                       {peso(row.remaining)}
                     </div>
                   </div>
@@ -281,7 +278,7 @@ export default function LedgerPage() {
                       className={`mt-1.5 w-full ${field}`}
                     />
                   </label>
-                  <div role="radiogroup" aria-label="Paid by" className="grid grid-cols-2 gap-1 p-1 rounded-[10px] bg-black/30 border border-seam">
+                  <div role="radiogroup" aria-label="Paid by" className="grid grid-cols-2 gap-1 p-1 rounded-[10px] bg-well border border-seam">
                     {(["CASH", "GCASH"] as const).map((method) => (
                       <button
                         key={method} type="button" role="radio" aria-checked={draft.method === method}

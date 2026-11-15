@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { ForecastLocked } from "@/components/ForecastPanel";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
@@ -37,9 +36,6 @@ export default async function ForecastPage() {
     <main className="flex-1">
       <header className="rz-banner">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
-          <Link href="/" className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-sm text-dust hover:text-bone transition-colors group">
-            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />Home
-          </Link>
           <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
             <BarberPoleIcon className="w-2.5 h-6" />
             Detailed forecast
@@ -116,7 +112,7 @@ function RankedBars({ view }: { view: ReportView }) {
         {view.ranked.map((row) => (
           <li
             key={row.method}
-            className={`rounded-[10px] px-3 py-2.5 ${row.served ? "bg-crimson/12 shadow-[inset_0_0_0_1px_rgb(218_44_53/0.45)]" : ""}`}
+            className={`rounded-[10px] px-3 py-2.5 ${row.served ? "bg-crimson/10 ring-1 ring-inset ring-crimson-bright/45" : ""}`}
           >
             <div className="sm:grid sm:grid-cols-[1fr_8rem_8rem] sm:gap-3 sm:items-baseline text-sm">
               <span className="text-bone">
@@ -133,7 +129,7 @@ function RankedBars({ view }: { view: ReportView }) {
                 {row.rmse === null ? "—" : row.rmse.toFixed(2)}
               </span>
             </div>
-            <div className="mt-1.5 h-2 rounded-full bg-black/30 ring-1 ring-inset ring-seam overflow-hidden">
+            <div className="mt-1.5 h-2 rounded-full bg-well ring-1 ring-inset ring-seam overflow-hidden">
               <div
                 className={`h-2 rounded-full ${row.served ? "bg-crimson" : "bg-dust/60"}`}
                 style={{ width: `${view.maxMean > 0 ? Math.max((row.mean / view.maxMean) * 100, 2) : 2}%` }}

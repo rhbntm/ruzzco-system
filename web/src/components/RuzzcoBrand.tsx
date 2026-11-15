@@ -60,7 +60,7 @@ export function RuzzcoLogoBanner({
 }) {
   return (
     <div
-      className={`relative aspect-[1.9/1] overflow-hidden rounded-md bg-[#080705] ring-1 ring-white/10 shadow-[0_26px_40px_-18px_rgb(0_0_0/0.9),0_2px_6px_rgb(0_0_0/0.5)] ${className}`}
+      className={`relative aspect-[1.9/1] overflow-hidden rounded-md bg-bone ring-1 ring-seam-strong rz-shadow-float ${className}`}
     >
       <Image
         src="/ruzzco-logo.jpg"

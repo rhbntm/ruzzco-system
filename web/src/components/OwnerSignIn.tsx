@@ -8,8 +8,9 @@
 
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { LockKeyhole } from "lucide-react";
-import { MustacheIcon } from "@/components/RuzzcoBrand";
+import { Logo } from "@/components/Logo";
 import { endBarberSessionForOwner } from "@/lib/local-session";
 
 type Mode = "ACCOUNT" | "PIN";
@@ -160,18 +161,17 @@ export function OwnerSignInPage({ title, what, submitLabel, onSignedIn }: {
   submitLabel: string;
   onSignedIn: () => void;
 }) {
-  const form = useOwnerSignIn(onSignedIn);
+  const router = useRouter();
+  // The layout renders again with the new session, so the owner's menu appears around the page.
+  const form = useOwnerSignIn(() => { onSignedIn(); router.refresh(); });
   return (
     <main className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6">
       <form onSubmit={(event) => { event.preventDefault(); void form.submit(); }} className="animate-pop rz-panel w-full max-w-sm p-6 sm:p-7 space-y-5">
         <div className="flex flex-col items-center text-center gap-3">
-          <span aria-hidden="true" className="w-14 h-14 rounded-full bg-brass/10 ring-1 ring-brass/45 text-brass-bright flex items-center justify-center">
-            <LockKeyhole className="w-6 h-6" />
-          </span>
-          <h1 className="rz-title text-3xl">{title}</h1>
+          <Logo stacked />
+          <h1 className="rz-title text-2xl">{title}</h1>
           <p className="text-sm text-dust leading-relaxed">{promptFor(form.mode, what)}</p>
         </div>
-        <div className="rz-ornament" aria-hidden="true"><MustacheIcon className="w-8 h-3 text-brass" /></div>
         <Fields form={form} />
         <button disabled={form.busy || !form.ready} className="rz-btn rz-btn-primary w-full min-h-12">
           {form.busy ? "Checking…" : submitLabel}
@@ -204,7 +204,7 @@ export function OwnerSignInDialog({ what, submitLabel = "Sign in", onSignedIn, o
     <div className="rz-overlay items-center">
       <form role="dialog" aria-modal="true" aria-labelledby={titleId} onSubmit={(event) => { event.preventDefault(); void form.submit(); }} className="rz-dialog p-5 space-y-4">
         <div className="flex items-center gap-2.5">
-          <span aria-hidden="true" className="w-9 h-9 rounded-full bg-brass/10 ring-1 ring-brass/40 text-brass-bright flex items-center justify-center shrink-0">
+          <span aria-hidden="true" className="w-9 h-9 rounded-full bg-panel-2 ring-1 ring-seam-strong text-bone flex items-center justify-center shrink-0">
             <LockKeyhole className="w-4 h-4" />
           </span>
           <h2 id={titleId} className="rz-title text-xl">Owner sign-in</h2>

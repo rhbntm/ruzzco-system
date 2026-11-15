@@ -39,7 +39,7 @@ export function RejectedSales({
         on this device and not counted on the server until resolved.
       </p>
 
-      <ul className="rounded-lg bg-black/30 border border-warn/20 overflow-hidden divide-y divide-warn/15 rz-stagger">
+      <ul className="rounded-lg bg-well border border-warn/20 overflow-hidden divide-y divide-warn/15 rz-stagger">
         {sales.map((tx) => {
           // Slice 17b: the same total as every other row on the phone, tip included.
           const collected = collectedTotal(tx);

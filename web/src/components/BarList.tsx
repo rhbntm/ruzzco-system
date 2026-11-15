@@ -2,7 +2,8 @@
 // The value and share are printed, so the bar only repeats them and is hidden from screen readers.
 // No hooks: it renders on the server page and inside the client presentation alike.
 // `delay` (ms) holds the bars back, so in the presentation they grow after the headline lands.
-export type BarItem = { key: string; label: string; note?: string; valueText: string; share: number | null };
+// `barClassName` colours one bar (a payment method keeps its own colour); the default is crimson.
+export type BarItem = { key: string; label: string; note?: string; valueText: string; share: number | null; barClassName?: string };
 
 export function BarList({ items, delay = 0 }: { items: BarItem[]; delay?: number }) {
   return (
@@ -19,9 +20,9 @@ export function BarList({ items, delay = 0 }: { items: BarItem[]; delay?: number
               <span className="text-xs font-normal text-dust">{item.share === null ? "—" : `${Math.round(item.share)}%`}</span>
             </span>
           </div>
-          <div aria-hidden="true" className="h-2 rounded-full bg-black/35 overflow-hidden" title={`${item.label}: ${item.valueText}`}>
+          <div aria-hidden="true" className="h-2 rounded-full bg-well overflow-hidden" title={`${item.label}: ${item.valueText}`}>
             <div
-              className="h-2 rounded-full bg-crimson-bright origin-left"
+              className={`h-2 rounded-full origin-left ${item.barClassName ?? "bg-crimson-bright"}`}
               style={{ width: `${item.share ?? 0}%`, animation: `rz-grow-x 800ms var(--ease-out-expo) ${delay + 120 + index * 60}ms both` }}
             />
           </div>

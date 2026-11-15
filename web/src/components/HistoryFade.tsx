@@ -79,7 +79,7 @@ export function HistoryFade() {
       copy.style.width = `${root.clientWidth}px`;
       for (const child of Array.from(document.body.children)) {
         if (!(child instanceof HTMLElement) || child.hidden || child.localName.includes("-")) continue;
-        if (child.matches("script, style, link, noscript, template, .rz-room, .rz-cursor-layer")) continue;
+        if (child.matches("script, style, link, noscript, template")) continue;
         copy.appendChild(still(child));
       }
       document.body.appendChild(copy);

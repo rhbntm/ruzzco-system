@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import {
-  ArrowLeft,
   Scissors,
   Banknote,
   Smartphone,
@@ -250,14 +248,6 @@ export default function ReconciliationPage() {
       {/* Header: the black banner */}
       <header className="rz-banner">
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-2 px-4 py-3">
-          {/* Padding with matching negative margins: bigger targets without moving the layout. */}
-          <Link
-            href="/shift-log"
-            className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-sm text-dust hover:text-bone transition-colors group shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
-            <span>Shift Log</span>
-          </Link>
           <div className="flex items-center gap-2 min-w-0">
             {/* The station light: it turns while the totals load. */}
             <BarberPoleIcon className="w-2.5 h-6" spinning={isLoading} />
@@ -265,12 +255,6 @@ export default function ReconciliationPage() {
               EOD CASH RECONCILIATION
             </h1>
           </div>
-          <Link
-            href="/pos"
-            className="inline-flex items-center justify-center gap-1 min-w-6 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 pointer-coarse:min-w-11 text-sm font-semibold text-dust hover:text-bone transition-colors shrink-0"
-          >
-            <span>POS</span>
-          </Link>
         </div>
       </header>
 
@@ -287,7 +271,7 @@ export default function ReconciliationPage() {
             value={date}
             onChange={(e) => setDate(e.target.value)}
             max={todayStr}
-            className="rz-field flex-1 min-w-0 py-1.5 pointer-coarse:min-h-11 sm:text-sm scheme-dark"
+            className="rz-field flex-1 min-w-0 py-1.5 pointer-coarse:min-h-11 sm:text-sm"
           />
           <button
             onClick={() => setRefreshKey((k) => k + 1)}
@@ -329,9 +313,9 @@ export default function ReconciliationPage() {
             </h2>
             {/* Sales by method on top; the two totals the drawer is checked against below them. */}
             <div className="rz-strip grid-cols-2 sm:grid-cols-6 rz-stagger">
-              {/* Cash keeps its crimson on the icon only: in figures, red means "cash short". */}
+              {/* Cash is neutral (slice 21): red is kept for "cash short". */}
               {[
-                { label: "Cash Sales", value: `₱${expected.cashTotal}`, icon: Banknote, color: "text-bone", iconColor: "text-crimson-ink" },
+                { label: "Cash Sales", value: `₱${expected.cashTotal}`, icon: Banknote, color: "text-bone", iconColor: "text-cash" },
                 { label: "GCash Sales", value: `₱${expected.gcashTotal}`, icon: Smartphone, color: "text-gcash-ink", iconColor: "text-gcash-ink" },
                 { label: "Maya Sales", value: `₱${expected.mayaTotal}`, icon: Smartphone, color: "text-maya-ink", iconColor: "text-maya-ink" },
                 { label: "Expected Drawer", value: `₱${expected.expectedDrawerCash}`, icon: Banknote, color: "text-brass-bright", iconColor: "text-brass-bright" },
@@ -392,7 +376,7 @@ export default function ReconciliationPage() {
               one belongs to.
             </p>
             {needsReview.map((sale) => (
-              <div key={sale.id} className="p-3 rounded-lg bg-black/30 border border-warn/20 text-xs space-y-2.5">
+              <div key={sale.id} className="p-3 rounded-lg bg-well border border-warn/20 text-xs space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-bone">{sale.barberName} · {sale.paymentMethod}</span>
                   <span className="rz-figure text-sm text-bone">₱{sale.amount}</span>

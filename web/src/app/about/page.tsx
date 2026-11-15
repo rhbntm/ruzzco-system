@@ -1,11 +1,11 @@
-import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeft, Banknote, CheckCircle2, Clock, RefreshCw, Server, Smartphone, Wifi, WifiOff } from "lucide-react";
+import { Banknote, CheckCircle2, Clock, RefreshCw, Server, Smartphone, Wifi, WifiOff } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { gatewayConfig } from "@/lib/gateway";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { ApprovalGate } from "@/components/ApprovalScreen";
 import { ownerPageAccess } from "@/lib/owner-access";
+import { OwnerFrame } from "@/components/OwnerPageGate";
 
 // How one sale is recorded, and what the system does so far. Both sat under the counter on the
 // home page; they live here so Open the POS stays near the top of the home screen on phones.
@@ -29,7 +29,10 @@ async function loadExample() {
 const peso = (value: number) => `₱${value.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default async function AboutPage() {
-  const [example, isOwner] = await Promise.all([loadExample(), ownerPageAccess()]);
+  // Slice 21: nothing is queried or rendered without owner access (the approval or sign-in screen only).
+  const isOwner = await ownerPageAccess();
+  if (!isOwner) return <ApprovalGate pathname="/about" title="About" ownerAccess={false}>{null}</ApprovalGate>;
+  const example = await loadExample();
   const gatewayOn = gatewayConfig() !== null;
 
   const built = [
@@ -46,15 +49,11 @@ export default async function AboutPage() {
   const exampleName = example?.name ?? "Cut";
   const exampleAmount = example ? peso(Number(example.standardPrice)) : null;
 
-  // Slice 19 §7: a browser that is neither approved nor signed in as the owner sees the approval screen.
   return (
-    <ApprovalGate pathname="/about" title="About" ownerAccess={isOwner}>
+    <OwnerFrame>
     <main className="flex-1">
       <header className="rz-banner">
         <div className="max-w-312 mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
-          <Link href="/" className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-sm text-dust hover:text-bone transition-colors group">
-            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />Home
-          </Link>
           <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
             <BarberPoleIcon className="w-2.5 h-6" />
             About
@@ -78,7 +77,7 @@ export default async function AboutPage() {
             <Zone icon={Smartphone} title="On the barber's phone" note="Works with no connection">
               <Step n={1} title="Tap" body="The barber picks the service and payment method on their phone.">
                 <div className="space-y-2.5">
-                  <div className="relative overflow-hidden flex items-center justify-between gap-3 rounded-[10px] border border-chrome bg-panel-2 py-2.5 pl-4 pr-3 shadow-[inset_0_1px_0_rgb(214_228_250/0.14)]">
+                  <div className="relative overflow-hidden flex items-center justify-between gap-3 rounded-[10px] border border-chrome bg-panel-2 py-2.5 pl-4 pr-3">
                     <span className="absolute inset-y-0 left-0 w-1 rz-stripes" />
                     <span className="flex items-center gap-2.5 min-w-0">
                       <BarberPoleIcon className="w-2.5 h-6" />
@@ -86,7 +85,7 @@ export default async function AboutPage() {
                     </span>
                     {exampleAmount && <span className="rz-figure text-base text-bone shrink-0">{exampleAmount}</span>}
                   </div>
-                  <div className="h-10 flex items-center justify-center gap-2 rounded-[10px] bg-crimson text-white font-display font-semibold uppercase tracking-wider text-[0.9375rem] shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_20px_-12px_rgb(0_0_0/0.95)]">
+                  <div className="h-10 flex items-center justify-center gap-2 rounded-[10px] bg-crimson text-on-accent font-display font-semibold uppercase tracking-wider text-[0.9375rem] rz-shadow-btn">
                     <Banknote className="w-4 h-4 stroke-[2.5]" />
                     Cash{exampleAmount && ` — ${exampleAmount}`}
                   </div>
@@ -156,7 +155,7 @@ export default async function AboutPage() {
               <h2 id="built-title" className="rz-title text-[2rem] sm:text-[2.75rem]">Built so far</h2>
               <p className="text-dust leading-relaxed">What the system does today, for the SPCC BSIT capstone.</p>
             </div>
-            <ul className="grid sm:grid-cols-2 gap-px overflow-hidden rounded-[14px] border border-seam bg-seam shadow-[0_18px_36px_-26px_rgb(0_0_0/0.95)] rz-stagger">
+            <ul className="grid sm:grid-cols-2 gap-px overflow-hidden rounded-[14px] border border-seam bg-seam rz-shadow-card rz-stagger">
               {built.map((item) => (
                 <li key={item} className="flex items-start gap-3 bg-panel px-5 py-4 text-sm text-bone-2 leading-relaxed">
                   <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-ok" />
@@ -168,7 +167,7 @@ export default async function AboutPage() {
         </section>
       </div>
     </main>
-    </ApprovalGate>
+    </OwnerFrame>
   );
 }
 

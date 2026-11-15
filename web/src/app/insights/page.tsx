@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
-  ArrowLeft,
   Calculator,
   CheckCircle2,
   ChevronLeft,
@@ -119,7 +118,7 @@ export default async function InsightsPage({
                 <Warning>
                   {data.heldForReview} {data.heldForReview === 1 ? "sale stamped on this date is" : "sales stamped on this date are"} held
                   for date review and not in these figures. Confirm {data.heldForReview === 1 ? "its" : "their"} date on{" "}
-                  <Link href="/reconciliation" className="underline rounded-sm hover:text-white">End-of-Day Cash</Link>.
+                  <Link href="/reconciliation" className="underline rounded-sm hover:text-bone">End-of-Day Cash</Link>.
                 </Warning>
               )}
               {data.pendingQrph > 0 && (
@@ -785,12 +784,6 @@ function Shell({ action, children }: { action?: React.ReactNode; children: React
     <div className="relative flex-1 overflow-x-hidden">
       <main className="rz-page relative max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-12">
         <header className="space-y-5">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3 pointer-coarse:py-3 rounded-sm text-sm text-dust hover:text-bone transition-colors group"
-          >
-            <ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" /> Home
-          </Link>
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
             <div className="space-y-2">
               <h1 className="rz-title text-4xl sm:text-5xl">
@@ -831,7 +824,7 @@ function DateBar({ day, today, range }: { day: BusinessDay; today: string; range
             name="date"
             defaultValue={day.date}
             max={today}
-            className={`rz-field w-auto py-1 ${control} sm:text-sm scheme-dark`}
+            className={`rz-field w-auto py-1 ${control} sm:text-sm`}
           />
           <button
             type="submit"

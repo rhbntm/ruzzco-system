@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, RefreshCw, Smartphone } from "lucide-react";
+import { RefreshCw, Smartphone } from "lucide-react";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
 
@@ -74,7 +73,6 @@ export default function DevicesPage() {
     <main className="flex-1">
       <header className="rz-banner">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
-          <Link href="/" className="inline-flex items-center gap-1.5 -my-2 py-2 pointer-coarse:-my-3.5 pointer-coarse:py-3.5 text-sm text-dust hover:text-bone transition-colors group"><ArrowLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-0.5" />Home</Link>
           <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
             <BarberPoleIcon className="w-2.5 h-6" spinning={busy} />
             Approved phones
@@ -93,7 +91,7 @@ export default function DevicesPage() {
         {active.length === 0 ? (
           <p className="rz-notice">No phone is approved yet.</p>
         ) : (
-          <ul className="rz-panel divide-y divide-white/8 overflow-hidden">
+          <ul className="rz-panel divide-y divide-seam overflow-hidden">
             {active.map((d) => (
               <li key={d.deviceKey} className="p-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0 space-y-0.5">
@@ -122,7 +120,7 @@ export default function DevicesPage() {
         {revoked.length > 0 && (
           <section className="space-y-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-dust">Revoked</h2>
-            <ul className="rz-panel divide-y divide-white/8 overflow-hidden opacity-75">
+            <ul className="rz-panel divide-y divide-seam overflow-hidden opacity-75">
               {revoked.map((d) => (
                 <li key={d.deviceKey} className="p-4 text-sm space-y-0.5">
                   <div className="font-semibold text-bone">{d.label ?? "Unnamed phone"}</div>

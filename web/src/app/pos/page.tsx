@@ -86,7 +86,8 @@ import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { ConnectionBadge, ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
 import { createSubmitLock } from "@/lib/submit-lock";
 import { useLiveQuery } from "dexie-react-hooks";
-import { RuzzcoLogoBanner, MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { MustacheIcon, BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { Logo } from "@/components/Logo";
 
 // After a sale is saved, further payment taps are ignored this long, so a double tap
 // that lands after the (millisecond-fast) local write still records only one sale.
@@ -776,7 +777,7 @@ function MobilePOSPage() {
       <div className="rz-page flex-1 flex flex-col items-center justify-center p-6 gap-8">
         <div className="flex flex-col items-center gap-6 text-center">
           {/* The banner carries the name and "Premium Cut & Shave"; the heading names the page for screen readers. */}
-          <RuzzcoLogoBanner className="w-64 sm:w-72" alt="" />
+          <Logo stacked className="mx-auto" />
           <h1 className="sr-only">Ruzzco Barbers</h1>
           <div role="status" className="flex items-center gap-3 text-sm text-dust">
             {/* The station light turns while the station starts up. */}
@@ -810,7 +811,7 @@ function MobilePOSPage() {
     return (
       <div className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-sm space-y-5 text-center">
-          <RuzzcoLogoBanner className="w-56 mx-auto" alt="" />
+          <Logo stacked className="mx-auto" />
           <h1 className="rz-title text-3xl">No barber on this phone</h1>
           <p className="text-sm text-dust leading-relaxed">
             The barber who uses this phone signs in with the shop PC on; the phone is then assigned to them.
@@ -830,7 +831,7 @@ function MobilePOSPage() {
       <div className="rz-page flex-1 flex items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-sm space-y-6">
           <div className="text-center space-y-4">
-            <RuzzcoLogoBanner className="w-56 mx-auto" alt="" />
+            <Logo stacked className="mx-auto" />
             <h1 className="rz-title text-3xl">
               Change the barber
             </h1>
@@ -852,7 +853,7 @@ function MobilePOSPage() {
                   className="rz-press w-full min-h-16 px-4 py-3.5 text-left flex items-center justify-between gap-3 group transition-[background-color,transform] duration-200 hover:bg-crimson/10 disabled:opacity-50"
                 >
                   <span className="flex items-center gap-3 min-w-0">
-                    <span className="w-11 h-11 rounded-full bg-panel-2 ring-1 ring-seam-strong text-bone flex items-center justify-center font-display font-semibold text-lg shrink-0 transition-colors duration-200 group-hover:bg-crimson group-hover:ring-crimson-bright group-hover:text-white">
+                    <span className="w-11 h-11 rounded-full bg-panel-2 ring-1 ring-seam-strong text-bone flex items-center justify-center font-display font-semibold text-lg shrink-0 transition-colors duration-200 group-hover:bg-crimson group-hover:ring-crimson-bright group-hover:text-on-accent">
                       {barber.fullName.charAt(0)}
                     </span>
                     <span className="min-w-0">
@@ -960,7 +961,7 @@ function MobilePOSPage() {
               {modalQr?.kind === "qr" ? (
                 <div className="animate-fade mx-auto mb-1 w-52 space-y-2">
                   {/* eslint-disable-next-line @next/next/no-img-element -- cached data URL from IndexedDB */}
-                  <img src={modalQr.dataUrl} alt={`${digitalLabel} QR on file for ${binding?.barberName ?? "this barber"}`} className="w-full aspect-square object-contain rounded-xl bg-white p-2.5 shadow-[0_12px_28px_-14px_rgb(0_0_0/0.9)]" />
+                  <img src={modalQr.dataUrl} alt={`${digitalLabel} QR on file for ${binding?.barberName ?? "this barber"}`} className="w-full aspect-square object-contain rounded-xl bg-paper p-2.5 border border-seam rz-shadow-float" />
                   <p className="text-xs text-dust text-center">{digitalLabel} QR on file for {binding?.barberName}</p>
                 </div>
               ) : modalQr?.kind === "not_set_up" ? (
@@ -993,7 +994,7 @@ function MobilePOSPage() {
                 value={digitalRef}
                 onChange={(e) => setDigitalRef(e.target.value)}
                 maxLength={20}
-                className={`rz-field sm:text-sm pointer-coarse:min-h-11 ${digitalColor === "emerald" ? "focus:border-maya focus:shadow-[0_0_0_3px_rgb(23_178_106/0.25)]" : "focus:border-gcash focus:shadow-[0_0_0_3px_rgb(47_124_246/0.28)]"}`}
+                className={`rz-field sm:text-sm pointer-coarse:min-h-11 ${digitalColor === "emerald" ? "focus:border-maya focus:ring-3 focus:ring-maya/25" : "focus:border-gcash focus:ring-3 focus:ring-gcash/25"}`}
                 autoFocus
               />
             </div>
@@ -1003,7 +1004,7 @@ function MobilePOSPage() {
                 type="button"
                 onClick={handleDigitalConfirm}
                 disabled={isRecording}
-                className={`rz-btn w-full min-h-14 text-base text-white border-white/10 shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_22px_-12px_rgb(0_0_0/0.9)] ${digitalColor === "emerald" ? "bg-[#0d7f4a] hover:bg-[#0f8d52]" : "bg-[#1f66d9] hover:bg-[#2a72e6]"}`}
+                className={`rz-btn w-full min-h-14 text-base ${digitalColor === "emerald" ? "rz-btn-maya" : "rz-btn-gcash"}`}
               >
                 {isRecording ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -1241,12 +1242,12 @@ function MobilePOSPage() {
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-crimson-ink" : ""}`} />
               {(pendingCount ?? 0) > 0 && (
-                <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-crimson text-white text-xs font-bold ring-2 ring-wall flex items-center justify-center animate-pulse">
+                <span aria-hidden="true" className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-crimson text-on-accent text-xs font-bold ring-2 ring-wall flex items-center justify-center animate-pulse">
                   {pendingCount}
                 </span>
               )}
               {(rejectedSales?.length ?? 0) > 0 && (
-                <span aria-hidden="true" title="Sales needing attention" className="absolute -bottom-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-warn text-black text-xs font-bold ring-2 ring-wall flex items-center justify-center">
+                <span aria-hidden="true" title="Sales needing attention" className="absolute -bottom-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-warn text-on-warn text-xs font-bold ring-2 ring-wall flex items-center justify-center">
                   {rejectedSales?.length}
                 </span>
               )}
@@ -1303,7 +1304,7 @@ function MobilePOSPage() {
           <RejectedSales sales={rejectedSales ?? []} busy={isSyncing} onRetry={handleRetryRejected} />
           {/* A saved sale is green; "not saved" and "switched off" messages are warnings. */}
           {lastActionToast && (
-            <div className={`animate-drop rz-notice text-sm shadow-[0_14px_30px_-18px_rgb(0_0_0/0.9)] ${lastActionToast.type === "success" ? "rz-notice-ok" : "rz-notice-warn"}`}>
+            <div className={`animate-drop rz-notice text-sm rz-shadow-float ${lastActionToast.type === "success" ? "rz-notice-ok" : "rz-notice-warn"}`}>
               {lastActionToast.type === "success" ? (
                 <CheckCircle2 className="w-4.5 h-4.5 text-ok shrink-0 mt-px" />
               ) : (
@@ -1335,8 +1336,8 @@ function MobilePOSPage() {
                     aria-pressed={isSelected}
                     className={`rz-press relative overflow-hidden min-h-22 p-3 pt-3.5 rounded-xl border text-left flex flex-col justify-between gap-2 transition-[background-color,border-color,box-shadow,transform] duration-200 ${
                       isSelected
-                        ? "bg-panel-2 border-chrome text-bone shadow-[inset_0_1px_0_rgb(214_228_250/0.14),0_14px_26px_-18px_rgb(0_0_0/0.95)]"
-                        : "bg-panel border-seam text-bone-2 shadow-[inset_0_1px_0_rgb(214_228_250/0.08)] hover:bg-panel-2 hover:border-seam-strong"
+                        ? "bg-panel-2 border-chrome text-bone rz-shadow-float"
+                        : "bg-panel border-seam text-bone-2 rz-shadow-card hover:bg-panel-2 hover:border-seam-strong"
                     }`}
                   >
                     {/* The chosen tile is edged along the top by the barber pole. */}
@@ -1445,7 +1446,7 @@ function MobilePOSPage() {
             </div>
 
             {/* Phones: the total and Charge in a bar fixed to the bottom, always in reach. */}
-            <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 border-t border-seam-strong bg-wall/95 backdrop-blur px-4 pt-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] shadow-[0_-14px_30px_-18px_rgb(0_0_0/0.95)]">
+            <div className="sm:hidden fixed inset-x-0 bottom-0 z-30 border-t border-seam-strong bg-wall/95 backdrop-blur px-4 pt-2 pb-[max(0.625rem,env(safe-area-inset-bottom))] rz-shadow-bar">
               <button
                 type="button"
                 onClick={handleCharge}
@@ -1489,7 +1490,7 @@ function MobilePOSPage() {
               >
                 View all
                 {(pendingCount ?? 0) > 0 && (
-                  <span className="ml-1 min-w-5 px-1.5 py-0.5 rounded-full bg-crimson text-white text-xs font-bold text-center">
+                  <span className="ml-1 min-w-5 px-1.5 py-0.5 rounded-full bg-crimson text-on-accent text-xs font-bold text-center">
                     {pendingCount}
                   </span>
                 )}
@@ -1527,7 +1528,7 @@ function MobilePOSPage() {
                             <Smartphone className="w-3 h-3" />
                           </span>
                         ) : (
-                          <span role="img" aria-label="Cash" className="w-5 h-5 rounded-full bg-crimson/20 text-crimson-ink flex items-center justify-center" title="Cash">
+                          <span role="img" aria-label="Cash" className="w-5 h-5 rounded-full bg-cash/15 text-cash-ink flex items-center justify-center" title="Cash">
                             <Banknote className="w-3 h-3" />
                           </span>
                         )}
