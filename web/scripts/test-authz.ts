@@ -288,6 +288,7 @@ function refusedProbe(row: MatrixRow): Probe | null {
     case "GET v1/reports/ledger-summary": return { path: `/api/v1/reports/ledger-summary?date=${DATE}&period=day&commissionBase=LIST_PRICE` };
     case "GET v1/reports/custom-amounts": return { path: `/api/v1/reports/custom-amounts?date=${DATE}` };
     case "GET v1/reports/payout-history": return { path: `/api/v1/reports/payout-history?from=${DATE}&to=${DATE}` };
+    case "GET v1/reports/sales": return { path: `/api/v1/reports/sales?from=${DATE}&to=${DATE}` };
     case "POST v1/reports/time-review": return { path: "/api/v1/reports/time-review", body: JSON.stringify({ transactionId: saleA, choice: "RECEIVED" }) };
     case "GET v1/forecast": return { path: "/api/v1/forecast" };
     case "POST v1/forecast/refresh": return { path: "/api/v1/forecast/refresh", body: "{}" };
@@ -393,6 +394,7 @@ async function allowed() {
     [`/api/v1/reports/ledger-summary?date=${DATE}&period=day&commissionBase=LIST_PRICE`, (j) => j.success === true],
     [`/api/v1/reports/custom-amounts?date=${DATE}`, (j) => j.success === true && Array.isArray(j.sales)],
     [`/api/v1/reports/payout-history?from=${DATE}&to=${DATE}`, (j) => j.success === true && Array.isArray(j.days)],
+    [`/api/v1/reports/sales?from=${DATE}&to=${DATE}`, (j) => j.success === true && Array.isArray(j.sales)],
     ["/api/v1/forecast", (j) => j.success === true],
   ];
   for (const [path, ok] of reads) {

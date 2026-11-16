@@ -7,6 +7,7 @@ export type OwnerNavItem = { href: string; label: string };
 
 export const OWNER_NAV: readonly OwnerNavItem[] = [
   { href: "/", label: "Dashboard" },
+  { href: "/sales", label: "Sales" },
   { href: "/ledger", label: "Barber Ledger" },
   { href: "/reconciliation", label: "End-of-Day Cash" },
   { href: "/insights", label: "Insights" },

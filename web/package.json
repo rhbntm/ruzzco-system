@@ -38,6 +38,8 @@
     "test:qr-cache": "tsx scripts/test-qr-cache.ts",
     "test:qrph-charge": "tsx scripts/test-qrph-charge.ts",
     "test:qrph-policy": "tsx scripts/test-qrph-policy.ts",
+    "test:sales-list": "tsx scripts/test-sales-list.ts",
+    "test:list-settings": "tsx scripts/test-list-settings.ts",
     "test:seed": "tsx scripts/test-seed.ts",
     "test:sheet-stack": "tsx scripts/test-sheet-stack.ts",
     "test:shift-log-pages": "tsx scripts/test-shift-log-pages.ts",

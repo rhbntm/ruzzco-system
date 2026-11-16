@@ -2,7 +2,7 @@
  * Slice 21a: the owner's menu. Pure, reads the list and the source:
  *   npm run test:nav
  *
- * N1 the list: nine pages, no /pos or /shift-log (an owner session records no sale; the shift
+ * N1 the list: ten pages, no /pos or /shift-log (an owner session records no sale; the shift
  *    log is the phone's own list), every owner page reachable.
  * N2 which item is current.
  * N3 the owner's screens (the shell, the dashboard, every owner page) link to no barber page, and
@@ -27,9 +27,10 @@ function check(name: string, ok: boolean, detail = "") {
 
 console.log("N1 the list");
 const hrefs = OWNER_NAV.map((item) => item.href);
-check("nine items", OWNER_NAV.length === 9, String(OWNER_NAV.length));
+check("ten items", OWNER_NAV.length === 10, String(OWNER_NAV.length));
 check("no href twice, no label twice", new Set(hrefs).size === hrefs.length && new Set(OWNER_NAV.map((i) => i.label)).size === OWNER_NAV.length);
 check("Dashboard first, at /", OWNER_NAV[0].href === "/" && OWNER_NAV[0].label === "Dashboard");
+check("Sales second, at /sales (slice 22)", OWNER_NAV[1].href === "/sales" && OWNER_NAV[1].label === "Sales");
 for (const page of DEVICE_PAGES) check(`${page} is not in the owner menu`, !hrefs.some((href) => href === page || href.startsWith(`${page}/`)));
 check("no item is a barber's page by the gate's own rule", hrefs.every((href) => gateKind(href) !== "device"));
 for (const page of OWNER_PAGES) check(`${page} is in the menu`, hrefs.includes(page));

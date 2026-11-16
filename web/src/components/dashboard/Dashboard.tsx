@@ -111,7 +111,7 @@ export function Dashboard({ period }: { period: DashboardPeriod }) {
           </Suspense>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2" title="Sales per day" href="/insights" linkLabel="Insights">
+            <Card className="lg:col-span-2" title="Sales per day" href="/sales" linkLabel="View sales">
               <Suspense key={`trend-${period}`} fallback={<CardSkeleton rows={6} />}>
                 <SalesPerDay summary={summary} today={today} periodCaption={periodCaption} />
               </Suspense>

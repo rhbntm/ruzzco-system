@@ -8,7 +8,7 @@
  */
 import { manilaToday } from "../src/lib/business-date";
 import { MAX_RANGE_DATES, PRESETS, parseRange, presetRange, type DateRange, type RangeError } from "../src/lib/date-range";
-import { presetOptions, rangeText } from "../src/components/DateRangeBar";
+import { customOption, presetOptions, rangeText } from "../src/components/DateRangeBar";
 
 let passed = 0;
 const failures: string[] = [];
@@ -126,6 +126,24 @@ console.log("\nThe range bar's options (slice 21c)");
   check("every option has its own label", new Set(options.map((o) => o.label)).size === options.length && options.every((o) => o.label.length > 0));
   check("a one-day range is printed as one date", rangeText(today, today) === "Sun, Nov 15, 2026", rangeText(today, today));
   check("a longer range names both ends", rangeText("2026-11-09", today) === "Mon, Nov 9, 2026 to Sun, Nov 15, 2026", rangeText("2026-11-09", today));
+
+  console.log("\nCustom range (slice 22, Decision 2)");
+  const good = customOption("2026-11-01", "2026-11-15", today);
+  check("a valid range is an option named Custom", !("error" in good) && good.key === "custom" && good.label === "Custom" && good.from === "2026-11-01" && good.to === "2026-11-15");
+  const errorOf = (from: string, to: string) => { const r = customOption(from, to, today); return "error" in r ? r.error : null; };
+  const wording = (from: string, to: string) => { const r = parseRange(from, to, today); return r.ok ? null : r.error; };
+  for (const [name, from, to] of [
+    ["from after to", "2026-11-10", "2026-11-05"],
+    ["more than 366 dates", "2025-01-01", "2026-11-15"],
+    ["a date after today", "2026-11-10", "2026-11-16"],
+    ["not a date", "2026-02-30", "2026-03-01"],
+    ["empty fields", "", ""],
+  ] as const) {
+    check(`${name}: refused with the route's own wording`, errorOf(from, to) !== null && errorOf(from, to) === wording(from, to), String(errorOf(from, to)));
+  }
+  const oneDay = customOption(today, today, today);
+  const todayOption = presetOptions(today)[0];
+  check("a one-day custom range equals Today", !("error" in oneDay) && oneDay.from === todayOption.from && oneDay.to === todayOption.to);
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
