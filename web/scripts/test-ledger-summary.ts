@@ -322,6 +322,23 @@ async function customAmounts() {
   check("read-only: a GET writes nothing (transactions, payout ledger rows, payout entries unchanged)", JSON.stringify(await counts()) === JSON.stringify(before));
   check("read-only: an impossible date answers 400", (await list("2000-02-30")).status === 400);
   check("read-only: a missing date answers 400", (await call("GET", "/api/v1/reports/custom-amounts")).status === 400);
+
+  // Slice 22, Decision 12: from/to, the range's sales as the sum of its days.
+  const range = (from: string, to: string, cookie = ownerCookie) => call<CustomList & { error?: string }>("GET", `/api/v1/reports/custom-amounts?from=${from}&to=${to}`, undefined, cookie);
+  const one = await range(DAY, DAY);
+  const same = (await list(DAY)).body.sales.map((s) => s.id).join();
+  check("range: a one-day range equals ?date=", one.status === 200 && one.body.sales.map((s) => s.id).join() === same, one.body.error);
+  const week = await range(BEFORE, AFTER);
+  const perDay = [...(await ids(BEFORE)), ...(await ids(DAY)), ...(await ids(AFTER))].sort().join();
+  check("range: three days equal the sum of their days' lists", week.status === 200 && week.body.sales.map((s) => s.id).sort().join() === perDay);
+  const weekTimes = week.body.sales.map((s) => s.time);
+  check("range: newest first", weekTimes.every((v, i) => i === 0 || weekTimes[i - 1] >= v));
+  check("range: date together with from is 400", (await call("GET", `/api/v1/reports/custom-amounts?date=${DAY}&from=${BEFORE}&to=${AFTER}`)).status === 400);
+  check("range: from without to is 400", (await call("GET", `/api/v1/reports/custom-amounts?from=${BEFORE}`)).status === 400);
+  check("range: from after to is 400", (await range(AFTER, BEFORE)).status === 400);
+  const tomorrow = new Date(Date.parse(`${manilaToday()}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  check("range: a future to is 422", (await range(manilaToday(), tomorrow)).status === 422);
+  check("range: signed out is 401 before any query", (await range("bad", "bad", "")).status === 401);
 }
 
 // ── Part 4, slice 20: from/to ────────────────────────────────────────────────

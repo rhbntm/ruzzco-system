@@ -11,6 +11,10 @@ import { peso as pesoText } from "@/lib/peso";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
 import { DateRangeBar, presetOptions, rangeText, type RangeOption } from "@/components/DateRangeBar";
+import { PagedControls } from "@/components/Pager";
+import { ShowingLine } from "@/components/ShowingLine";
+import { usePagedList } from "@/lib/use-paged-list";
+import { clearListSettings, keepRange, readListSettings, resolveKeptRange, showingText, writeListSettings } from "@/lib/list-settings";
 
 // The Barber Ledger (slice 21c layout). Three parts, each with its own dates:
 //   1. Payouts for one business date: a card per barber beside one payout form (slice 18's
@@ -66,6 +70,8 @@ const newDraft = (method: Method = "CASH"): Draft => ({ id: generateUUID(), amou
 const SAVE_REPEAT_GUARD_MS = 600;
 // The range option that follows the picked business date.
 const PICKED = "picked";
+// Slice 22, Decision 10: the range is kept in this browser (a preset by name, a Custom range by its dates).
+const RANGE_KEY = "ledger-range";
 
 export default function LedgerPage() {
   const today = manilaToday();
@@ -73,6 +79,9 @@ export default function LedgerPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [base, setBase] = useState<Base>("LIST_PRICE");
   const [rangeKey, setRangeKey] = useState<string>("today");
+  // Slice 22: a Custom range chosen on the range bar (checked by `customOption`).
+  const [customRange, setCustomRange] = useState<RangeOption | null>(null);
+  const [rangeRead, setRangeRead] = useState(false);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [history, setHistory] = useState<History | null>(null);
@@ -103,9 +112,30 @@ export default function LedgerPage() {
   // The presets of slice 20, and the picked business date as a one-day range when it isn't today.
   const rangeOptions = useMemo<RangeOption[]>(() => {
     const presets = presetOptions(today);
-    return date === today ? presets : [{ key: PICKED, label: shortDate(date), from: date, to: date }, ...presets];
-  }, [date, today]);
+    const base = date === today ? presets : [{ key: PICKED, label: shortDate(date), from: date, to: date }, ...presets];
+    return customRange ? [...base, customRange] : base;
+  }, [date, today, customRange]);
   const range = rangeOptions.find((option) => option.key === rangeKey) ?? rangeOptions[0];
+
+  // The kept range, read once after mount; a kept range that is no longer valid becomes Today.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const kept = readListSettings<{ range: unknown }>(RANGE_KEY, { range: null }, (raw) => ({ range: raw.range }));
+      const resolved = resolveKeptRange(kept.range, today);
+      if (resolved.key === "custom") setCustomRange({ key: "custom", label: "Custom", from: resolved.from, to: resolved.to });
+      setRangeKey(resolved.key);
+      setRangeRead(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [today]);
+  useEffect(() => {
+    if (rangeRead && range.key !== PICKED) writeListSettings(RANGE_KEY, { range: keepRange(range) });
+  }, [rangeRead, range]);
+  function resetRange() {
+    clearListSettings(RANGE_KEY);
+    setCustomRange(null);
+    setRangeKey("today");
+  }
 
   // Another business date: the Summary and history follow it, as the day view always did.
   function pickDate(next: string) {
@@ -148,11 +178,11 @@ export default function LedgerPage() {
     setRangeBusy(false);
   }, [from, to, base]);
 
-  // One business date at a time: the range and commission base never change this list.
+  // Slice 22, Decision 12: the same dates as the Summary and the Payout history.
   const loadCustom = useCallback(async () => {
     setCustomBusy(true); setCustomError(null);
     try {
-      const res = await fetch(`/api/v1/reports/custom-amounts?date=${date}`);
+      const res = await fetch(`/api/v1/reports/custom-amounts?from=${from}&to=${to}`);
       const body = await res.json();
       if (!res.ok || !body.success) throw new Error(body.error ?? "Could not load the custom amounts");
       setCustomSales(body.sales);
@@ -160,7 +190,7 @@ export default function LedgerPage() {
       setCustomSales(null);
       setCustomError(err instanceof Error ? err.message : "Could not load the custom amounts");
     } finally { setCustomBusy(false); }
-  }, [date]);
+  }, [from, to]);
 
   useEffect(() => {
     if (!unlocked) return;
@@ -242,6 +272,7 @@ export default function LedgerPage() {
   const dayLabel = date === today ? "today" : `on ${shortDate(date)}`;
   const payRow = rows.find((row) => row.barberId === pickedBarberId) ?? rows.find((row) => Number(row.remaining) > 0) ?? rows[0] ?? null;
   const reload = () => { void load(); void loadRange(); void loadCustom(); };
+  const rangeIsToday = range.key === "today";
   const loading = busy || rangeBusy;
 
   return (
@@ -399,7 +430,6 @@ export default function LedgerPage() {
           </div>
           <p className="text-xs text-dust flex items-start gap-1.5"><Scissors className="w-3.5 h-3.5 mt-px shrink-0" />Each payout is kept as its own entry and is never edited; a mistake is fixed with a correction beside it. Cash payouts come out of expected drawer cash when recorded.</p>
 
-          <CustomAmountsSection date={date} sales={customSales} error={customError} busy={customBusy} />
         </section>
 
         {/* ── 2 and 3. The Summary and the Payout history, over one range ── */}
@@ -409,7 +439,7 @@ export default function LedgerPage() {
               <h2 id="range-title" className="rz-title text-2xl">Summary and payout history</h2>
               <p className="text-xs text-dust">Both show the same dates. A period is the sum of its days; the payout cards above stay on their one business date.</p>
             </div>
-            <DateRangeBar options={rangeOptions} selected={range.key} onSelect={setRangeKey} label="Dates for the summary and the payout history" busy={rangeBusy} />
+            <DateRangeBar options={rangeOptions} selected={range.key} onSelect={setRangeKey} today={today} onCustom={(option) => { setCustomRange(option); setRangeKey(option.key); }} label="Dates for the summary, the payout history and the custom amounts" busy={rangeBusy} />
           </div>
 
           {summaryError ? (
@@ -423,10 +453,12 @@ export default function LedgerPage() {
           {historyError ? (
             <div role="alert" className="animate-rise rz-notice rz-notice-danger">Payout history: {historyError}</div>
           ) : history ? (
-            <PayoutHistorySection history={history} />
+            <PayoutHistorySection history={history} rangeIsToday={rangeIsToday} onResetRange={resetRange} />
           ) : (
             <SectionSkeleton title="Payout history" />
           )}
+
+          <CustomAmountsSection range={{ from, to }} sales={customSales} error={customError} busy={customBusy} rangeIsToday={rangeIsToday} onResetRange={resetRange} />
         </section>
       </div>
     </main>
@@ -633,14 +665,18 @@ function SummarySection({ summary }: { summary: Summary }) {
 // Slice 20, shown by slice 21c: what each barber was owed and paid on each date of the range,
 // days newest first, with every entry. Read-only: payouts and corrections are recorded on the
 // cards above, for one business date. Owed is at list price, whatever base the cards show.
-function PayoutHistorySection({ history }: { history: History }) {
+function PayoutHistorySection({ history, rangeIsToday, onResetRange }: { history: History; rangeIsToday: boolean; onResetRange: () => void }) {
   const { totals } = history;
+  // Slice 22, Decision 9: the days are paged on the screen; the totals above them cover every day.
+  const list = usePagedList("ledger-payout-history", history.days);
+  const showing = showingText([], { from: history.from, to: history.to });
   return (
     <section className="animate-rise rz-panel p-4 sm:p-5 space-y-4 text-sm">
       <div className="space-y-1">
         <h3 className="rz-title text-xl">Payout history</h3>
         <p className="text-xs text-dust tabular-nums">{rangeText(history.from, history.to)} · read-only · owed at list price, from the sales themselves</p>
       </div>
+      <ShowingLine text={showing.text} filtered={false} canReset isDefault={rangeIsToday && list.isDefault} onReset={() => { onResetRange(); list.reset(); }} />
       <dl className="rz-strip grid-cols-3">
         <div>
           <dt className="rz-label">Owed</dt>
@@ -674,7 +710,7 @@ function PayoutHistorySection({ history }: { history: History }) {
         <p className="rz-notice">No paid sales and no payouts on these dates.</p>
       ) : (
         <div className="space-y-5">
-          {history.days.map((day) => (
+          {list.shown.items.map((day) => (
             <div key={day.date} className="space-y-2">
               <h4 className="rz-heading text-bone">{rangeText(day.date, day.date)}</h4>
               <div className="overflow-x-auto">
@@ -712,6 +748,7 @@ function PayoutHistorySection({ history }: { history: History }) {
               </div>
             </div>
           ))}
+          <PagedControls list={list} label="Payout history pages" />
         </div>
       )}
     </section>
@@ -746,30 +783,37 @@ const STATUS_NAMES: Record<string, string> = { PENDING: "Payment pending" };
 const noteText = (note: string | null) => (!note?.trim() || note.trim() === DEFAULT_CUSTOM_NOTE ? "(no note)" : note);
 
 // Slice 16, Decision 4: custom amounts skip the server's price check, so the owner sees each one
-// here, for the picked date only. Text only (the note is typed by a barber; React escapes it).
-// The commission is the stored snapshot; the base toggle doesn't change it.
-function CustomAmountsSection({ date, sales, error, busy }: { date: string; sales: CustomSale[] | null; error: string | null; busy: boolean }) {
+// here, over the range under the range bar (slice 22, Decision 12). Text only (the note is typed
+// by a barber; React escapes it). The commission is the stored snapshot; the base toggle doesn't change it.
+function CustomAmountsSection({ range, sales, error, busy, rangeIsToday, onResetRange }: {
+  range: { from: string; to: string }; sales: CustomSale[] | null; error: string | null; busy: boolean; rangeIsToday: boolean; onResetRange: () => void;
+}) {
+  const list = usePagedList("ledger-custom-amounts", sales ?? []);
+  const showing = showingText([], range);
+  const oneDay = range.from === range.to;
   return (
     <section className="rz-panel p-4 sm:p-5 space-y-3 text-sm">
       <div className="space-y-1">
         <h3 className="rz-title text-xl">Custom amounts</h3>
         <p className="text-xs text-dust">
-          {date === manilaToday() ? "Today" : shortDate(date)} only. Sales with a typed amount instead of the menu price; each shows the commission recorded when it synced.
+          Sales with a typed amount instead of the menu price; each shows the commission recorded when it synced.
         </p>
       </div>
+      <ShowingLine text={showing.text} filtered={false} canReset isDefault={rangeIsToday && list.isDefault} onReset={() => { onResetRange(); list.reset(); }} />
       {error ? (
         <p role="alert" className="rz-notice rz-notice-danger">Custom amounts: {error}</p>
       ) : sales === null ? (
         <p className="text-dust">{busy ? "Loading…" : "Not loaded."}</p>
       ) : sales.length === 0 ? (
-        <p className="text-dust">No custom amounts on this date.</p>
+        <p className="text-dust">No custom amounts on these dates.</p>
       ) : (
+        <>
         <ul className="divide-y divide-seam">
-          {sales.map((sale) => (
+          {list.shown.items.map((sale) => (
             <li key={sale.id} className="py-2 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-bone-2 break-words">
-                  <span className="tabular-nums">{manilaTime(sale.time)}</span> · {sale.barberName} · {sale.serviceName ?? "Unknown service"}
+                  <span className="tabular-nums">{oneDay ? manilaTime(sale.time) : manilaStamp(sale.time)}</span> · {sale.barberName} · {sale.serviceName ?? "Unknown service"}
                 </p>
                 <p className="text-xs text-dust break-words">{noteText(sale.note)}</p>
                 <p className="text-xs text-dust tabular-nums break-words">
@@ -783,6 +827,8 @@ function CustomAmountsSection({ date, sales, error, busy }: { date: string; sale
             </li>
           ))}
         </ul>
+        <PagedControls list={list} label="Custom amounts pages" />
+        </>
       )}
     </section>
   );

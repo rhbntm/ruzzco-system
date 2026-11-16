@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Smartphone } from "lucide-react";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
+import { PagedControls } from "@/components/Pager";
+import { usePagedList } from "@/lib/use-paged-list";
 
 // Owner-only (slice 15): the phones approved to send sales. A lost or replaced phone is revoked
 // here; its secret stops working at once and the sales it still holds wait until it is approved
@@ -29,6 +31,9 @@ export default function DevicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
+  // Slice 22, Decision 9: each list has its own pager and kept page size.
+  const activeList = usePagedList("devices-approved", devices.filter((d) => !d.revokedAt));
+  const revokedList = usePagedList("devices-revoked", devices.filter((d) => d.revokedAt));
 
   const load = useCallback(async () => {
     setBusy(true); setError(null);
@@ -76,8 +81,8 @@ export default function DevicesPage() {
     return <OwnerSignInPage title="Approved phones" what="see the approved phones and revoke a lost or replaced one" submitLabel="Unlock" onSignedIn={() => void load()} />;
   }
 
-  const active = devices.filter((d) => !d.revokedAt);
-  const revoked = devices.filter((d) => d.revokedAt);
+  const active = activeList.shown.items;
+  const revoked = revokedList.shown.items;
 
   return (
     <main className="flex-1">
@@ -98,7 +103,7 @@ export default function DevicesPage() {
         </p>
         {error && <p role="alert" className="rz-notice rz-notice-danger">{error}</p>}
 
-        {active.length === 0 ? (
+        {activeList.total === 0 ? (
           <p className="rz-notice">No phone is approved yet.</p>
         ) : (
           <ul className="rz-panel divide-y divide-seam overflow-hidden">
@@ -126,8 +131,9 @@ export default function DevicesPage() {
             ))}
           </ul>
         )}
+        {activeList.total > 0 && <PagedControls list={activeList} label="Approved phones pages" />}
 
-        {revoked.length > 0 && (
+        {revokedList.total > 0 && (
           <section className="space-y-2">
             <h2 className="text-xs font-bold uppercase tracking-wider text-dust">Revoked</h2>
             <ul className="rz-panel divide-y divide-seam overflow-hidden">
@@ -138,6 +144,7 @@ export default function DevicesPage() {
                 </li>
               ))}
             </ul>
+            <PagedControls list={revokedList} label="Revoked phones pages" />
           </section>
         )}
       </div>

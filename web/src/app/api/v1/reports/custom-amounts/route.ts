@@ -3,8 +3,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { serverError } from "@/lib/api";
 import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
-import { isBusinessDate, parseBusinessDate } from "@/lib/business-date";
-import { countsOnDay } from "@/lib/time-review";
+import { isBusinessDate, manilaToday, parseBusinessDate } from "@/lib/business-date";
+import { parseRange } from "@/lib/date-range";
+import { countsInRange, countsOnDay } from "@/lib/time-review";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,8 @@ const querySchema = z.object({
 });
 
 /**
- * GET /api/v1/reports/custom-amounts?date=YYYY-MM-DD (owner access)
+ * GET /api/v1/reports/custom-amounts?date=YYYY-MM-DD, or ?from=&to= (slice 22, Decision 12: the
+ * range's sales, countsInRange; never both) (owner access)
  * Custom-amount sales that count on that Manila business date (countsOnDay: a flagged sale waiting
  * for its date review is on no day), PAID or PENDING, newest first, inactive barbers and services
  * included. `commission` is the sale's stored snapshot, never recomputed; `menuPriceNow` is the
@@ -24,14 +26,31 @@ const querySchema = z.object({
  */
 export async function GET(request: NextRequest) {
   if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
-  const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
-  if (!parsed.success) return NextResponse.json({ success: false, error: "date must be a real calendar date (YYYY-MM-DD)" }, { status: 400 });
-  const { date } = parsed.data;
+  const params = new URL(request.url).searchParams;
+  const isRange = params.has("from") || params.has("to");
+  if (isRange && params.has("date")) {
+    return NextResponse.json({ success: false, error: "Use either from and to, or date, not both" }, { status: 400 });
+  }
+  let when: ReturnType<typeof countsOnDay>;
+  let echo: { date: string } | { from: string; to: string };
+  if (isRange) {
+    const from = params.get("from");
+    const to = params.get("to");
+    if (!from || !to) return NextResponse.json({ success: false, error: "from and to are required (YYYY-MM-DD)" }, { status: 400 });
+    const range = parseRange(from, to, manilaToday());
+    if (!range.ok) return NextResponse.json({ success: false, error: range.error }, { status: range.status });
+    when = countsInRange(range.first, range.last);
+    echo = { from: range.first.date, to: range.last.date };
+  } else {
+    const parsed = querySchema.safeParse(Object.fromEntries(params));
+    if (!parsed.success) return NextResponse.json({ success: false, error: "date must be a real calendar date (YYYY-MM-DD)" }, { status: 400 });
+    when = countsOnDay(parseBusinessDate(parsed.data.date)!);
+    echo = { date: parsed.data.date };
+  }
 
   try {
-    const day = parseBusinessDate(date)!;
     const sales = await prisma.transaction.findMany({
-      where: { AND: [countsOnDay(day), { customAmount: true, paymentStatus: { in: ["PAID", "PENDING"] } }] },
+      where: { AND: [when, { customAmount: true, paymentStatus: { in: ["PAID", "PENDING"] } }] },
       orderBy: [{ transactionTime: "desc" }, { id: "asc" }],
       select: {
         id: true,
@@ -49,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      date,
+      ...echo,
       sales: sales.map((sale) => {
         const service = sale.items[0]?.service ?? null;
         return {

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { KeyRound, RefreshCw, UserPlus, UserRound } from "lucide-react";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
+import { PagedControls } from "@/components/Pager";
+import { usePagedList } from "@/lib/use-paged-list";
 
 // Staff accounts (slice 19, Decision 15): list, create, set or reset a password, deactivate and
 // reactivate. Accounts are never deleted, and no password or hash ever reaches this page.
@@ -44,6 +46,7 @@ function StaffAccountsList() {
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmDeactivate, setConfirmDeactivate] = useState<string | null>(null);
+  const list = usePagedList("staff-accounts", accounts);
 
   // Signed out meanwhile (a password reset, Lock, or the first owner account ended the PIN session).
   const handle401 = useCallback((status: number) => {
@@ -115,7 +118,7 @@ function StaffAccountsList() {
 
         <ul className="rz-panel divide-y divide-seam overflow-hidden">
           {accounts.length === 0 && (busy ? <li role="status" className="p-4"><span className="sr-only">Loading the accounts…</span><div aria-hidden="true" className="rz-skeleton h-5 w-2/3" /></li> : <li className="p-4 text-sm text-dust">No accounts yet.</li>)}
-          {accounts.map((account) => (
+          {list.shown.items.map((account) => (
             <li key={account.id} className="p-4 space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-0.5">
@@ -165,6 +168,7 @@ function StaffAccountsList() {
             </li>
           ))}
         </ul>
+        <PagedControls list={list} label="Accounts pages" />
 
         <CreateAccount
           barbers={freeBarbers}

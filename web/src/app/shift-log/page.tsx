@@ -11,14 +11,15 @@ import {
   QrCode,
   TriangleAlert,
   HardDrive,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { db, getOrCreateDeviceKey, type LocalTransaction } from "@/lib/db";
 import { DEFAULT_CUSTOM_NOTE, discountLabel } from "@/lib/pricing";
 import { collectedTotal } from "@/lib/charge";
 import { peso } from "@/lib/peso";
-import { paginate } from "@/lib/paginate";
+import { DEFAULT_PAGE_SIZE, paginate } from "@/lib/paginate";
+import { clearListSettings, readListSettings, validPageSize, writeListSettings } from "@/lib/list-settings";
+import { Pager } from "@/components/Pager";
+import { ResetButton } from "@/components/ShowingLine";
 import { countPending, isRejected, listRejected, retryRejected, summarizeSync, syncNow } from "@/lib/sync";
 import { useLiveQuery } from "dexie-react-hooks";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
@@ -29,6 +30,8 @@ import { BarberHeader } from "@/components/BarberHeader";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
+
+const SHIFT_LOG_KEY = "shift-log";
 
 function subscribeOnline(callback: () => void) {
   window.addEventListener("online", callback);
@@ -68,8 +71,22 @@ function ShiftLogPage() {
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   // QR payment for a synced QRPH sale (after a Retry, or the row's "QR payment" button).
   const [qrSale, setQrSale] = useState<{ id: string; amount: number } | null>(null);
-  // Slice 13: 20 sales a page, newest first, from the phone's own store (works with the PC off).
+  // Slices 13 and 22: newest first, from the phone's own store (works with the PC off). 10 a page
+  // unless the barber chose another size, which this phone keeps; the page number never is.
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState<number>(() =>
+    readListSettings(SHIFT_LOG_KEY, { pageSize: DEFAULT_PAGE_SIZE }, (raw, d) => ({ pageSize: validPageSize(raw.pageSize, d.pageSize) })).pageSize
+  );
+  function changePageSize(size: number) {
+    setPageSizeState(size);
+    setPage(1);
+    writeListSettings(SHIFT_LOG_KEY, { pageSize: size });
+  }
+  function resetList() {
+    clearListSettings(SHIFT_LOG_KEY);
+    setPageSizeState(DEFAULT_PAGE_SIZE);
+    setPage(1);
+  }
 
   const localTransactions = useLiveQuery(
     async () => {
@@ -173,7 +190,7 @@ function ShiftLogPage() {
   const cannotSyncNow = !isOnline || isShopPcDown(shopPc);
 
   // The page number is clamped, so a list that shrank still shows a page that exists.
-  const shown = paginate(localTransactions ?? [], page);
+  const shown = paginate(localTransactions ?? [], page, pageSize);
 
   if (!mounted) {
     return (
@@ -387,26 +404,9 @@ function ShiftLogPage() {
                 );
               })}
             </ul>
-            {shown.pageCount > 1 && (
-              <nav aria-label="Sales pages" className="flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPage(shown.page - 1)}
-                  disabled={shown.page <= 1}
-                  className="rz-btn rz-btn-secondary min-h-11 px-4 disabled:opacity-40"
-                >
-                  <ChevronLeft className="w-4 h-4" /> Previous
-                </button>
-                <span aria-live="polite" className="text-sm text-dust tabular-nums">Page {shown.page} of {shown.pageCount}</span>
-                <button
-                  type="button"
-                  onClick={() => setPage(shown.page + 1)}
-                  disabled={shown.page >= shown.pageCount}
-                  className="rz-btn rz-btn-secondary min-h-11 px-4 disabled:opacity-40"
-                >
-                  Next <ChevronRight className="w-4 h-4" />
-                </button>
-              </nav>
+            <Pager page={shown.page} pageCount={shown.pageCount} pageSize={pageSize} total={localTransactions?.length ?? 0} onPage={setPage} onPageSize={changePageSize} label="Sales pages" />
+            {(localTransactions?.length ?? 0) > DEFAULT_PAGE_SIZE && (
+              <div className="flex justify-end"><ResetButton isDefault={pageSize === DEFAULT_PAGE_SIZE} onReset={resetList} /></div>
             )}
             </>
           )}
