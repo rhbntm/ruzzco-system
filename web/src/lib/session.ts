@@ -122,12 +122,14 @@ export async function verifySessionCookie(value: string | undefined, now = Date.
 /**
  * For a phone signed in offline (no cookie): is the account it holds still the one it signed in
  * to? PASSWORD_CHANGED when the server's passwordChangedAt differs, INACTIVE when the account or
- * its barber is deactivated, otherwise NONE (Decision 10, case 4).
+ * its barber is deactivated or the account no longer exists (a deleted account is one that can no
+ * longer be used, so the phone ends its session and deletes its verifier), otherwise NONE
+ * (Decision 10, case 4). A malformed id is NONE: it can't be an account the phone signed in to.
  */
 export async function accountStateFor(userId: string, passwordChangedAt: string): Promise<SessionRefusal> {
   if (!/^[0-9A-Za-z-]{1,191}$/.test(userId)) return "NONE";
   const user = await findAccount({ id: userId });
-  if (!user) return "NONE";
+  if (!user) return "INACTIVE";
   if (!accountUsable(user)) return "INACTIVE";
   if ((user.passwordChangedAt?.toISOString() ?? "") !== passwordChangedAt) return "PASSWORD_CHANGED";
   return "NONE";

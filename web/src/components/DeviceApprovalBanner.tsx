@@ -28,7 +28,8 @@ export function DeviceApprovalBanner({ onApproved, message }: { onApproved?: () 
 /**
  * "Approve this phone" and its PIN dialog, wherever a phone may need approving: the banner above,
  * and (slice 21b) the barber sign-in on /pos and the owner sign-in on /login, where the phone may
- * already be approved. Approving again only replaces this phone's secret (slice 15); its barber,
+ * already be approved. Approving again replaces this phone's secret (slice 15) and ends its active
+ * barber assignment (the barber is assigned again at the next sign-in; assignment history stays);
  * its sales and its queue stay as they are. The PIN is checked on the server, never here.
  */
 export function ApprovePhoneButton({ onApproved, className, label = "Approve this phone" }: {

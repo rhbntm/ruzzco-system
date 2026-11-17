@@ -261,6 +261,15 @@ async function signInChecks() {
   await signIn("bayani", PASSWORD, deps(recheck, server()).d);
   applySessionAnswer({ kind: "refused", reason: "INACTIVE" }, recheck);
   check("recheck, INACTIVE: session ended, verifier deleted", recheck.map.get(SESSION_KEY) === undefined && recheck.map.get(VERIFIER_KEY) === undefined);
+
+  // A deleted account: the server answers INACTIVE (session.ts accountStateFor), the same answer as a
+  // deactivated one, so a valid local barber session for it ends and its verifier goes at the next recheck.
+  const deleted = memoryStorage();
+  await signIn("bayani", PASSWORD, deps(deleted, server()).d);
+  check("a valid local session exists before the account is deleted", readLocalSession(deleted) !== null && readVerifier(deleted) !== null);
+  check("while the phone is offline, the session is kept (it cannot learn of the deletion)", applySessionAnswer({ kind: "unreachable" }, deleted) === "kept" && readLocalSession(deleted) !== null);
+  check("the next successful recheck answers INACTIVE for the deleted account: session ended", applySessionAnswer({ kind: "refused", reason: "INACTIVE" }, deleted) === "ended" && readLocalSession(deleted) === null);
+  check("...and the cached verifier is deleted, so no offline sign-in is possible for it", readVerifier(deleted) === null);
 }
 
 // Slice 19 §7.13: an owner sign-in on this browser ends the barber's session and deletes the

@@ -235,6 +235,11 @@ async function main() {
   const linkedSale = { ...sale(phone, assignmentId), userId: accountId };
   const linkedSync = await sync(auth(phone, secret1), [linkedSale]);
   check("a sale signed in under that account is recorded with its userId", linkedSync.status === 200 && (await prisma.transaction.findUnique({ where: { id: linkedSale.id }, select: { userId: true } }))?.userId === accountId, `got ${linkedSync.status}`);
+  // The phone's own recheck of the account it signed in to offline (no cookie): GET /api/v1/auth/session?userId&passwordChangedAt.
+  const heldChangedAt = (await prisma.user.findUnique({ where: { id: accountId }, select: { passwordChangedAt: true } }))?.passwordChangedAt?.toISOString() ?? "";
+  const recheck = (headers: Record<string, string>) => call(`/api/v1/auth/session?userId=${accountId}&passwordChangedAt=${encodeURIComponent(heldChangedAt)}`, { method: "GET", headers });
+  const recheckLive = await recheck(auth(phone, secret1));
+  check("before deletion, the phone's recheck of that account answers NONE (nothing changed)", recheckLive.status === 401 && recheckLive.body?.reason === "NONE", JSON.stringify(recheckLive.body));
   const delNoOwner = await del(accountId, { "Content-Type": "application/json" });
   check("without owner access it is 401 and deletes nothing", delNoOwner.status === 401 && (await prisma.user.count({ where: { id: accountId } })) === 1, `got ${delNoOwner.status}`);
   const delActive = await del(accountId);
@@ -250,6 +255,13 @@ async function main() {
   check("its sale stays with the same barber; only the userId link is cleared", kept?.userId === null && kept.barberId === BARBER && kept.cashierId === BARBER, JSON.stringify(kept));
   const delAgain = await del(accountId);
   check("deleting it again is 404", delAgain.status === 404);
+  // The phone still holds a local session for the deleted account: its next recheck must end it.
+  const recheckDeleted = await recheck(auth(phone, secret1));
+  check("after deletion, the approved phone's recheck answers INACTIVE (so it ends the local session)", recheckDeleted.status === 401 && recheckDeleted.body?.reason === "INACTIVE", JSON.stringify(recheckDeleted.body));
+  const recheckNoHeaders = await recheck({ "Content-Type": "application/json" });
+  check("...but a caller without approved-phone headers learns nothing (NONE)", recheckNoHeaders.status === 401 && recheckNoHeaders.body?.reason === "NONE", JSON.stringify(recheckNoHeaders.body));
+  const recheckMalformed = await call(`/api/v1/auth/session?userId=${encodeURIComponent("not a user id!")}&passwordChangedAt=x`, { method: "GET", headers: auth(phone, secret1) });
+  check("...and a malformed account id is still NONE", recheckMalformed.status === 401 && recheckMalformed.body?.reason === "NONE");
 
   console.log("\nPhones page data (GET /api/v1/devices)");
   const devicesNoOwner = await call("/api/v1/devices?barber=" + BARBER, { method: "GET", headers: {} });
@@ -265,12 +277,16 @@ async function main() {
   const noRecordKey = newKey(); // an assignment whose phone has no device record
   const noRecordAssignment = randomUUID();
   await prisma.deviceAssignment.create({ data: { id: noRecordAssignment, deviceKey: noRecordKey, barberId: BARBER } });
-  const withOrphan = await call(`/api/v1/devices?barber=${BARBER}`, { method: "GET", headers: { Cookie: await ownerCookie() } });
-  const orphanList = (withOrphan.body?.orphanAssignments ?? []) as { id: string }[];
-  check("an assignment with no phone record is reported on its own, not as a phone", orphanList.some((o) => o.id === noRecordAssignment) && !JSON.stringify(withOrphan.body?.devices).includes(noRecordKey));
-  const staffWithOrphan = await call("/api/v1/users", { method: "GET", headers: { Cookie: await ownerCookie() } });
-  check("...and never counted as an approved phone", countsOf((staffWithOrphan.body?.barbers ?? []) as StaffBarber[])?.approved === 2);
-  await prisma.deviceAssignment.deleteMany({ where: { id: noRecordAssignment } });
+  // Removed in `finally`, so an assertion that throws cannot leave this fixture behind (cleanup() also covers its device key).
+  try {
+    const withOrphan = await call(`/api/v1/devices?barber=${BARBER}`, { method: "GET", headers: { Cookie: await ownerCookie() } });
+    const orphanList = (withOrphan.body?.orphanAssignments ?? []) as { id: string }[];
+    check("an assignment with no phone record is reported on its own, not as a phone", orphanList.some((o) => o.id === noRecordAssignment) && !JSON.stringify(withOrphan.body?.devices).includes(noRecordKey));
+    const staffWithOrphan = await call("/api/v1/users", { method: "GET", headers: { Cookie: await ownerCookie() } });
+    check("...and never counted as an approved phone", countsOf((staffWithOrphan.body?.barbers ?? []) as StaffBarber[])?.approved === 2);
+  } finally {
+    await prisma.deviceAssignment.deleteMany({ where: { id: noRecordAssignment } });
+  }
 
   console.log("\nRe-approval replaces the secret and ends the assignment");
   const queuedOffline = sale(phone, assignmentId); // made on the phone before it was approved again
