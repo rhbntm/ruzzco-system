@@ -4,6 +4,8 @@ import { hasOwnerAccess, ownerRequiredResponse } from "@/lib/owner-access";
 import { hashPassword, normalizeUsername, passwordProblem, USERNAME_RULE } from "@/lib/passwords";
 import { prisma } from "@/lib/prisma";
 import { isUniqueViolation } from "@/lib/prisma-errors";
+import { loadClassifiedPhones } from "@/lib/phone-data";
+import { barberPhoneCounts } from "@/lib/phone-status";
 import { staffAccountSelect, toStaffAccount } from "@/lib/staff-accounts";
 
 export const dynamic = "force-dynamic";
@@ -14,18 +16,26 @@ const fail = (status: number, code: string, error: string) => NextResponse.json(
 export async function GET(request: NextRequest) {
   if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
   try {
-    const [users, barbers] = await Promise.all([
+    const [users, barbers, { phones }] = await Promise.all([
       prisma.user.findMany({ select: staffAccountSelect, orderBy: [{ role: "asc" }, { name: "asc" }] }),
       prisma.barber.findMany({
         select: { id: true, fullName: true, isActive: true, account: { select: { id: true } } },
         orderBy: { fullName: "asc" },
       }),
+      loadClassifiedPhones(),
     ]);
     return NextResponse.json({
       success: true,
       users: users.map(toStaffAccount),
-      barbers: barbers.map((b) => ({ id: b.id, fullName: b.fullName, isActive: b.isActive, accountId: b.account?.id ?? null })),
-    });
+      // Only counts per barber: /devices is where phones are listed and managed.
+      barbers: barbers.map((b) => ({
+        id: b.id,
+        fullName: b.fullName,
+        isActive: b.isActive,
+        accountId: b.account?.id ?? null,
+        phones: barberPhoneCounts(phones, b.id),
+      })),
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return serverError("[users] list failed", error);
   }

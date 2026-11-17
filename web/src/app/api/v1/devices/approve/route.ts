@@ -18,7 +18,8 @@ const approveSchema = z.object({
  * POST /api/v1/devices/approve { deviceKey, pin, label? }
  * Typed on the phone itself, with the owner PIN or the approval PIN (DEVICE_APPROVAL_PIN).
  * Returns a new secret once; the server keeps only its hash. Approving a phone again (browser
- * data cleared, or revoked earlier) replaces the secret, so the old one stops working.
+ * data cleared, or revoked earlier) replaces the secret, so the old one stops working, and ends
+ * the phone's active barber assignment in the same transaction (the phone must be bound again).
  * There is no list of waiting phones: an unapproved phone writes nothing to the database.
  */
 export async function POST(request: NextRequest) {
@@ -59,12 +60,26 @@ export async function POST(request: NextRequest) {
       revokedAt: null,
       ...(label ? { label } : {}),
     };
-    await prisma.device.upsert({
-      where: { deviceKey },
-      create: { deviceKey, ...record },
-      update: record,
+    // Credential and binding change together. Approving a known phone again replaces its secret AND
+    // ends its active barber assignment (history stays: the row is kept with revokedAt set, and the
+    // sales made under it still sync to its barber). The phone then finds no active binding on the
+    // server, drops its local one and goes through the normal bind (a first bind needs no PIN).
+    // A first approval has nothing to end. Revoking a phone (the owner's /revoke) is a separate rule.
+    const endedAssignments = await prisma.$transaction(async (tx) => {
+      const existing = await tx.device.findUnique({ where: { deviceKey }, select: { deviceKey: true } });
+      await tx.device.upsert({
+        where: { deviceKey },
+        create: { deviceKey, ...record },
+        update: record,
+      });
+      if (!existing) return 0;
+      const ended = await tx.deviceAssignment.updateMany({
+        where: { deviceKey, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      return ended.count;
     });
-    console.log(`[devices] approved ${deviceKey} with ${role}`);
+    console.log(`[devices] approved ${deviceKey} with ${role}${endedAssignments ? `, ended ${endedAssignments} active assignment(s)` : ""}`);
 
     return NextResponse.json(
       { success: true, deviceKey, secret, approvedWith: role },

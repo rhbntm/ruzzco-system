@@ -176,14 +176,95 @@ async function main() {
   check("the owner list shows the phone with label, approver and last seen", !!mine && mine.label === "Test phone" && mine.approvedWith === "OWNER" && !!mine.lastSeenAt);
   check("the list never carries a secret or its hash", !JSON.stringify(listed.body).includes(secret1) && list.every((d) => !("secretHash" in d)));
 
-  console.log("\nRe-approval replaces the secret");
+  console.log("\nStaff page data (GET /api/v1/users)");
+  const secretOfHelper = String(byApprover.body?.secret ?? "");
+  const helperAssignment = randomUUID();
+  const helperBound = await call("/api/v1/devices/bind", { headers: auth(helper, secretOfHelper), body: { deviceKey: helper, barberId: BARBER, assignmentId: helperAssignment } });
+  check("a second phone is bound to the same barber", helperBound.status === 200, `got ${helperBound.status}`);
+  const staffNoOwner = await call("/api/v1/users", { method: "GET", headers: {} });
+  check("without owner access it is 401 with no data", staffNoOwner.status === 401 && !("barbers" in (staffNoOwner.body ?? {})) && !("users" in (staffNoOwner.body ?? {})), `got ${staffNoOwner.status}`);
+  const staffApproved = await call("/api/v1/users", { method: "GET", headers: auth(phone, secret1) });
+  check("an approved phone's headers don't open it either (401)", staffApproved.status === 401, `got ${staffApproved.status}`);
+  const staff = await call("/api/v1/users", { method: "GET", headers: { Cookie: await ownerCookie() } });
+  const staffText = JSON.stringify(staff.body);
+  type StaffBarber = { id: string; accountId: string | null; phones: { approved: number; revoked: number } };
+  const staffBarbers = (staff.body?.barbers ?? []) as StaffBarber[];
+  const countsOf = (list: StaffBarber[]) => list.find((b) => b.id === BARBER)?.phones;
+  check("the owner gets 200 with users and barbers", staff.status === 200 && Array.isArray(staff.body?.users) && staffBarbers.length > 0, `got ${staff.status}`);
+  check("a barber with no account is listed with accountId null", staffBarbers.find((b) => b.id === BARBER)?.accountId === null);
+  check("the staff page carries counts only, no phone list", !("assignedPhones" in (staff.body ?? {})) && !("devices" in (staff.body ?? {})));
+  check("two approved phones are assigned to that barber, none revoked", countsOf(staffBarbers)?.approved === 2 && countsOf(staffBarbers)?.revoked === 0, JSON.stringify(countsOf(staffBarbers)));
+  check(
+    "no credential material: no device key, secret, hash or password field",
+    !staffText.includes(phone) && !staffText.includes(helper) && !staffText.includes(secret1) && !staffText.includes(secretOfHelper) &&
+      !/secretHash|secret_hash|passwordHash|"deviceKey"|"secret"/.test(staffText)
+  );
+
+  console.log("\nPhones page data (GET /api/v1/devices)");
+  const devicesNoOwner = await call("/api/v1/devices?barber=" + BARBER, { method: "GET", headers: {} });
+  check("the filtered list is 401 without owner access, with no data", devicesNoOwner.status === 401 && !("devices" in (devicesNoOwner.body ?? {})), `got ${devicesNoOwner.status}`);
+  const phonesList = await call(`/api/v1/devices?barber=${BARBER}`, { method: "GET", headers: { Cookie: await ownerCookie() } });
+  const filtered = (phonesList.body?.devices ?? []) as { deviceKey: string; state: string; barberId: string | null }[];
+  check("filtering by barber returns exactly that barber's two assigned phones", filtered.length === 2 && filtered.every((d) => d.state === "assigned" && d.barberId === BARBER) && filtered.some((d) => d.deviceKey === phone) && filtered.some((d) => d.deviceKey === helper), JSON.stringify(filtered.map((d) => d.state)));
+  const otherBarber = await call(`/api/v1/devices?barber=${randomUUID()}`, { method: "GET", headers: { Cookie: await ownerCookie() } });
+  check("another barber's filter returns none of them", ((otherBarber.body?.devices ?? []) as unknown[]).length === 0 && otherBarber.status === 200);
+  const everything = await call("/api/v1/devices", { method: "GET", headers: { Cookie: await ownerCookie() } });
+  check("with no filter every phone is listed, and the barber list is there for the filter", ((everything.body?.devices ?? []) as unknown[]).length >= 2 && ((everything.body?.barbers ?? []) as { id: string }[]).some((b) => b.id === BARBER));
+  check("the phone list carries no secret or hash", !JSON.stringify(everything.body).includes(secret1) && !/secretHash|secret_hash/.test(JSON.stringify(everything.body)));
+  const noRecordKey = newKey(); // an assignment whose phone has no device record
+  const noRecordAssignment = randomUUID();
+  await prisma.deviceAssignment.create({ data: { id: noRecordAssignment, deviceKey: noRecordKey, barberId: BARBER } });
+  const withOrphan = await call(`/api/v1/devices?barber=${BARBER}`, { method: "GET", headers: { Cookie: await ownerCookie() } });
+  const orphanList = (withOrphan.body?.orphanAssignments ?? []) as { id: string }[];
+  check("an assignment with no phone record is reported on its own, not as a phone", orphanList.some((o) => o.id === noRecordAssignment) && !JSON.stringify(withOrphan.body?.devices).includes(noRecordKey));
+  const staffWithOrphan = await call("/api/v1/users", { method: "GET", headers: { Cookie: await ownerCookie() } });
+  check("...and never counted as an approved phone", countsOf((staffWithOrphan.body?.barbers ?? []) as StaffBarber[])?.approved === 2);
+  await prisma.deviceAssignment.deleteMany({ where: { id: noRecordAssignment } });
+
+  console.log("\nRe-approval replaces the secret and ends the assignment");
+  const queuedOffline = sale(phone, assignmentId); // made on the phone before it was approved again
+  const activeBefore = await prisma.deviceAssignment.count({ where: { deviceKey: phone, revokedAt: null } });
+  const totalBefore = await prisma.deviceAssignment.count({ where: { deviceKey: phone } });
+  const hashBefore = (await prisma.device.findUnique({ where: { deviceKey: phone } }))?.secretHash;
+  check("before: the phone has one active assignment", activeBefore === 1 && totalBefore >= 1);
   const again = await approve(phone, approvalPin);
   const secret2 = String(again.body?.secret ?? "");
   check("approving again returns a new secret", again.status === 200 && secret2.length === 64 && secret2 !== secret1);
+  const hashAfter = (await prisma.device.findUnique({ where: { deviceKey: phone } }))?.secretHash;
+  check("the stored hash was replaced", !!hashAfter && hashAfter !== hashBefore && hashAfter.length === 64);
   const oldSecret = await sync(auth(phone, secret1), [sale(phone)]);
   check("the old secret stops working", oldSecret.status === 401, `got ${oldSecret.status}`);
   const newSecret = await sync(auth(phone, secret2), [sale(phone)]);
   check("the new secret works", newSecret.status === 200, `got ${newSecret.status}`);
+  check("the phone's old assignment is ended", (await prisma.deviceAssignment.count({ where: { deviceKey: phone, revokedAt: null } })) === 0);
+  const oldRow = await prisma.deviceAssignment.findUnique({ where: { id: assignmentId } });
+  check("...as history: the row is kept with its barber and an end time", !!oldRow && oldRow.barberId === BARBER && oldRow.revokedAt !== null && (await prisma.deviceAssignment.count({ where: { deviceKey: phone } })) === totalBefore);
+  const bindingNow = await call(`/api/v1/devices/binding?deviceKey=${phone}`, { method: "GET", headers: auth(phone, secret2) });
+  check("the re-approved phone has no active binding (it does not inherit the old one)", bindingNow.status === 200 && bindingNow.body?.bound === false, JSON.stringify(bindingNow.body));
+  check("another phone's assignment was not touched", (await prisma.deviceAssignment.findUnique({ where: { id: helperAssignment } }))?.revokedAt === null);
+  const staffAfter = await call("/api/v1/users", { method: "GET", headers: { Cookie: await ownerCookie() } });
+  check("the staff page now counts one approved phone for that barber", countsOf((staffAfter.body?.barbers ?? []) as StaffBarber[])?.approved === 1, JSON.stringify(countsOf((staffAfter.body?.barbers ?? []) as StaffBarber[])));
+  const afterReapprove = await call("/api/v1/devices", { method: "GET", headers: { Cookie: await ownerCookie() } });
+  const reapproved1 = ((afterReapprove.body?.devices ?? []) as { deviceKey: string; state: string; barberId: string | null }[]).find((d) => d.deviceKey === phone);
+  check("the Phones page shows the re-approved phone as approved but not assigned", reapproved1?.state === "unassigned" && reapproved1.barberId === null, JSON.stringify(reapproved1));
+
+  console.log("\nQueued offline sale across re-approval");
+  const queuedSync = await sync(auth(phone, secret2), [queuedOffline]);
+  check("a sale made under the ended assignment still syncs", queuedSync.status === 200 && (queuedSync.body?.syncedIds as string[] | undefined)?.includes(queuedOffline.id) === true, JSON.stringify(queuedSync.body));
+  check("...attributed to that assignment's barber, as before", (await stored(queuedOffline.id))?.cashierId === BARBER && (await stored(queuedOffline.id))?.barberId === BARBER);
+
+  console.log("\nBinding again uses the normal workflow");
+  const secondAssignment = randomUUID();
+  const rebound = await call("/api/v1/devices/bind", { headers: auth(phone, secret2), body: { deviceKey: phone, barberId: BARBER, assignmentId: secondAssignment } });
+  check("a bind with no active binding needs no PIN and works", rebound.status === 200, `got ${rebound.status}`);
+  const bindingAfter = await call(`/api/v1/devices/binding?deviceKey=${phone}`, { method: "GET", headers: auth(phone, secret2) });
+  check("the phone is bound again, under the new assignment", bindingAfter.body?.bound === true && (bindingAfter.body?.assignment as { id?: string } | undefined)?.id === secondAssignment, JSON.stringify(bindingAfter.body));
+  const newAssignmentSale = sale(phone, secondAssignment);
+  const rebindSync = await sync(auth(phone, secret2), [newAssignmentSale]);
+  check("a sale under the new assignment syncs", rebindSync.status === 200 && (rebindSync.body?.syncedIds as string[] | undefined)?.includes(newAssignmentSale.id) === true);
+  const firstApprovalKey = newKey();
+  const firstTime = await approve(firstApprovalKey, ownerPin);
+  check("a first approval still works and ends nothing", firstTime.status === 200 && (await prisma.deviceAssignment.count({ where: { deviceKey: phone, revokedAt: null } })) === 1 && (await prisma.deviceAssignment.count({ where: { deviceKey: firstApprovalKey } })) === 0);
 
   console.log("\nRevoke");
   const cookie = await ownerCookie();
@@ -197,6 +278,14 @@ async function main() {
   check("bind from the revoked phone answers 401", bindRevoked.status === 401, `got ${bindRevoked.status}`);
   const revokeAgain = await call("/api/v1/devices/revoke", { headers: { "Content-Type": "application/json", Cookie: cookie }, body: { deviceKey: phone } });
   check("revoking again is a no-op", revokeAgain.status === 200);
+  // Revoking does not end the assignment (queued sales keep their barber), but the phone is no longer usable.
+  check("revoking leaves its assignment record in place (history)", (await prisma.deviceAssignment.count({ where: { deviceKey: phone, revokedAt: null } })) === 1);
+  const afterRevokeList = await call("/api/v1/devices", { method: "GET", headers: { Cookie: cookie } });
+  const revokedRow = ((afterRevokeList.body?.devices ?? []) as { deviceKey: string; state: string; barberId: string | null }[]).find((d) => d.deviceKey === phone);
+  check("the Phones page lists it as revoked, with its last barber as history", revokedRow?.state === "revoked" && revokedRow.barberId === BARBER, JSON.stringify(revokedRow));
+  const staffRevoked = await call("/api/v1/users", { method: "GET", headers: { Cookie: cookie } });
+  const revokedCounts = countsOf((staffRevoked.body?.barbers ?? []) as StaffBarber[]);
+  check("the staff page counts it as revoked, not as an approved phone", revokedCounts?.approved === 1 && revokedCounts.revoked === 1, JSON.stringify(revokedCounts));
   const reapproved = await approve(phone, ownerPin);
   const secret3 = String(reapproved.body?.secret ?? "");
   const held = await sync(auth(phone, secret3), [afterRevoke]);
