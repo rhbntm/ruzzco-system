@@ -39,6 +39,7 @@ export const AUTHZ_MATRIX: MatrixRow[] = [
   { route: "v1/users", method: "GET", access: "owner", note: "staff accounts" },
   { route: "v1/users", method: "POST", access: "owner", note: "readJson" },
   { route: "v1/users/[id]", method: "PATCH", access: "owner", note: "readJson" },
+  { route: "v1/users/[id]", method: "DELETE", access: "owner", note: "only a deactivated account; no body" },
   { route: "v1/reports/payouts", method: "GET", access: "owner", note: "ledger rows" },
   { route: "v1/reports/payouts", method: "POST", access: "owner", note: "readJson" },
   { route: "v1/reports/reconciliation", method: "GET", access: "owner", note: "day figures and its saved counts (?date), or the latest count of recent dates (?recent=N, slice 26)" },

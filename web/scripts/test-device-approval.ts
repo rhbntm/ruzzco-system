@@ -200,6 +200,57 @@ async function main() {
       !/secretHash|secret_hash|passwordHash|"deviceKey"|"secret"/.test(staffText)
   );
 
+  console.log("\nA new barber from the staff page (POST /api/v1/users)");
+  const ownerHeaders = { "Content-Type": "application/json", Cookie: await ownerCookie() };
+  const newName = `Test New Barber ${RUN}`;
+  const newUser = `t-nb-${RUN}`;
+  const newPassword = randomUUID();
+  const makeBarber = (extra: Record<string, unknown>) => call("/api/v1/users", { headers: ownerHeaders, body: { role: "BARBER", name: newName, username: newUser, password: newPassword, ...extra } });
+  const barbersNamed = () => prisma.barber.count({ where: { fullName: newName } });
+  const noRate = await makeBarber({});
+  check("a new barber without a commission rate is refused (400), nothing created", noRate.status === 400 && (await barbersNamed()) === 0, `got ${noRate.status}`);
+  const badRate = await makeBarber({ commissionRate: 1.5 });
+  const oddRate = await makeBarber({ commissionRate: 0.555 });
+  check("a rate outside 0 to 1, or with more than two decimals, is refused", badRate.status === 400 && oddRate.status === 400 && (await barbersNamed()) === 0);
+  const noName = await call("/api/v1/users", { headers: ownerHeaders, body: { role: "BARBER", username: newUser, password: newPassword, commissionRate: 0.5 } });
+  check("a new barber needs a name", noName.status === 400 && (await barbersNamed()) === 0, `got ${noName.status}`);
+  const existingWithRate = await call("/api/v1/users", { headers: ownerHeaders, body: { role: "BARBER", barberId: BARBER, username: newUser, password: newPassword, commissionRate: 0.5 } });
+  check("a rate with an existing barber is refused", existingWithRate.status === 400);
+  const ownerWithRate = await call("/api/v1/users", { headers: ownerHeaders, body: { role: "OWNER", name: newName, username: newUser, password: newPassword, commissionRate: 0.5 } });
+  check("an owner account takes no rate", ownerWithRate.status === 400 && (await prisma.user.count({ where: { username: newUser } })) === 0);
+  const noCookie = await call("/api/v1/users", { body: { role: "BARBER", name: newName, username: newUser, password: newPassword, commissionRate: 0.5 } });
+  check("without owner access it is 401 and creates nothing", noCookie.status === 401 && (await barbersNamed()) === 0);
+  const made = await makeBarber({ commissionRate: 0.5 });
+  const madeUser = (made.body?.user ?? {}) as { id?: string; barberId?: string; role?: string; hasPassword?: boolean };
+  check("a new barber with a stated rate creates the barber and the account (201)", made.status === 201 && madeUser.role === "BARBER" && madeUser.hasPassword === true && !!madeUser.barberId, `got ${made.status}`);
+  const madeBarber = await prisma.barber.findFirst({ where: { fullName: newName } });
+  check("...the barber is active, linked to the account, with exactly the stated rate", !!madeBarber && madeBarber.isActive && madeBarber.id === madeUser.barberId && Number(madeBarber.commissionRate) === 0.5);
+  check("...and the response carries no password or hash", !/passwordHash|"password"/.test(JSON.stringify(made.body)));
+  const taken = await makeBarber({ commissionRate: 0.4 });
+  check("a taken username is refused (409) and leaves no second barber behind", taken.status === 409 && (await barbersNamed()) === 1, `got ${taken.status}`);
+
+  console.log("\nDeleting a deactivated account (DELETE /api/v1/users/:id)");
+  const accountId = String(madeUser.id);
+  const del = (id: string, headers: Record<string, string> = ownerHeaders) => call(`/api/v1/users/${id}`, { method: "DELETE", headers });
+  const linkedSale = { ...sale(phone, assignmentId), userId: accountId };
+  const linkedSync = await sync(auth(phone, secret1), [linkedSale]);
+  check("a sale signed in under that account is recorded with its userId", linkedSync.status === 200 && (await prisma.transaction.findUnique({ where: { id: linkedSale.id }, select: { userId: true } }))?.userId === accountId, `got ${linkedSync.status}`);
+  const delNoOwner = await del(accountId, { "Content-Type": "application/json" });
+  check("without owner access it is 401 and deletes nothing", delNoOwner.status === 401 && (await prisma.user.count({ where: { id: accountId } })) === 1, `got ${delNoOwner.status}`);
+  const delActive = await del(accountId);
+  check("an active account is refused (409 NOT_DEACTIVATED) and kept", delActive.status === 409 && delActive.body?.code === "NOT_DEACTIVATED" && (await prisma.user.count({ where: { id: accountId } })) === 1, `got ${delActive.status}`);
+  const delUnknown = await del(randomUUID());
+  check("an unknown account is 404", delUnknown.status === 404, `got ${delUnknown.status}`);
+  const deactivated = await call(`/api/v1/users/${accountId}`, { method: "PATCH", headers: ownerHeaders, body: { isActive: false } });
+  check("deactivating it works", deactivated.status === 200);
+  const deleted = await del(accountId);
+  check("a deactivated account is deleted (200)", deleted.status === 200 && (await prisma.user.count({ where: { id: accountId } })) === 0, `got ${deleted.status}`);
+  check("its barber record stays, now without an account", (await prisma.barber.findFirst({ where: { id: madeUser.barberId }, select: { account: { select: { id: true } } } }))?.account === null);
+  const kept = await prisma.transaction.findUnique({ where: { id: linkedSale.id }, select: { userId: true, barberId: true, cashierId: true } });
+  check("its sale stays with the same barber; only the userId link is cleared", kept?.userId === null && kept.barberId === BARBER && kept.cashierId === BARBER, JSON.stringify(kept));
+  const delAgain = await del(accountId);
+  check("deleting it again is 404", delAgain.status === 404);
+
   console.log("\nPhones page data (GET /api/v1/devices)");
   const devicesNoOwner = await call("/api/v1/devices?barber=" + BARBER, { method: "GET", headers: {} });
   check("the filtered list is 401 without owner access, with no data", devicesNoOwner.status === 401 && !("devices" in (devicesNoOwner.body ?? {})), `got ${devicesNoOwner.status}`);
@@ -301,6 +352,8 @@ async function ownerCookie() {
 }
 
 async function cleanup() {
+  await prisma.user.deleteMany({ where: { username: `t-nb-${RUN}` } });
+  await prisma.barber.deleteMany({ where: { fullName: `Test New Barber ${RUN}` } });
   await prisma.transaction.deleteMany({ where: { OR: [{ id: { in: txIds } }, { barberId: BARBER }] } });
   await prisma.deviceAssignment.deleteMany({ where: { OR: [{ deviceKey: { in: deviceKeys } }, { barberId: BARBER }] } });
   await prisma.device.deleteMany({ where: { deviceKey: { in: deviceKeys } } });

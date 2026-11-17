@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, KeyRound, RefreshCw, Smartphone, UserPlus, UserRound } from "lucide-react";
+import { ChevronDown, KeyRound, RefreshCw, Smartphone, Trash2, UserPlus, UserRound } from "lucide-react";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
 
 // Staff (slice 19, Decision 15; one card per barber since the security-staff change): list, create, set or reset a password, deactivate and
-// reactivate. Accounts are never deleted, and no password or hash ever reaches this page.
+// reactivate, and delete a deactivated account (the barber record and sales stay). No password or hash ever reaches this page.
 
 type Account = {
   id: string;
@@ -47,6 +47,7 @@ function StaffAccountsList() {
   const [notice, setNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [confirmDeactivate, setConfirmDeactivate] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   // Signed out meanwhile (a password reset, Lock, or the first owner account ended the PIN session).
   const handle401 = useCallback((status: number) => {
@@ -72,9 +73,9 @@ function StaffAccountsList() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  async function send(url: string, method: "POST" | "PATCH", payload: unknown): Promise<string | null> {
+  async function send(url: string, method: "POST" | "PATCH" | "DELETE", payload?: unknown): Promise<string | null> {
     try {
-      const res = await fetch(url, { method, headers: json, body: JSON.stringify(payload) });
+      const res = await fetch(url, { method, headers: json, body: payload === undefined ? undefined : JSON.stringify(payload) });
       if (handle401(res.status)) return "Owner sign-in required.";
       const body = await res.json().catch(() => null);
       if (!res.ok || !body?.success) return body?.error ?? `Failed (HTTP ${res.status})`;
@@ -93,7 +94,7 @@ function StaffAccountsList() {
     await load();
   }
 
-  const freeBarbers = barbers.filter((b) => b.isActive && !b.accountId);
+  const presetBarber = barbers.find((b) => b.id === createFor) ?? null;
   const accountOf = (barberId: string) => accounts.find((a) => a.barberId === barberId) ?? null;
   const owners = accounts.filter((a) => a.role === "OWNER");
   // A working login has a username and a password; older records may have neither.
@@ -107,7 +108,17 @@ function StaffAccountsList() {
     window.setTimeout(() => document.getElementById("create-account-title")?.scrollIntoView({ block: "center" }), 0);
   }
 
-  // One account's actions (password, deactivate), shared by the barber cards and the owner lists.
+  // Delete is offered only once the account is deactivated; the server enforces that too.
+  async function deleteAccount(account: Account) {
+    if (confirmDelete !== account.id) { setConfirmDelete(account.id); return; }
+    setConfirmDelete(null); setError(null); setNotice(null);
+    const problem = await send(`/api/v1/users/${account.id}`, "DELETE");
+    if (problem) setError(problem);
+    else setNotice(`${account.name}'s account was deleted.`);
+    await load();
+  }
+
+  // One account's actions (password, deactivate, delete), shared by the barber cards and the owner lists.
   function accountActions(account: Account) {
     if (account.role === "CASHIER") return null;
     return (
@@ -121,7 +132,19 @@ function StaffAccountsList() {
             {confirmDeactivate === account.id ? "Tap again to deactivate" : "Deactivate"}
           </button>
         ) : (
-          <button type="button" disabled={busy} onClick={() => void setActive(account, true)} className="rz-btn rz-btn-secondary text-sm pointer-coarse:min-h-11">Reactivate</button>
+          <>
+            <button type="button" disabled={busy} onClick={() => void setActive(account, true)} className="rz-btn rz-btn-secondary text-sm pointer-coarse:min-h-11">Reactivate</button>
+            <button type="button" disabled={busy} onClick={() => void deleteAccount(account)} className={`rz-btn ${confirmDelete === account.id ? "rz-btn-primary" : "rz-btn-secondary"} text-sm pointer-coarse:min-h-11`}>
+              <Trash2 className="w-4 h-4" />
+              {confirmDelete === account.id ? "Tap again to delete" : "Delete"}
+            </button>
+          </>
+        )}
+        {confirmDelete === account.id && (
+          <p role="alert" className="basis-full text-xs text-bone-2 leading-relaxed max-w-prose">
+            This permanently removes the login. The barber, sales, payouts and phones stay; its sales only lose the link to this login. This can&apos;t be undone.
+            <button type="button" onClick={() => setConfirmDelete(null)} className="ml-2 underline rounded-sm hover:text-bone pointer-coarse:py-3">Cancel</button>
+          </p>
         )}
       </div>
     );
@@ -289,8 +312,7 @@ function StaffAccountsList() {
         {showCreate ? (
           <CreateAccount
             key={createFor ?? "none"}
-            barbers={freeBarbers}
-            presetBarberId={createFor}
+            presetBarber={presetBarber}
             onCancel={() => { setShowCreate(false); setCreateFor(null); }}
             onCreate={async (payload) => {
               const problem = await send("/api/v1/users", "POST", payload);
@@ -356,22 +378,29 @@ function PasswordForm({ account, onSave, onCancel }: {
   );
 }
 
-function CreateAccount({ barbers, presetBarberId, onCreate, onCancel }: {
-  barbers: BarberOption[];
-  presetBarberId: string | null;
+function CreateAccount({ presetBarber, onCreate, onCancel }: {
+  // Set by "Create account" on a barber's card: an account for that existing barber, no rate to enter.
+  presetBarber: BarberOption | null;
   onCancel: () => void;
-  onCreate: (payload: Record<string, string>) => Promise<string | null>;
+  onCreate: (payload: Record<string, string | number>) => Promise<string | null>;
 }) {
   const [role, setRole] = useState<"BARBER" | "OWNER">("BARBER");
-  const [barberId, setBarberId] = useState(presetBarberId ?? "");
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [rate, setRate] = useState("50");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const chosenBarber = barbers.some((b) => b.id === barberId) ? barberId : "";
+  // Like an owner account, a new barber is made from a name (and the stated commission rate).
+  const existing = role === "BARBER" ? presetBarber : null;
+  const needsName = !existing;
+  const rateNumber = Number(rate);
+  const rateOk = rate.trim() !== "" && Number.isFinite(rateNumber) && rateNumber >= 0 && rateNumber <= 100 && Math.abs(Math.round(rateNumber * 100) / 100 - rateNumber) < 1e-9;
+  const newBarber = role === "BARBER" && !existing;
 
-  const ready = username.trim().length >= 3 && password.length >= 8 && (role === "OWNER" ? name.trim().length > 0 : Boolean(chosenBarber));
+  const ready =
+    username.trim().length >= 3 && password.length >= 8 &&
+    (existing ? true : name.trim().length > 0 && (role === "OWNER" || rateOk));
 
   return (
     <section className="rz-panel p-4 sm:p-5 space-y-4" aria-labelledby="create-account-title">
@@ -381,13 +410,14 @@ function CreateAccount({ barbers, presetBarberId, onCreate, onCancel }: {
         onSubmit={async (event) => {
           event.preventDefault();
           setSaving(true); setError(null);
-          const payload: Record<string, string> = { role, username, password };
-          if (role === "BARBER") payload.barberId = chosenBarber;
-          if (name.trim()) payload.name = name.trim();
+          const payload: Record<string, string | number> = { role, username, password };
+          if (existing) payload.barberId = existing.id;
+          if (newBarber) payload.commissionRate = Math.round(rateNumber * 100) / 100 / 100; // a stated percentage, as a fraction
+          if (needsName && name.trim()) payload.name = name.trim();
           const problem = await onCreate(payload);
           setSaving(false);
           if (problem) { setError(problem); return; }
-          setBarberId(""); setName(""); setUsername(""); setPassword("");
+          setName(""); setUsername(""); setPassword(""); setRate("50");
         }}
       >
         <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Role">
@@ -397,21 +427,20 @@ function CreateAccount({ barbers, presetBarberId, onCreate, onCancel }: {
             </button>
           ))}
         </div>
-        {role === "BARBER" && barbers.length === 0 && (
-          <p className="text-xs text-dust">Every active barber already has an account. Choose Owner to add an owner account.</p>
+        {existing && (
+          <p className="text-sm text-bone-2">Account for <span className="font-semibold text-bone">{existing.fullName}</span>, an existing barber.</p>
         )}
-        {role === "BARBER" ? (
+        {needsName && (
           <label className="block space-y-1.5">
-            <span className="rz-field-label">Barber</span>
-            <select value={chosenBarber} onChange={(event) => setBarberId(event.target.value)} className="rz-field min-h-11 w-full">
-              <option value="">{barbers.length === 0 ? "No barber without an account" : "Choose a barber"}</option>
-              {barbers.map((b) => <option key={b.id} value={b.id}>{b.fullName}</option>)}
-            </select>
-          </label>
-        ) : (
-          <label className="block space-y-1.5">
-            <span className="rz-field-label">Name</span>
+            <span className="rz-field-label">{role === "OWNER" ? "Name" : "Barber's full name"}</span>
             <input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} className="rz-field min-h-11 w-full" />
+          </label>
+        )}
+        {newBarber && (
+          <label className="block space-y-1.5">
+            <span className="rz-field-label">Commission rate (%). The shop&apos;s usual split is 50</span>
+            <input type="number" inputMode="decimal" min={0} max={100} step="0.01" value={rate} onChange={(event) => setRate(event.target.value)} aria-invalid={!rateOk} className="rz-field min-h-11 w-full" />
+            {!rateOk && <span className="block text-xs text-dust">Enter a percentage from 0 to 100.</span>}
           </label>
         )}
         <label className="block space-y-1.5">

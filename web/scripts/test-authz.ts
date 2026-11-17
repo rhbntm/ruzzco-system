@@ -279,6 +279,7 @@ function refusedProbe(row: MatrixRow): Probe | null {
     case "POST v1/users":
       return { path: "/api/v1/users", body: JSON.stringify({ name: "Intruder", role: "OWNER", username: `t-intr-${RUN}`, password: PASSWORD }) };
     case "PATCH v1/users/[id]": return { path: `/api/v1/users/${barberUserId}`, body: JSON.stringify({ isActive: false }) };
+    case "DELETE v1/users/[id]": return { path: `/api/v1/users/${barberUserId}` };
     case "GET v1/reports/payouts": return { path: `/api/v1/reports/payouts?date=${DATE}&commissionBase=LIST_PRICE` };
     case "POST v1/reports/payouts":
       return { path: "/api/v1/reports/payouts", body: JSON.stringify({ id: randomUUID(), barberId: BARBER_A.id, date: DATE, amount: 10, method: "CASH" }) };
@@ -403,7 +404,7 @@ async function allowed() {
   }
   // Owner writes get past the owner check (an empty body is refused for itself, not for access).
   const writes: [Method, string][] = [
-    ["POST", "/api/v1/devices/revoke"], ["POST", "/api/v1/users"], ["PATCH", `/api/v1/users/${barberUserId}`],
+    ["POST", "/api/v1/devices/revoke"], ["POST", "/api/v1/users"], ["PATCH", `/api/v1/users/${barberUserId}`], ["DELETE", `/api/v1/users/${barberUserId}`],
     ["POST", "/api/v1/reports/payouts"], ["POST", "/api/v1/reports/reconciliation"], ["POST", "/api/v1/reports/time-review"],
   ];
   for (const [method, path] of writes) {

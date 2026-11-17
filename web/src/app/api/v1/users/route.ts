@@ -42,9 +42,12 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST /api/v1/users (owner only)  { name?, username, password, role: OWNER | BARBER, barberId? }
+ * POST /api/v1/users (owner only)  { name?, username, password, role: OWNER | BARBER, barberId?, commissionRate? }
  * Decision 1: a BARBER account is linked to exactly one barber record, and a barber has at most
  * one account; an OWNER account has none.
+ * A BARBER account without `barberId` creates the barber record too, in the same transaction as the
+ * account: `name` is the barber's full name and `commissionRate` (a fraction, 0 to 1) is required and
+ * stated by the owner, never defaulted here. With a `barberId` a commission rate is refused.
  */
 export async function POST(request: NextRequest) {
   if (!(await hasOwnerAccess(request))) return ownerRequiredResponse();
@@ -63,34 +66,41 @@ export async function POST(request: NextRequest) {
 
   try {
     let barberId: string | null = null;
+    let newBarberRate: number | null = null; // set when this request also creates the barber record
     let displayName = name;
     if (role === "BARBER") {
-      if (typeof raw.barberId !== "string" || !raw.barberId) return fail(400, "INVALID", "A barber account needs a barber");
-      const barber = await prisma.barber.findUnique({
-        where: { id: raw.barberId },
-        select: { id: true, fullName: true, account: { select: { id: true } } },
-      });
-      if (!barber) return fail(404, "UNKNOWN_BARBER", "Unknown barber");
-      if (barber.account) return fail(409, "BARBER_HAS_ACCOUNT", `${barber.fullName} already has an account`);
-      barberId = barber.id;
-      displayName ||= barber.fullName;
-    } else if (raw.barberId !== undefined && raw.barberId !== null) {
+      if (typeof raw.barberId === "string" && raw.barberId) {
+        if (raw.commissionRate !== undefined) return fail(400, "INVALID", "A commission rate is only set when a new barber is created");
+        const barber = await prisma.barber.findUnique({
+          where: { id: raw.barberId },
+          select: { id: true, fullName: true, account: { select: { id: true } } },
+        });
+        if (!barber) return fail(404, "UNKNOWN_BARBER", "Unknown barber");
+        if (barber.account) return fail(409, "BARBER_HAS_ACCOUNT", `${barber.fullName} already has an account`);
+        barberId = barber.id;
+        displayName ||= barber.fullName;
+      } else {
+        // A new barber: the owner states the name and the commission rate.
+        const rate = raw.commissionRate;
+        if (typeof rate !== "number" || !Number.isFinite(rate) || rate < 0 || rate > 1 || Math.abs(Math.round(rate * 100) / 100 - rate) > 1e-9) {
+          return fail(400, "INVALID", "A new barber needs a commission rate between 0% and 100%");
+        }
+        newBarberRate = Math.round(rate * 100) / 100;
+      }
+    } else if ((raw.barberId !== undefined && raw.barberId !== null) || raw.commissionRate !== undefined) {
       return fail(400, "INVALID", "An owner account has no barber");
     }
     if (!displayName) return fail(400, "INVALID", "Name is required");
 
-    const created = await prisma.user.create({
-      data: {
-        name: displayName,
-        role,
-        username,
-        passwordHash: await hashPassword(raw.password as string),
-        passwordChangedAt: new Date(),
-        barberId,
-        isActive: true,
-      },
-      select: staffAccountSelect,
-    });
+    const passwordHash = await hashPassword(raw.password as string);
+    const accountData = { name: displayName, role, username, passwordHash, passwordChangedAt: new Date(), isActive: true } as const;
+    // The barber and its account are made together: a taken username leaves no barber behind.
+    const created = newBarberRate !== null
+      ? await prisma.$transaction(async (tx) => {
+          const barber = await tx.barber.create({ data: { fullName: displayName, commissionRate: newBarberRate, isActive: true }, select: { id: true } });
+          return tx.user.create({ data: { ...accountData, barberId: barber.id }, select: staffAccountSelect });
+        })
+      : await prisma.user.create({ data: { ...accountData, barberId }, select: staffAccountSelect });
     return NextResponse.json({ success: true, user: toStaffAccount(created) }, { status: 201 });
   } catch (error) {
     if (isUniqueViolation(error)) return fail(409, "TAKEN", "That username is taken, or that barber already has an account");

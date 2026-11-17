@@ -290,7 +290,7 @@ function SignInScreen({ title, onSignedIn }: { title: string; onSignedIn: (sessi
           With the shop PC off, the phone checks the password itself if this account has signed in here before. Forgot it? The owner resets it on Staff accounts.
         </p>
         {/* Slice 21b: approval stays reachable once the phone is approved (re-approval replaces its key). */}
-        <ApprovePhoneButton className="rz-btn rz-btn-ghost w-full min-h-11 text-sm text-dust hover:text-bone" />
+        <ApprovePhoneButton className="rz-btn rz-btn-ghost w-full min-h-12 text-base sm:text-sm text-dust hover:text-bone" />
       </form>
     </main>
   );

@@ -16,7 +16,7 @@ export function OwnerLogin({ next }: { next: string }) {
       footer={
         <div className="border-t border-seam pt-4 space-y-2 text-center">
           <p className="text-xs text-dust">Setting up a shop phone?</p>
-          <ApprovePhoneButton className="rz-btn rz-btn-secondary w-full min-h-11 text-sm" />
+          <ApprovePhoneButton className="rz-btn rz-btn-secondary w-full min-h-12 text-base sm:text-sm" />
         </div>
       }
     />
