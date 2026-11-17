@@ -34,7 +34,7 @@ export type GateScreen =
 export type GateKind = "open" | "device" | "owner" | "general";
 
 export const DEVICE_PAGES = ["/pos", "/shift-log"] as const;
-export const OWNER_PAGES = ["/sales", "/ledger", "/devices", "/payment-qr", "/reconciliation", "/insights", "/forecast", "/staff"] as const;
+export const OWNER_PAGES = ["/sales", "/ledger", "/devices", "/payment-qr", "/reconciliation", "/reports", "/forecast", "/staff"] as const;
 const OPEN_PAGES = ["/login"] as const;
 /** Where a barber session goes from any page it may not open. */
 export const BARBER_HOME = "/pos";

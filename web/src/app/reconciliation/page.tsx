@@ -66,6 +66,12 @@ interface Staleness {
   expectedCashDelta: string;
 }
 
+// Slice 26: one date in the recent list, with its latest saved count.
+interface RecentCount {
+  date: string;
+  latest: SavedRecord;
+}
+
 // A sale whose phone timestamp is suspect (L5). It counts on no day until the owner picks one.
 interface NeedsReviewSale {
   id: string;
@@ -115,6 +121,21 @@ export default function ReconciliationPage() {
   const [locked, setLocked] = useState(false);
 
   const [refreshKey, setRefreshKey] = useState(0);
+  // Slice 26: every saved count of the selected date (newest first), and the latest count of the
+  // last 30 dates that have one. Read-only.
+  const [revisions, setRevisions] = useState<SavedRecord[]>([]);
+  const [recent, setRecent] = useState<RecentCount[] | null>(null);
+  const [recentKey, setRecentKey] = useState(0);
+
+  useEffect(() => {
+    if (locked) return;
+    let active = true;
+    fetch("/api/v1/reports/reconciliation?recent=30", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (active) setRecent(data?.success ? data.recent : null); })
+      .catch(() => { if (active) setRecent(null); });
+    return () => { active = false; };
+  }, [locked, refreshKey, recentKey]);
 
   useEffect(() => {
     let active = true;
@@ -125,6 +146,7 @@ export default function ReconciliationPage() {
       setSaved(null);
       setStaleness(null);
       setNeedsReview([]);
+      setRevisions([]);
       setFeedback(null);
       try {
         const res = await fetch(`/api/v1/reports/reconciliation?date=${date}`);
@@ -144,6 +166,7 @@ export default function ReconciliationPage() {
           setSaved(data.saved);
           setStaleness(data.staleness);
           setNeedsReview(data.needsDateReview ?? []);
+          setRevisions(data.revisions ?? []);
           if (data.saved) {
             setCountedCash(data.saved.countedCash);
             setNote(data.saved.note ?? "");
@@ -193,6 +216,8 @@ export default function ReconciliationPage() {
         setExpected(data.expected);
         setSaved(data.saved);
         setStaleness(data.staleness);
+        setRevisions(data.revisions ?? []);
+        setRecentKey((k) => k + 1);
         setFeedback({ msg: `Reconciliation saved as revision ${data.saved.revision} ✓`, ok: true });
       } else {
         setFeedback({ msg: data.error ?? "Save failed", ok: false });
@@ -376,7 +401,7 @@ export default function ReconciliationPage() {
                 </div>
               </dl>
               <p className="mt-3 text-xs text-dust leading-relaxed">
-                Cash payouts are the cash entries recorded on the Barber Ledger for this date. Petty cash is recorded with the count below{saved ? "" : " (none saved yet)"}. Total revenue {pesoOf(expected.totalRevenue)}: cash, GCash, Maya{parseFloat(expected.qrphTotal) > 0 ? " and QR Ph" : ""}, tips not included.
+                Cash payouts are the cash entries recorded on Payouts for this date. Petty cash is recorded with the count below{saved ? "" : " (none saved yet)"}. Total revenue {pesoOf(expected.totalRevenue)}: cash, GCash, Maya{parseFloat(expected.qrphTotal) > 0 ? " and QR Ph" : ""}, tips not included.
               </p>
             </div>
             {(parseFloat(expected.qrphTotal) > 0 || expected.gatewaySales.length > 0) && (
@@ -646,7 +671,71 @@ export default function ReconciliationPage() {
             </p>
           </section>
         )}
+
+        {/* Slice 26: every saved count of this date. Read-only; only the current one is checked for staleness. */}
+        {revisions.length > 1 && (
+          <section aria-labelledby="revisions-title" className="rz-panel p-4 sm:p-5 space-y-3">
+            <h2 id="revisions-title" className="rz-heading">Saved counts for {date}</h2>
+            <p className="text-xs text-dust">Each save is kept as it was. Older counts are never changed or recomputed.</p>
+            <ol className="rz-well overflow-hidden divide-y divide-seam text-sm">
+              {revisions.map((r, i) => (
+                <li key={r.revision} className="px-3.5 py-2.5 space-y-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <span className="font-semibold text-bone">
+                      Revision {r.revision}
+                      <span className="ml-2 text-xs font-normal text-dust">{i === 0 ? "Current" : `Replaced by revision ${revisions[i - 1].revision}`}</span>
+                    </span>
+                    <span className="text-xs text-dust">{manilaTime(r.reconciledAt)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 text-xs tabular-nums">
+                    <span className="text-dust">Expected <span className="text-bone">{pesoOf(r.expectedCash)}</span></span>
+                    <span className="text-dust">Counted <span className="text-bone">{pesoOf(r.countedCash)}</span></span>
+                    <span className="text-dust">Variance <span className="text-bone">{signedPeso(parseFloat(r.variance))}</span> {varianceWord(r.variance)}</span>
+                    <span className="text-dust">Petty cash <span className="text-bone">{pesoOf(r.pettyCashAmount)}</span></span>
+                  </div>
+                  {r.pettyCashNote && <p className="text-xs text-dust">Petty cash note: {r.pettyCashNote}</p>}
+                  {r.note && <p className="text-xs text-dust">Note: {r.note}</p>}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {/* Slice 26: the latest count of the last 30 dates that have one. Read-only. */}
+        {!locked && recent !== null && (
+          <section aria-labelledby="recent-title" className="rz-panel p-4 sm:p-5 space-y-3">
+            <h2 id="recent-title" className="rz-heading">Recent counts</h2>
+            <p className="text-xs text-dust">The last 30 dates with a saved count, newest first, each with its latest revision. A date with no saved count is not listed; pick it above to see &quot;Not counted yet&quot;.</p>
+            {recent.length === 0 ? (
+              <p className="rz-notice">No drawer count has been saved yet.</p>
+            ) : (
+              <ul className="rz-well overflow-hidden divide-y divide-seam text-sm">
+                {recent.map((row) => (
+                  <li key={row.date}>
+                    <button
+                      type="button"
+                      onClick={() => setDate(row.date)}
+                      aria-current={row.date === date ? "true" : undefined}
+                      className="w-full text-left px-3.5 py-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 hover:bg-panel-2 pointer-coarse:min-h-11"
+                    >
+                      <span className="font-semibold text-bone">{row.date} <span className="ml-1 text-xs font-normal text-dust">revision {row.latest.revision}</span></span>
+                      <span className="text-xs text-dust tabular-nums">
+                        Counted <span className="text-bone">{pesoOf(row.latest.countedCash)}</span> · {varianceWord(row.latest.variance)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );
+}
+
+// The same thresholds as the saved record above: within a centavo is balanced.
+function varianceWord(variance: string) {
+  const v = parseFloat(variance);
+  return Math.abs(v) < 0.01 ? "Balanced" : v < 0 ? "Cash short" : "Cash over";
 }

@@ -264,7 +264,7 @@ export default function LedgerPage() {
   }
 
   if (!unlocked) {
-    return <OwnerSignInPage title="Owner ledger" what="view and record barber payouts" submitLabel="Unlock ledger" onSignedIn={() => setUnlocked(true)} />;
+    return <OwnerSignInPage title="Payouts" what="view and record barber payouts" submitLabel="Unlock payouts" onSignedIn={() => setUnlocked(true)} />;
   }
 
   // Inputs: 16px text on phones (no iOS zoom on focus), 44px tall on touch screens.
@@ -282,7 +282,7 @@ export default function LedgerPage() {
           <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
             {/* The station light: it turns while the ledger loads. */}
             <BarberPoleIcon className="w-2.5 h-6" spinning={loading} />
-            Daily payout ledger
+            Payouts
           </h1>
           <button onClick={reload} aria-label="Reload the ledger" title="Reload" className="rz-btn rz-btn-ghost rz-btn-icon -my-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -295,7 +295,7 @@ export default function LedgerPage() {
         <section aria-labelledby="payouts-title" className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-seam pb-3">
             <div className="space-y-1">
-              <h2 id="payouts-title" className="rz-title text-2xl">Payouts</h2>
+              <h2 id="payouts-title" className="rz-title text-2xl">Daily payouts</h2>
               <p className="text-xs text-dust">One business date at a time. What each barber earned {dayLabel}, what was paid, and what is left.</p>
             </div>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -629,8 +629,9 @@ function SummarySection({ summary }: { summary: Summary }) {
             <p className="py-1.5 text-dust">No sales in this period.</p>
           ) : (
             <>
-              {summary.services.map((row) => <Line key={row.name} label={row.name} note={`${row.count} sold`} value={peso(row.listSales)} />)}
-              {Number(summary.serviceGap) !== 0 && <Line label="Discounts" value={peso(summary.serviceGap)} note="services are at list price, so they differ from total revenue" />}
+              {/* Slice 23: a service's menu-price value, not money collected; a sale with several services adds an item to each. */}
+              {summary.services.map((row) => <Line key={row.name} label={row.name} note={`${row.count} ${row.count === 1 ? "item" : "items"}, at menu price`} value={peso(row.listSales)} />)}
+              {Number(summary.serviceGap) !== 0 && <Line label="Discounts" value={peso(summary.serviceGap)} note="services are at menu price, so they differ from total revenue" />}
             </>
           )}
         </div>

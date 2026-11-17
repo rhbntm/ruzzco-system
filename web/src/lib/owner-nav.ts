@@ -4,19 +4,44 @@
  * session records no sale, and the shift log is the phone's own list.
  */
 export type OwnerNavItem = { href: string; label: string };
+export type OwnerNavGroup = { label: string; items: readonly OwnerNavItem[] };
 
-export const OWNER_NAV: readonly OwnerNavItem[] = [
-  { href: "/", label: "Dashboard" },
-  { href: "/sales", label: "Sales" },
-  { href: "/ledger", label: "Barber Ledger" },
-  { href: "/reconciliation", label: "End-of-Day Cash" },
-  { href: "/insights", label: "Insights" },
-  { href: "/forecast", label: "Forecast" },
-  { href: "/payment-qr", label: "Payment QR" },
-  { href: "/devices", label: "Phones" },
-  { href: "/staff", label: "Staff accounts" },
-  { href: "/about", label: "About" },
+/**
+ * Slice 25: the menu in groups. Grouping is presentation only: every page keeps its own route,
+ * data, API and owner check. Reports (slice 27) replaced Insights; /insights redirects to /reports.
+ */
+export const OWNER_NAV_GROUPS: readonly OwnerNavGroup[] = [
+  { label: "Overview", items: [{ href: "/", label: "Dashboard" }] },
+  {
+    label: "Business",
+    items: [
+      { href: "/sales", label: "Sales" },
+      { href: "/reports", label: "Reports" },
+      { href: "/forecast", label: "Forecast" },
+    ],
+  },
+  {
+    label: "Financial operations",
+    items: [
+      { href: "/ledger", label: "Payouts" },
+      { href: "/reconciliation", label: "End-of-Day Cash" },
+    ],
+  },
+  {
+    label: "Team and administration",
+    items: [
+      { href: "/staff", label: "Staff accounts" },
+      { href: "/payment-qr", label: "Payment QR" },
+      { href: "/devices", label: "Phones" },
+    ],
+  },
 ];
+
+/** Shown beside Lock, at the foot of the menu. */
+export const OWNER_NAV_SECONDARY: readonly OwnerNavItem[] = [{ href: "/about", label: "About" }];
+
+/** Every menu item, groups first then the secondary ones: the list the top bar and tests read. */
+export const OWNER_NAV: readonly OwnerNavItem[] = [...OWNER_NAV_GROUPS.flatMap((group) => group.items), ...OWNER_NAV_SECONDARY];
 
 /** Whether `pathname` is this item's page or under it ("/" matches only itself). */
 export function isCurrentNav(pathname: string, href: string): boolean {

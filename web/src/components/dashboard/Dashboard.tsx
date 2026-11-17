@@ -4,9 +4,9 @@ import { ArrowRight, CalendarClock, CheckCircle2, CircleDashed, Smartphone, Tria
 import { manilaToday, parseBusinessDate } from "@/lib/business-date";
 import { gatewayConfig } from "@/lib/gateway";
 import { peso } from "@/lib/peso";
-import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
+import { addDays, latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
 import { MAX_FORECAST_DAYS } from "@/lib/forecast-chart";
-import { loadTrends } from "@/lib/trends";
+import { rangeFigures } from "@/lib/range-figures";
 import {
   DASHBOARD_PERIODS,
   dashboardRange,
@@ -85,7 +85,7 @@ export function Dashboard({ period }: { period: DashboardPeriod }) {
           <div className="space-y-1.5">
             <h1 className="rz-title text-3xl sm:text-4xl">Dashboard</h1>
             <p className="text-sm text-dust">
-              Paid sales, what is owed to the barbers and today&apos;s drawer. Figures only: payouts are recorded on the Barber Ledger and the drawer is counted on End-of-Day Cash.
+              Paid sales, what is owed to the barbers and today&apos;s drawer. Figures only: payouts are recorded on Payouts and the drawer is counted on End-of-Day Cash.
             </p>
           </div>
           <nav aria-label="Period for the summary cards" className="rz-seg">
@@ -117,12 +117,12 @@ export function Dashboard({ period }: { period: DashboardPeriod }) {
               </Suspense>
             </Card>
             <div className="grid gap-4">
-              <Card title="Payment mix" caption={periodCaption} href="/insights" linkLabel="Insights">
+              <Card title="Payment mix" caption={periodCaption} href="/reports" linkLabel="Reports">
                 <Suspense key={`mix-${period}`} fallback={<CardSkeleton rows={3} />}>
                   <PaymentMix summary={summary} gatewayOn={gatewayOn} />
                 </Suspense>
               </Card>
-              <Card title="Services sold" caption={periodCaption} href="/insights" linkLabel="Insights">
+              <Card title="Services sold" caption={periodCaption} href="/reports" linkLabel="Reports">
                 <Suspense key={`services-${period}`} fallback={<CardSkeleton rows={3} />}>
                   <ServicesSold summary={summary} />
                 </Suspense>
@@ -131,12 +131,12 @@ export function Dashboard({ period }: { period: DashboardPeriod }) {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            <Card title="The shop's share" caption={periodCaption} href="/ledger" linkLabel="Barber Ledger">
+            <Card title="The shop's share" caption={periodCaption} href="/ledger" linkLabel="Payouts">
               <Suspense key={`share-${period}`} fallback={<CardSkeleton rows={5} />}>
                 <ShopShare summary={summary} />
               </Suspense>
             </Card>
-            <Card className="lg:col-span-2" title="Owed to barbers" caption={periodCaption} href="/ledger" linkLabel="Barber Ledger">
+            <Card className="lg:col-span-2" title="Owed to barbers" caption={periodCaption} href="/ledger" linkLabel="Payouts">
               <Suspense key={`owed-${period}`} fallback={<CardSkeleton rows={5} />}>
                 <OwedToBarbers summary={summary} barbers={barbers} />
               </Suspense>
@@ -312,9 +312,11 @@ async function SalesPerDay({ summary, today, periodCaption }: { summary: Promise
   // A one-day period has no per-day list: show the last 14 days instead, as Insights does.
   if (days.length === 0) {
     try {
-      const trends = await loadTrends(parseBusinessDate(today)!, 14);
-      days = trends.daily.map((day) => ({ date: day.date, revenue: day.revenue.toNumber(), detail: `${day.sales} paid ${day.sales === 1 ? "sale" : "sales"}` }));
-      caption = `Last 14 days · ${shortDay(trends.first)} to ${longDay(trends.last)}`;
+      // Slice 27: the same rangeFigures path as Reports and the ledger Summary (trends.ts removed).
+      const first = addDays(today, -13);
+      const { perDate } = await rangeFigures(parseBusinessDate(first)!, parseBusinessDate(today)!, "LIST_PRICE");
+      days = [...perDate.entries()].map(([date, day]) => ({ date, revenue: day.revenue.toNumber(), detail: `${day.count} paid ${day.count === 1 ? "sale" : "sales"}` }));
+      caption = `Last 14 days · ${shortDay(first)} to ${longDay(today)}`;
     } catch (error) {
       console.error("[dashboard] sales trend failed:", error instanceof Error ? error.message : String(error));
       return <CardError what="Sales per day" />;
@@ -384,7 +386,7 @@ async function ServicesSold({ summary }: { summary: Promise<Loaded<PeriodSummary
   const items: BarItem[] = services.map((row) => ({
     key: row.name,
     label: row.name,
-    note: `${row.count} sold`,
+    note: `${row.count} ${row.count === 1 ? "item" : "items"}`,
     valueText: pesoOf(row.listSales),
     share: listTotal > 0 ? (Number(row.listSales) / listTotal) * 100 : null,
     barClassName: "bg-bone-2",
@@ -393,7 +395,7 @@ async function ServicesSold({ summary }: { summary: Promise<Loaded<PeriodSummary
     <div className="space-y-3">
       <BarList items={items} />
       <p className="text-xs text-dust">
-        At list price.{Number(serviceGap) !== 0 && ` Discounts given: ${pesoOf(serviceGap)}.`}
+        Each service at its menu price, not money collected; a sale with several services adds an item to each.{Number(serviceGap) !== 0 && ` Discounts given: ${pesoOf(serviceGap)}.`}
       </p>
     </div>
   );

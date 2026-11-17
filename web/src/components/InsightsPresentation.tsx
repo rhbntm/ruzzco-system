@@ -284,7 +284,7 @@ function Stage({ story, onClose }: { story: Story; onClose: () => void }) {
       ref={stage}
       role="dialog"
       aria-modal="true"
-      aria-label="Insights summary"
+      aria-label="Reports summary"
       tabIndex={-1}
       className="rz-stage fixed inset-0 z-50 flex flex-col overflow-hidden outline-none"
     >
@@ -297,7 +297,7 @@ function Stage({ story, onClose }: { story: Story; onClose: () => void }) {
               <p className="flex items-center gap-2 shrink-0 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
                 {/* The station light: it turns while the slides play themselves. */}
                 <BarberPoleIcon className="w-2.5 h-6" spinning={playing} />
-                Insights
+                Reports
               </p>
               <p className="hidden sm:block min-w-0 truncate text-sm text-dust">{story.dateLine}</p>
               <p className="hidden lg:flex pointer-coarse:hidden items-center gap-1.5 ml-auto shrink-0 text-xs text-dust">
@@ -461,7 +461,7 @@ function Intro({ phase, dateLine, onSkip }: { phase: Phase; dateLine: string; on
         <div className="rz-intro-sign w-full">
           <RuzzcoLogoBanner className="w-full" alt="" sizes="(min-width: 640px) 22rem, 15rem" />
         </div>
-        <p className="rz-intro-title rz-title text-[2.75rem] sm:text-6xl">Insights</p>
+        <p className="rz-intro-title rz-title text-[2.75rem] sm:text-6xl">Reports</p>
         <div className="rz-ornament rz-intro-ornament w-full">
           <MustacheIcon className="w-9 h-3.5" />
         </div>

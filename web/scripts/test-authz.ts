@@ -449,12 +449,12 @@ async function allowed() {
 
 // Markup only a rendered page has (the template's `rz-page-in`/`rz-page-out` transition names don't count).
 function pageMarkup(html: string): string | null {
-  const found = ["Expected drawer cash", "New account", "Owner ledger"].filter((t) => html.includes(t));
+  const found = ["Expected drawer cash", "New account", "view and record barber payouts"].filter((t) => html.includes(t));
   for (const cls of [/rz-page(?!-)/, /rz-panel/, /rz-banner/, /rz-mirror/]) if (cls.test(html)) found.push(cls.source);
   return found.length ? found.join(", ") : null;
 }
 
-const OWNER_PAGE_PATHS = ["/ledger", "/devices", "/payment-qr", "/reconciliation", "/insights", "/forecast", "/staff"];
+const OWNER_PAGE_PATHS = ["/ledger", "/devices", "/payment-qr", "/reconciliation", "/reports", "/forecast", "/staff"];
 
 async function pages() {
   const as = (cookie: string) => ({ Cookie: cookie });
@@ -476,7 +476,7 @@ async function pages() {
   }
   // RSC requests (in-app navigation) are redirected too, not answered with the page's payload.
   const rsc = await call("GET", "/ledger", { headers: { ...as(barberCookie), RSC: "1" } });
-  check("/ledger as in-app navigation with a barber session: no ledger payload", !rsc.text.includes("Owner ledger") || redirectsToPos(rsc), `HTTP ${rsc.status}`);
+  check("/ledger as in-app navigation with a barber session: no ledger payload", !rsc.text.includes("view and record barber payouts") || redirectsToPos(rsc), `HTTP ${rsc.status}`);
   for (const path of ["/pos", "/shift-log"]) {
     const barber = await call("GET", path, { headers: as(barberCookie) });
     check(`${path} with a barber session → 200, no redirect`, barber.status === 200, `HTTP ${barber.status}`);
@@ -495,13 +495,16 @@ async function pages() {
     check(`${path} with the owner session alone → 200, no redirect`, owner.status === 200, `HTTP ${owner.status} ${owner.headers.get("location") ?? ""}`);
   }
   const lockedViews: [string, string][] = [
-    ["/insights", "Dashboards, the calculations behind them"],
-    ["/forecast", "Expected customers and revenue for the next 7 days"],
+    ["/reports", "Sales, revenue and how the shop did over a date range"],
+    ["/forecast", "How the forecast is checked and how its revenue estimate is worked out"],
   ];
   for (const [path, signedOut] of lockedViews) {
     const owner = await call("GET", path, { headers: as(ownerCookie) });
     check(`${path} with the owner session: not the signed-out view`, owner.status === 200 && !owner.text.includes(signedOut));
   }
+  // Slice 27: /insights is a redirect to /reports (next.config), whoever asks; /reports keeps its own checks.
+  const oldInsights = await call("GET", "/insights?date=2026-01-01");
+  check("/insights → 308 to /reports (no page of its own)", oldInsights.status === 308 && new URL(oldInsights.headers.get("location") ?? "", BASE).pathname === "/reports", `HTTP ${oldInsights.status} ${oldInsights.headers.get("location") ?? ""}`);
   const staffOwner = await call("GET", "/staff", { headers: as(ownerCookie) });
   check("/staff with the owner session: the form is there", staffOwner.status === 200 && staffOwner.text.includes("New account"));
 
@@ -515,7 +518,7 @@ async function pages() {
     const owner = await call("GET", path, { headers: as(ownerCookie) });
     check(`${path} with the owner session → 200, the same shell (approval is decided on the phone, never by owner access)`, owner.status === 200, `HTTP ${owner.status}`);
   }
-  for (const path of ["/", "/about", "/ledger", "/insights", "/forecast", "/staff"]) {
+  for (const path of ["/", "/about", "/ledger", "/reports", "/forecast", "/staff"]) {
     const none = await call("GET", path);
     check(`${path} with no credentials → 200 (the approval or sign-in screen), not redirected`, none.status === 200, `HTTP ${none.status}`);
     check(`${path} with no credentials: no dashboard, peso figure or account form`, !none.text.includes("Expected drawer cash") && !none.text.includes("Owed to barbers") && !none.text.includes("₱") && !none.text.includes("New account"));

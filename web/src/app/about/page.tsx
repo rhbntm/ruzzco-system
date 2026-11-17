@@ -40,7 +40,7 @@ export default async function AboutPage() {
     "Custom amounts count as revenue; tips are kept separate",
     "Sales locked to the barber's device assignment at sale time",
     "50/50 commission saved with each sale, never recomputed",
-    "Daily payout ledger behind an owner PIN",
+    "Daily barber payouts, recorded by the owner account",
     "End-of-day drawer reconciliation with petty cash",
     "Customer and revenue forecast for the owner (7, 14 or 30 days), from the paper logbook",
   ];

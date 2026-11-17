@@ -9,15 +9,16 @@ import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } f
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, ClipboardCheck, Info, LayoutDashboard, LineChart, LockKeyhole, Menu, QrCode, Smartphone, Users, Wallet, X } from "lucide-react";
-import { OWNER_NAV, isCurrentNav, navTitle } from "@/lib/owner-nav";
+import { BarChart3, ClipboardCheck, Info, LayoutDashboard, LineChart, LockKeyhole, Menu, QrCode, Receipt, Smartphone, Users, Wallet, X } from "lucide-react";
+import { OWNER_NAV_GROUPS, OWNER_NAV_SECONDARY, isCurrentNav, navTitle, type OwnerNavItem } from "@/lib/owner-nav";
 import { Logo } from "@/components/Logo";
 
 const ICONS: Record<string, LucideIcon> = {
   "/": LayoutDashboard,
+  "/sales": Receipt,
   "/ledger": Wallet,
   "/reconciliation": ClipboardCheck,
-  "/insights": BarChart3,
+  "/reports": BarChart3,
   "/forecast": LineChart,
   "/payment-qr": QrCode,
   "/devices": Smartphone,
@@ -28,10 +29,12 @@ const ICONS: Record<string, LucideIcon> = {
 // The phone menu's history entry: the phone's Back closes the menu instead of leaving the page.
 const MENU_MARK = "rzOwnerMenu";
 
-function NavList({ pathname, onPick }: { pathname: string; onPick?: (event: MouseEvent<HTMLAnchorElement>, href: string) => void }) {
+type Pick = (event: MouseEvent<HTMLAnchorElement>, href: string) => void;
+
+function NavItems({ items, pathname, onPick }: { items: readonly OwnerNavItem[]; pathname: string; onPick?: Pick }) {
   return (
     <ul className="space-y-1">
-      {OWNER_NAV.map((item) => {
+      {items.map((item) => {
         const Icon = ICONS[item.href] ?? LayoutDashboard;
         const current = isCurrentNav(pathname, item.href);
         return (
@@ -44,6 +47,20 @@ function NavList({ pathname, onPick }: { pathname: string; onPick?: (event: Mous
         );
       })}
     </ul>
+  );
+}
+
+// Slice 25: the menu in groups, each list under its own small heading.
+function NavList({ pathname, onPick, idPrefix }: { pathname: string; onPick?: Pick; idPrefix: string }) {
+  return (
+    <div className="space-y-4">
+      {OWNER_NAV_GROUPS.map((group, index) => (
+        <div key={group.label} role="group" aria-labelledby={`${idPrefix}-group-${index}`} className="space-y-1">
+          <p id={`${idPrefix}-group-${index}`} className="rz-label px-3">{group.label}</p>
+          <NavItems items={group.items} pathname={pathname} onPick={onPick} />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -140,9 +157,12 @@ export function OwnerShell({ today, todayLabel, children }: {
             </Link>
           </div>
           <nav aria-label="Owner pages" className="flex-1 overflow-y-auto p-3">
-            <NavList pathname={pathname} />
+            <NavList pathname={pathname} idPrefix={`${menuId}-side`} />
           </nav>
-          <div className="shrink-0 border-t border-seam p-3">
+          <div className="shrink-0 border-t border-seam p-3 space-y-2">
+            <nav aria-label="More">
+              <NavItems items={OWNER_NAV_SECONDARY} pathname={pathname} />
+            </nav>
             <LockButton />
           </div>
         </div>
@@ -185,9 +205,12 @@ export function OwnerShell({ today, todayLabel, children }: {
               </button>
             </div>
             <nav aria-label="Owner pages" className="flex-1 overflow-y-auto p-3">
-              <NavList pathname={pathname} onPick={pick} />
+              <NavList pathname={pathname} onPick={pick} idPrefix={`${menuId}-drawer`} />
             </nav>
-            <div className="shrink-0 border-t border-seam p-3">
+            <div className="shrink-0 border-t border-seam p-3 space-y-2">
+              <nav aria-label="More">
+                <NavItems items={OWNER_NAV_SECONDARY} pathname={pathname} onPick={pick} />
+              </nav>
               <LockButton />
             </div>
           </div>
