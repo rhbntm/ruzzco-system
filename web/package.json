@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start -H 127.0.0.1",
     "https": "node scripts/https-proxy.mjs",
     "lint": "eslint",
