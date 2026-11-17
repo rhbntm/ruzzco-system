@@ -158,6 +158,38 @@ export function latestRevision(day: BusinessDay) {
   });
 }
 
+/** Slice 26: every saved count of one business date, newest revision first. Read-only. */
+export function listRevisions(day: BusinessDay) {
+  return prisma.shiftReconciliation.findMany({
+    where: { reconciliationDate: day.dateValue },
+    orderBy: { revision: "desc" },
+  });
+}
+
+/** Slice 26: most dates the recent list may hold. */
+export const RECENT_COUNTS_MAX = 60;
+
+/**
+ * Slice 26: the latest `limit` business dates up to `upTo` (Manila, inclusive) that have a saved
+ * count, newest first, each with its latest revision. Dates without a count are not listed (no
+ * revision exists for them). Read-only: two queries, never a write.
+ */
+export async function recentCounts(upTo: BusinessDay, limit = 30) {
+  const dates = await prisma.shiftReconciliation.groupBy({
+    by: ["reconciliationDate"],
+    where: { reconciliationDate: { lte: upTo.dateValue } },
+    _max: { revision: true },
+    orderBy: { reconciliationDate: "desc" },
+    take: limit,
+  });
+  if (dates.length === 0) return [];
+  const rows = await prisma.shiftReconciliation.findMany({
+    where: { OR: dates.map((d) => ({ reconciliationDate: d.reconciliationDate, revision: d._max.revision ?? 0 })) },
+    orderBy: { reconciliationDate: "desc" },
+  });
+  return rows.map((row) => ({ date: row.reconciliationDate.toISOString().slice(0, 10), latest: row }));
+}
+
 // ── Response shapes (money as fixed-2 strings) ───────────────────────────────
 
 export function serializeExpected(t: ExpectedTotals) {
