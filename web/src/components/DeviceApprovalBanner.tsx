@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { ShieldCheck, TriangleAlert } from "lucide-react";
 import { approveThisDevice, isWaitingForApproval, subscribeApproval } from "@/lib/sync";
 
@@ -77,13 +78,15 @@ export function ApprovePhoneButton({ onApproved, className, label = "Approve thi
       </button>
       {done && !waiting && <p role="status" className="sr-only">This phone is approved.</p>}
 
-      {open && (
+      {/* In a portal: the sign-in screens hold this button inside their own <form>, and a form cannot sit in a form.
+          The submit is stopped here too, since React bubbles a portal's events to the form around the button. */}
+      {open && createPortal(
         <div className="rz-overlay items-center">
           <form
             role="dialog"
             aria-modal="true"
             aria-labelledby="approve-phone-title"
-            onSubmit={(event) => { event.preventDefault(); void submit(); }}
+            onSubmit={(event) => { event.preventDefault(); event.stopPropagation(); void submit(); }}
             className="rz-dialog p-5 sm:p-5 space-y-5 sm:space-y-4"
           >
             <div className="flex items-center gap-2.5">
@@ -124,7 +127,8 @@ export function ApprovePhoneButton({ onApproved, className, label = "Approve thi
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

@@ -12,7 +12,6 @@ import type { LucideIcon } from "lucide-react";
 import { BarChart3, ClipboardCheck, Info, LayoutDashboard, LineChart, LockKeyhole, Menu, QrCode, Receipt, Smartphone, Users, Wallet, X } from "lucide-react";
 import { OWNER_NAV_GROUPS, OWNER_NAV_SECONDARY, isCurrentNav, navTitle, type OwnerNavItem } from "@/lib/owner-nav";
 import { Logo } from "@/components/Logo";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 const ICONS: Record<string, LucideIcon> = {
   "/": LayoutDashboard,
@@ -164,14 +163,13 @@ export function OwnerShell({ today, todayLabel, children }: {
             <nav aria-label="More">
               <NavItems items={OWNER_NAV_SECONDARY} pathname={pathname} />
             </nav>
-            <ThemeToggle />
             <LockButton />
           </div>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-seam bg-panel px-3 sm:px-5">
+        <div className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-seam bg-panel pl-3 pr-14 sm:pl-5 sm:pr-16">
           <button
             ref={buttonRef}
             type="button"
@@ -213,7 +211,6 @@ export function OwnerShell({ today, todayLabel, children }: {
               <nav aria-label="More">
                 <NavItems items={OWNER_NAV_SECONDARY} pathname={pathname} onPick={pick} />
               </nav>
-              <ThemeToggle />
               <LockButton />
             </div>
           </div>

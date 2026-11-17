@@ -86,6 +86,7 @@ import { SignInGate, useStaffSession } from "@/components/SignInGate";
 import { QrPhCheckout } from "@/components/QrPhCheckout";
 import { ShopPcReminder, isShopPcDown, useShopPc } from "@/components/ShopPcStatus";
 import { BarberHeader } from "@/components/BarberHeader";
+import { ThemeSwitchButton } from "@/components/ThemeToggle";
 import { createSubmitLock } from "@/lib/submit-lock";
 import { useLiveQuery } from "dexie-react-hooks";
 import { BarberPoleIcon } from "@/components/RuzzcoBrand";
@@ -1185,7 +1186,7 @@ function MobilePOSPage() {
         </div>
       )}
 
-      {/* Phone settings, from the header's gear: changing the barber. */}
+      {/* Phone settings, from the header's gear: changing the barber, light or dark, signing out. */}
       {showSettings && (
         <div className="rz-overlay items-end sm:items-center" onClick={(event) => { if (event.target === event.currentTarget) setShowSettings(false); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="phone-settings-title" className="rz-dialog rz-dialog-sheet p-5 space-y-4">
@@ -1209,6 +1210,8 @@ function MobilePOSPage() {
               Change the barber for this phone
               <ChevronRight className="w-4 h-4 text-dust transition-transform duration-200 group-hover:translate-x-0.5" />
             </button>
+            {/* Light or dark, for this phone's browser (there is no corner button on the barber's pages). */}
+            <ThemeSwitchButton />
             {/* Slice 19: signing out never touches queued sales; they still sync. */}
             <button
               type="button"

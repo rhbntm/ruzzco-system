@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { HistoryFade } from "@/components/HistoryFade";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 // Oswald (SIL OFL 1.1, see fonts/Oswald-OFL.txt), the condensed caps of the shop's logo.
@@ -65,6 +66,8 @@ export default function RootLayout({
         {/* The barber-pole ribbon across the top of every page */}
         <div aria-hidden="true" className="rz-ribbon shrink-0" />
         {children}
+        {/* Light or dark, fixed in the top right corner of every page, owner or barber */}
+        <ThemeToggle />
         {/* Back and forward fade out the page being left, as a link's page transition does */}
         <HistoryFade />
         {/* Over HTTPS: the POS and shift log open on an installed phone without a connection */}

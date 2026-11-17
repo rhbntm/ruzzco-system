@@ -154,8 +154,18 @@ check("the stylesheet's default colour scheme is light", /color-scheme:\s*light/
 const themeLib = readFileSync(join(ROOT, "src/lib/theme.ts"), "utf8");
 check("the init script switches to dark only when dark was chosen (otherwise light)", /getItem\([^)]*\)==="dark"/.test(themeLib) && !/setAttribute\("data-theme","light"\)/.test(themeLib));
 check("the root layout runs the init script in <head> and tolerates the attribute (no flash, no hydration warning)", /<head>[\s\S]*THEME_INIT_SCRIPT[\s\S]*<\/head>/.test(readFileSync(join(ROOT, "src/app/layout.tsx"), "utf8")) && /suppressHydrationWarning/.test(readFileSync(join(ROOT, "src/app/layout.tsx"), "utf8")));
+const layoutSource = readFileSync(join(ROOT, "src/app/layout.tsx"), "utf8");
+const toggleSource = readFileSync(join(ROOT, "src/components/ThemeToggle.tsx"), "utf8");
+check("the switch is rendered once, by the root layout, so owner and barber pages both have it", (layoutSource.match(/<ThemeToggle \/>/g) ?? []).length === 1);
+check("it is fixed in the top right corner, above the sticky headers and below dialogs", /\bfixed\b/.test(toggleSource) && /\bright-2\b/.test(toggleSource) && /\btop-3\b/.test(toggleSource) && /z-\[45\]/.test(toggleSource));
 const shell = readFileSync(join(ROOT, "src/components/OwnerShell.tsx"), "utf8");
-check("the owner menu offers the switch in the sidebar and in the phone menu", (shell.match(/<ThemeToggle \/>/g) ?? []).length === 2);
+const posPage = readFileSync(join(ROOT, "src/app/pos/page.tsx"), "utf8");
+check("the owner top bar leaves room for it on the right", /pr-14/.test(shell));
+check("the owner menu carries no second copy", !/ThemeToggle/.test(shell));
+check("the corner button hides itself on /pos and /shift-log", /BARBER_PATHS = \["\/pos", "\/shift-log"\]/.test(toggleSource) && /BARBER_PATHS\.includes\(pathname\)\) return null/.test(toggleSource));
+check("on the POS the switch is in the phone settings dialog", /<ThemeSwitchButton \/>/.test(posPage) && posPage.indexOf("phone-settings-title") < posPage.indexOf("<ThemeSwitchButton />"));
+const approve = readFileSync(join(ROOT, "src/components/DeviceApprovalBanner.tsx"), "utf8");
+check("the approve dialog is in a portal and stops its submit (no form inside the sign-in form)", /createPortal\(/.test(approve) && /event\.stopPropagation\(\)/.test(approve));
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
