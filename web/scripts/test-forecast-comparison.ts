@@ -6,7 +6,8 @@
  */
 import { COMPARISON_ONLY, METHOD_NAMES, METHOD_NOTES, buildComparisonView, buildReportView } from "../src/lib/forecast-comparison";
 import { forecastChart } from "../src/lib/forecast-chart";
-import type { Comparison } from "../src/lib/forecast";
+import { forecastPageDays, forecastTakeaways } from "../src/lib/forecast-page";
+import type { Comparison, SerializedForecast } from "../src/lib/forecast";
 
 let passed = 0;
 const failures: string[] = [];
@@ -128,7 +129,7 @@ check("axis label is the short weekday", chart.columns[0].axisLabel === "Tue" &&
 check("label is weekday, month and day", chart.columns[0].label === "Tue, Oct 27");
 check("value is the expected customers", chart.columns[0].value === 10 && chart.columns[1].value === 10.5);
 check("valueText has one decimal", chart.columns[1].valueText === "10.5 customers");
-check("detail is revenue in pesos with two decimals", chart.columns[0].detail === "₱2,000.00 expected revenue");
+check("detail is revenue in pesos with two decimals", chart.columns[0].detail === "₱2,000.00 estimated revenue");
 check("a null day is a zero-height column with —", chart.columns[3].value === 0 && chart.columns[3].valueText === "—");
 check(
   "summary names the range and the busiest day",
@@ -152,6 +153,42 @@ check("14 days: 14 columns, day-of-month labels, every 2nd", fortnight.columns.l
 check("14 days: tooltip label keeps the weekday", fortnight.columns[5].label === "Sun, Nov 1");
 const month = forecastChart(span(30));
 check("30 days: 30 columns, every 5th label", month.columns.length === 30 && month.labelEvery === 5 && month.columns[29].key === "2026-11-25");
+
+// Slice 28: what /forecast shows, from the saved run only.
+console.log("\nForecast page days (slice 28)");
+const pageRun = { createdOn: "2026-10-30", weeksRfWon: 1, weeksTested: 4 } as NonNullable<SerializedForecast["run"]>;
+const pageDays = [...week].reverse(); // out of order on purpose; 2026-10-27 .. 2026-11-02, the 4th has no customers
+const pd = forecastPageDays({ run: pageRun, days: pageDays }, "2026-10-29");
+check("keeps only days from today", pd.days.every((d) => d.date >= "2026-10-29") && pd.days.length === 5, pd.days.map((d) => d.date).join(","));
+check("at most 7 days", forecastPageDays({ run: pageRun, days: span(30) }, "2026-10-27").days.length === 7);
+const panelDays = pd.days; // ForecastPanel's own formula, written out again here
+check(
+  "totals equal the ForecastPanel formula",
+  pd.totalCustomers === panelDays.reduce((s, d) => s + (d.customers ?? 0), 0) && pd.totalRevenue === panelDays.reduce((s, d) => s + Number(d.revenue), 0)
+);
+check("a null customer counts as 0 in the total", forecastPageDays({ run: pageRun, days: [{ date: "2026-10-30", customers: null, revenue: "0.00" }, { date: "2026-10-31", customers: 4, revenue: "800.00" }] }, "2026-10-30").totalCustomers === 4);
+check("stale when the run is from an earlier day", forecastPageDays({ run: pageRun, days: pageDays }, "2026-10-31").stale === true && pd.stale === false);
+check("no days from today gives an empty list and zero totals", (() => { const e = forecastPageDays({ run: pageRun, days: pageDays }, "2026-12-01"); return e.days.length === 0 && e.totalCustomers === 0 && e.totalRevenue === 0; })());
+check("no run: not stale", forecastPageDays({ run: null, days: [] }, "2026-10-29").stale === false);
+
+console.log("\nForecast page takeaways (slice 28)");
+const tk = (change: Partial<Comparison>, methods = ALL) => forecastTakeaways(pageRun, buildReportView(make({ weeks: [{ start: "2026-10-01", end: "2026-10-07", mae: {} }], ...change }, methods), date));
+// make() gives later methods larger errors, so the first method listed is the lowest.
+const same = tk({ mean: { random_forest: 1, average: 2 }, spread: {}, served: "random_forest" }, ["random_forest", "average"]);
+check("served is the lowest: says so, never 'best'", same.compare === "The forecast uses the method with the lowest typical miss.");
+const simple = tk({ mean: { random_forest: 2, naive: 1.5 }, spread: {}, served: "random_forest" }, ["random_forest", "naive"]);
+check("a simple method is lowest: named with the served method", simple.compare === "Lowest typical miss: Repeat the last open day's count (1.50 customers a day). The forecast uses Random Forest.", simple.compare ?? "");
+const only = tk({ mean: { random_forest: 2, linear: 1.25 }, spread: {}, served: "random_forest" }, ["random_forest", "linear"]);
+check("a comparison-only method is lowest: marked for comparison only", only.compare === "Lowest typical miss: Straight-line model (linear regression), for comparison only (1.25 customers a day). The forecast uses Random Forest.", only.compare ?? "");
+const experimental = tk({ mean: { random_forest: 2, random_forest_last7: 1.75 }, spread: {}, served: "random_forest" }, ["random_forest", "random_forest_last7"]);
+check("the last-7 variant is lowest: marked experimental and not used", experimental.compare === "Lowest typical miss: Random Forest + last-7 input, an experimental variant that is not used for the forecast (1.75 customers a day). The forecast uses Random Forest.", experimental.compare ?? "");
+check("no takeaway calls a method the best", [same, simple, only, experimental].every((t) => !/best/i.test(`${t.compare} ${t.weeks}`)));
+check("weeks of the run are quoted", same.trust === "Random Forest did better than the best simple guess in 1 of 4 test weeks.");
+check("the week takeaway counts the saved weeks", same.weeks === "1 test week; lower is better. The swing shows how much each method's miss changed from week to week.", same.weeks ?? "");
+const noWeeks = forecastTakeaways(pageRun, buildReportView(make({ weeks: undefined }), date));
+check("no weeks saved: no week takeaway", noWeeks.weeks === null && noWeeks.compare !== null);
+check("no comparison: only the trust takeaway", (() => { const n = forecastTakeaways(pageRun, null); return n.compare === null && n.weeks === null && n.trust.includes("1 of 4"); })());
+check("no number outside the inputs", [same, simple, only, experimental].every((t) => (`${t.compare} ${t.weeks}`.match(/\d+(\.\d+)?/g) ?? []).every((n) => ["1", "1.00", "1.50", "1.25", "1.75", "7"].includes(n))));
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
