@@ -1,6 +1,6 @@
 ---
 name: Ruzzco Barbers System
-description: The shop's offline-first POS and end-of-day books as a plain, light POS. Light is the only theme offered; the earlier dark palette is kept under the same names and is not selectable.
+description: The shop's offline-first POS and end-of-day books as a plain, light POS. Light is the default; the earlier dark palette (the same values as the Stitch "The Shop After Dark" set) is kept under the same names and is chosen with the switch in the owner menu.
 colors:
   wall: "#f6f7f8"
   wall-raised: "#ffffff"
@@ -103,7 +103,7 @@ Colours are tokens, defined once in `src/app/globals.css`: the light values in `
 A state or wallet tint is mixed onto the solid panel (`color-mix(in srgb, var(--color-warn) 8%, var(--color-panel))`), never drawn as a translucent colour, so it reads the same on the canvas and on a card. Pills use 11% with a 38% border, notices 8% with a 35% border, wallet pay buttons 10% (18% on hover).
 
 ### Dark set
-The dark values are the app's colours before slice 21, unchanged, plus dark values for the tokens slice 21 added. Nothing sets `data-theme`, so dark is unreachable: the switch was cut in slice 21d (2026-11-16). Before anyone ships it: the dark set fails five of `test:theme`'s contrast pairs (crimson and crimson-bright as text on the canvas and on a card, QR Ph on a card), its `well` is translucent (the test needs to composite it), the inline script changes the stored `/pos` and `/shift-log` (a `sw.js` VERSION bump), and no page of the new layout has been checked in it.
+The dark values are the app's colours before slice 21, unchanged, plus dark values for the tokens slice 21 added. The owner menu's switch (`ThemeToggle`, `lib/theme.ts`) sets `data-theme="dark"` on `<html>`; light is the default and the choice is kept per browser in localStorage, applied before paint by a script in the root layout. The dark values equal the Stitch "The Shop After Dark" set, so no colour was changed to add the switch. Checked in dark on every owner page (a text-contrast scan found only disabled controls, which are exempt); the barber's POS screens past the sign-in were not checked in dark. The phone toolbar tint follows `--color-wall`.
 
 ## Typography
 

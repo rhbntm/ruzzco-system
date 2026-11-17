@@ -144,10 +144,18 @@ pair("on-warn", rgb("on-warn"), "warn", rgb("warn"), 4.5);
 pair("chrome (field edge)", rgb("chrome"), "wall-raised", rgb("wall-raised"), 3);
 pair("chrome (field edge)", rgb("chrome"), "wall", rgb("wall"), 3);
 
-console.log("\nT4 the dark set is not selectable (the switch was cut in slice 21d)");
-const setters = files(join(ROOT, "src")).filter((file) => !file.endsWith(".css") && /data-theme|dataset\.theme/.test(readFileSync(file, "utf8")));
-check("nothing in src sets data-theme", setters.length === 0, setters.map((f) => relative(ROOT, f)).join(", "));
+console.log("\nT4 the dark set is selected only by the theme switch; light is the default");
+const setters = files(join(ROOT, "src"))
+  .filter((file) => !file.endsWith(".css") && /data-theme|dataset\.theme/.test(readFileSync(file, "utf8")))
+  .map((f) => relative(ROOT, f).replace(/\\/g, "/"))
+  .sort();
+check("only the switch (lib/theme.ts) and the root layout's comment refer to data-theme", setters.join(",") === "src/app/layout.tsx,src/lib/theme.ts", setters.join(", "));
 check("the stylesheet's default colour scheme is light", /color-scheme:\s*light/.test(root.body));
+const themeLib = readFileSync(join(ROOT, "src/lib/theme.ts"), "utf8");
+check("the init script switches to dark only when dark was chosen (otherwise light)", /getItem\([^)]*\)==="dark"/.test(themeLib) && !/setAttribute\("data-theme","light"\)/.test(themeLib));
+check("the root layout runs the init script in <head> and tolerates the attribute (no flash, no hydration warning)", /<head>[\s\S]*THEME_INIT_SCRIPT[\s\S]*<\/head>/.test(readFileSync(join(ROOT, "src/app/layout.tsx"), "utf8")) && /suppressHydrationWarning/.test(readFileSync(join(ROOT, "src/app/layout.tsx"), "utf8")));
+const shell = readFileSync(join(ROOT, "src/components/OwnerShell.tsx"), "utf8");
+check("the owner menu offers the switch in the sidebar and in the phone menu", (shell.match(/<ThemeToggle \/>/g) ?? []).length === 2);
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

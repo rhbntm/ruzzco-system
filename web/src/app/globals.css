@@ -4,7 +4,7 @@
  * Ruzzco design system (slice 21): a plain, light POS. A cool off-white canvas, white cards with a
  * hairline, dark ink, and crimson for the logo, the barber-pole strip and the one primary action.
  * Every colour is a token: the light values are in @theme and :root below, and the earlier dark
- * palette is kept under :root[data-theme="dark"] (not selectable until slice 21d). Nothing outside
+ * palette is kept under :root[data-theme="dark"] (chosen with the switch in the owner menu, lib/theme.ts). Nothing outside
  * these three blocks may hold a colour literal (npm run test:theme). DESIGN.md documents them.
  */
 
@@ -100,8 +100,8 @@
   --rz-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234b5563' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
-/* The dark palette: the app's colours before slice 21, kept under the same names. Nothing sets
-   data-theme yet; slice 21d adds the switch once every page is verified in it. */
+/* The dark palette: the app's colours before slice 21, kept under the same names. The owner menu's
+   switch (lib/theme.ts) sets data-theme; these values are the same as the "Shop After Dark" design's. */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --color-wall: #0c0b0a;

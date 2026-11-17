@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { HistoryFade } from "@/components/HistoryFade";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 // Oswald (SIL OFL 1.1, see fonts/Oswald-OFL.txt), the condensed caps of the shop's logo.
 // Subset to Latin and the peso sign and served by this app, so neither the build nor the
@@ -48,7 +49,13 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${oswald.variable} h-full antialiased`}
+      // The theme script below may set data-theme before React loads; that is not a mismatch in our markup.
+      suppressHydrationWarning
     >
+      <head>
+        {/* Applies a chosen dark theme before the first paint (see lib/theme.ts) */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body
         className="min-h-full flex flex-col"
         // Browser extensions (subtitle, grammar and password tools) add classes and attributes
