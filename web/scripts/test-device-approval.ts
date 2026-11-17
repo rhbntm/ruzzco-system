@@ -143,7 +143,11 @@ async function main() {
 
   console.log("\nThe approval PIN opens nothing else");
   const unlockWithApproval = await call("/api/v1/owner/unlock", { body: { pin: approvalPin } });
-  check("owner unlock refuses the approval PIN", unlockWithApproval.status === 401 && !unlockWithApproval.cookie, `got ${unlockWithApproval.status}`);
+  // 401 while no owner account exists (the PIN is checked and refused); 409 OWNER_ACCOUNT_EXISTS once one does
+  // (unlock is closed before the PIN is looked at). Either way the approval PIN opens nothing and sets no cookie.
+  const refusedUnlock =
+    (unlockWithApproval.status === 401 || (unlockWithApproval.status === 409 && unlockWithApproval.body?.code === "OWNER_ACCOUNT_EXISTS")) && !unlockWithApproval.cookie;
+  check("owner unlock refuses the approval PIN (401, or 409 once an owner account exists), with no cookie", refusedUnlock, `got ${unlockWithApproval.status}`);
   for (const [method, path] of [["GET", "/api/v1/devices"], ["GET", "/api/v1/reports/reconciliation?date=2026-10-01"], ["GET", "/api/v1/reports/ledger-summary?period=day&date=2026-10-01"]] as const) {
     const res = await call(path, { method, headers: {} });
     check(`${method} ${path.split("?")[0]} is 401 without the owner cookie`, res.status === 401, `got ${res.status}`);
