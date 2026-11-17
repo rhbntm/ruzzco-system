@@ -16,6 +16,7 @@ import {
 } from "@/lib/list-settings";
 import { DateRangeBar, presetOptions, type RangeOption } from "@/components/DateRangeBar";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
+import { PageContainer, PageHeader } from "@/components/PageHeader";
 import { Pager } from "@/components/Pager";
 import { ShowingLine } from "@/components/ShowingLine";
 
@@ -158,12 +159,14 @@ function SalesPanel({ barbers, services }: { barbers: Option[]; services: Option
   const totals = answer?.totals;
 
   return (
-    <main className="flex-1">
-      <div className="rz-page max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
-        <header className="space-y-1">
-          <h1 className="rz-title text-3xl">Sales</h1>
-          <p className="text-sm text-dust">Every sale on the chosen dates, newest first. Totals count paid sales only.</p>
-        </header>
+    <PageContainer width="wide">
+        <PageHeader
+          title="Sales"
+          description="Every sale on the chosen dates, newest first. Totals count paid sales only."
+          onReload={() => void load()}
+          reloading={busy}
+          reloadLabel="Reload the sales"
+        />
 
         {/* Dates and filters: one panel, so what narrows the list sits together. */}
         <section aria-label="Dates and filters" className="rz-panel p-4 sm:p-5 space-y-4">
@@ -268,8 +271,7 @@ function SalesPanel({ barbers, services }: { barbers: Option[]; services: Option
               onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} label="Sales pages" />
           </section>
         )}
-      </div>
-    </main>
+    </PageContainer>
   );
 }
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, ImageOff, RefreshCw, Trash2, Upload } from "lucide-react";
-import { BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { Check, ImageOff, Trash2, Upload } from "lucide-react";
+import { PageContainer, PageHeader } from "@/components/PageHeader";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
 
 // Owner-only: attach a GCash and a Maya QR image to each active barber (slice 6).
@@ -98,22 +98,14 @@ export default function PaymentQrPage() {
   }
 
   return (
-    <main className="flex-1">
-      <header className="rz-banner">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
-          <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
-            {/* The station light: it turns while the codes load. */}
-            <BarberPoleIcon className="w-2.5 h-6" spinning={busy} />
-            Payment QR codes
-          </h1>
-          <button onClick={() => void load()} title="Reload" aria-label="Reload the QR codes" className="rz-btn rz-btn-ghost rz-btn-icon -my-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11"><RefreshCw className={`w-4 h-4 ${busy ? "animate-spin" : ""}`} /></button>
-        </div>
-      </header>
-
-      <div className="rz-page max-w-4xl mx-auto p-4 sm:p-6 space-y-5">
-        <p className="text-sm text-dust leading-relaxed max-w-prose">
-          The POS shows these in the GCash and Maya payment screen, for the barber the sale is recorded under. PNG, JPEG or WebP, up to 1 MB.
-        </p>
+    <PageContainer>
+        <PageHeader
+          title="Payment QR codes"
+          description="The POS shows these in the GCash and Maya payment screen, for the barber the sale is recorded under. PNG, JPEG or WebP, up to 1 MB."
+          onReload={() => void load()}
+          reloading={busy}
+          reloadLabel="Reload the QR codes"
+        />
         {error && <div role="alert" className="animate-rise rz-notice rz-notice-danger">{error}</div>}
         {/* Announces "Saved", "Removed" and upload errors to screen readers; out of the layout flow. */}
         <p aria-live="polite" className="sr-only">{slotMessage ? withoutTick(slotMessage.text) : ""}</p>
@@ -191,7 +183,6 @@ export default function PaymentQrPage() {
           )}
           {!busy && barbers.length === 0 && <div className="rz-panel p-8 text-center text-dust">No active barbers found.</div>}
         </div>
-      </div>
-    </main>
+    </PageContainer>
   );
 }

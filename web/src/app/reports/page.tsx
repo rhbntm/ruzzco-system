@@ -1,10 +1,11 @@
+import { PageContainer, PageHeader } from "@/components/PageHeader";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { Prisma, type PaymentMethod } from "@prisma/client";
 import { manilaToday } from "@/lib/business-date";
 import { PRESETS, parseRange, presetRange, type DateRange, type Preset } from "@/lib/date-range";
 import { gatewayConfig } from "@/lib/gateway";
-import { ownerPageAccess } from "@/lib/owner-access";
+import { requireOwnerPage } from "@/lib/owner-access";
 import { loadReport, type Report } from "@/lib/report";
 import { chartBuckets } from "@/lib/report-chart";
 import { buildReportStory } from "@/lib/insights-story";
@@ -55,7 +56,9 @@ async function loadSafely(range: DateRange): Promise<Report | null> {
 }
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const isOwner = await ownerPageAccess();
+  // A visitor without owner access is redirected to /login before this page renders anything.
+  await requireOwnerPage("/reports");
+  const isOwner = true;
   if (!isOwner) {
     // No figures are loaded without owner access.
     return (
@@ -244,16 +247,14 @@ function Calculations({ report, showQrph }: { report: Report; showQrph: boolean 
 function Shell({ action, children }: { action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="relative flex-1 overflow-x-hidden">
-      <main className="rz-page relative max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-7 space-y-8">
-        <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-          <div className="space-y-1.5">
-            <h1 className="rz-title text-3xl sm:text-4xl">Reports</h1>
-            <p className="text-sm text-dust max-w-2xl leading-relaxed">How the shop did over the dates you pick: revenue, paid sales, services, barbers and busy hours.</p>
-          </div>
-          {action}
-        </header>
+      <PageContainer width="wide">
+        <PageHeader
+          title="Reports"
+          description="How the shop did over the dates you pick: revenue, paid sales, services, barbers and busy hours."
+          actions={action}
+        />
         {children}
-      </main>
+      </PageContainer>
     </div>
   );
 }

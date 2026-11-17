@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, ownerAccountExists, requestSession } from "@/lib/session";
-import { BARBER_HOME } from "@/lib/approval-gate";
+import { BARBER_HOME, ownerSignInHref } from "@/lib/approval-gate";
 
 export const OWNER_COOKIE = "ruzzco_owner_access";
 
@@ -108,6 +108,16 @@ export async function ownerPageAccess(): Promise<boolean> {
     return true;
   }
   return isOwnerCookie((await cookies()).get(OWNER_COOKIE)?.value) && !(await ownerAccountExists());
+}
+
+/**
+ * Owner pages (the layouts of /sales, /ledger, ...): owner access, or a redirect to
+ * /login?next=<page> before anything renders. A visitor without it sees one generic sign-in page,
+ * never the owner page's title or text; a barber session still goes to /pos (ownerPageAccess).
+ * The pages keep their own ownerPageAccess check, since a layout doesn't stop its page rendering.
+ */
+export async function requireOwnerPage(pathname: string): Promise<void> {
+  if (!(await ownerPageAccess())) redirect(ownerSignInHref(pathname));
 }
 
 export function ownerRequiredResponse() {

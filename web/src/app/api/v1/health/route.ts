@@ -5,39 +5,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    // Ping MySQL through Prisma
+    // Ping the database through Prisma. Public route: it says only whether the app is healthy.
     await prisma.$queryRaw`SELECT 1`;
-
-    const barberCount = await prisma.barber.count();
-    const serviceCount = await prisma.service.count();
-
-    return NextResponse.json({
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      services: {
-        api: "online",
-        database: "connected",
-        databaseType: "MySQL 8.0 (Docker)",
-      },
-      counts: {
-        barbers: barberCount,
-        services: serviceCount,
-      },
-    });
+    return NextResponse.json({ status: "healthy" });
   } catch (error) {
     console.error("Health check failed:", error);
-    return NextResponse.json(
-      {
-        status: "unhealthy",
-        timestamp: new Date().toISOString(),
-        services: {
-          api: "online",
-          database: "disconnected",
-        },
-        // Details stay in the server log; the response only says the database is down.
-        error: "Database unreachable",
-      },
-      { status: 503 }
-    );
+    return NextResponse.json({ status: "unhealthy" }, { status: 503 });
   }
 }

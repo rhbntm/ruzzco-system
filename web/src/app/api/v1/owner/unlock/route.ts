@@ -27,7 +27,12 @@ export async function POST(request: NextRequest) {
 
   // Locked out (too many wrong PINs): refuse before looking at the PIN, and don't count it.
   const client = pinClientKey(request.headers);
-  const waitMs = ownerPinLimiter.retryAfter(client);
+  let waitMs: number;
+  try {
+    waitMs = await ownerPinLimiter.retryAfter(client);
+  } catch (error) {
+    return serverError("[owner] unlock: limiter unavailable", error);
+  }
   if (waitMs > 0) return tooManyPinsResponse(waitMs);
 
   const body = await readJson(request, "Invalid request");
@@ -36,10 +41,18 @@ export async function POST(request: NextRequest) {
   const pin = typeof raw?.pin === "string" ? raw.pin : "";
 
   if (!validOwnerPin(pin)) {
-    ownerPinLimiter.recordFailure(client);
+    try {
+      await ownerPinLimiter.recordFailure(client);
+    } catch (error) {
+      return serverError("[owner] unlock: limiter unavailable", error);
+    }
     return NextResponse.json({ success: false, error: "Invalid owner PIN" }, { status: 401 });
   }
-  ownerPinLimiter.recordSuccess(client);
+  try {
+    await ownerPinLimiter.recordSuccess(client);
+  } catch (error) {
+    return serverError("[owner] unlock: limiter unavailable", error);
+  }
 
   const response = NextResponse.json({ success: true });
   response.cookies.set({

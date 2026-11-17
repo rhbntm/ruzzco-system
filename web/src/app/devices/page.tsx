@@ -2,9 +2,10 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, RefreshCw, Smartphone, TriangleAlert } from "lucide-react";
+import { ChevronDown, Smartphone, TriangleAlert } from "lucide-react";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
 import { PagedControls } from "@/components/Pager";
+import { PageContainer, PageHeader } from "@/components/PageHeader";
 import { usePagedList } from "@/lib/use-paged-list";
 
 // Owner-only (slice 15): the phones approved to send sales. A lost or replaced phone is revoked
@@ -125,15 +126,14 @@ function Devices() {
   const filteredName = barberFilter ? barbers.find((b) => b.id === barberFilter)?.fullName : null;
 
   return (
-    <main className="flex-1">
-      <div className="rz-page max-w-3xl mx-auto px-4 sm:px-6 py-5 space-y-5">
-        <header className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <h1 className="rz-title text-3xl">Phones</h1>
-            <p className="text-sm text-dust max-w-prose leading-relaxed">Which phones may send sales, which barber each is assigned to, and revoking a lost or replaced one.</p>
-          </div>
-          <button onClick={() => void load()} title="Reload" aria-label="Reload the phones" className="rz-btn rz-btn-ghost rz-btn-icon shrink-0 pointer-coarse:min-h-11 pointer-coarse:min-w-11"><RefreshCw className={`w-4 h-4 ${busy ? "animate-spin" : ""}`} /></button>
-        </header>
+    <PageContainer>
+        <PageHeader
+          title="Phones"
+          description="Which phones may send sales, which barber each is assigned to, and revoking a lost or replaced one."
+          onReload={() => void load()}
+          reloading={busy}
+          reloadLabel="Reload the phones"
+        />
 
         <p className="text-sm text-dust leading-relaxed max-w-prose">
           A phone is approved on the phone itself, with the approval PIN (Bayani) or the owner PIN. Revoking a phone stops it sending sales at
@@ -228,7 +228,6 @@ function Devices() {
             <div className="p-3 border-t border-seam"><PagedControls list={orphanList} label="Assignments without a phone record pages" /></div>
           </Section>
         )}
-      </div>
-    </main>
+    </PageContainer>
   );
 }

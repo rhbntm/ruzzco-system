@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Banknote, Check, CheckCircle2, Clock, Plus, RefreshCw, Scissors, Smartphone, TriangleAlert, Undo2 } from "lucide-react";
+import { Banknote, Check, CheckCircle2, Clock, Plus, Scissors, Smartphone, TriangleAlert, Undo2 } from "lucide-react";
 import { manilaToday } from "@/lib/business-date";
 import { generateUUID } from "@/lib/db";
 import { createSubmitLock } from "@/lib/submit-lock";
 import { DEFAULT_CUSTOM_NOTE } from "@/lib/pricing";
 import { peso as pesoText } from "@/lib/peso";
-import { BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { PageContainer, PageHeader } from "@/components/PageHeader";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
 import { DateRangeBar, presetOptions, rangeText, type RangeOption } from "@/components/DateRangeBar";
 import { PagedControls } from "@/components/Pager";
@@ -276,21 +276,15 @@ export default function LedgerPage() {
   const loading = busy || rangeBusy;
 
   return (
-    <main className="flex-1">
-      <header className="rz-banner">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
-          <h1 className="flex items-center gap-2 font-display font-semibold text-base sm:text-lg leading-none uppercase tracking-widest text-bone">
-            {/* The station light: it turns while the ledger loads. */}
-            <BarberPoleIcon className="w-2.5 h-6" spinning={loading} />
-            Payouts
-          </h1>
-          <button onClick={reload} aria-label="Reload the ledger" title="Reload" className="rz-btn rz-btn-ghost rz-btn-icon -my-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
-            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-      </header>
+    <PageContainer width="wide">
+        <PageHeader
+          title="Payouts"
+          description="Record what each barber is paid for a day, and read the summary and payout history for any dates."
+          onReload={reload}
+          reloading={loading}
+          reloadLabel="Reload the ledger"
+        />
 
-      <div className="rz-page max-w-6xl mx-auto p-4 sm:p-6 space-y-8">
         {/* ── 1. Payouts for one business date ── */}
         <section aria-labelledby="payouts-title" className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-seam pb-3">
@@ -460,8 +454,7 @@ export default function LedgerPage() {
 
           <CustomAmountsSection range={{ from, to }} sales={customSales} error={customError} busy={customBusy} rangeIsToday={rangeIsToday} onResetRange={resetRange} />
         </section>
-      </div>
-    </main>
+    </PageContainer>
   );
 }
 

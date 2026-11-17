@@ -36,10 +36,10 @@ export async function POST(request: NextRequest) {
 
   // Locked (too many wrong passwords for this username, or shop-wide): refuse before checking,
   // even the right password, and don't count it.
-  const waitMs = loginLimiter.retryAfter(typedUsername);
-  if (waitMs > 0) return tooManyLoginsResponse(waitMs);
-
   try {
+    const waitMs = await loginLimiter.retryAfter(typedUsername);
+    if (waitMs > 0) return tooManyLoginsResponse(waitMs);
+
     const username = normalizeUsername(typedUsername);
     const user = username ? await findAccount({ username }) : null;
     // Unknown usernames take as long and get the same answer as a wrong password (Decision 6).
@@ -47,10 +47,10 @@ export async function POST(request: NextRequest) {
       ? await verifyPassword(password, user.passwordHash)
       : (await verifyPassword(password, await dummyPasswordHash()), false);
     if (!user || !passwordOk) {
-      loginLimiter.recordFailure(typedUsername);
+      await loginLimiter.recordFailure(typedUsername);
       return refuse(401, "WRONG_PASSWORD", "Wrong username or password.");
     }
-    loginLimiter.recordSuccess(typedUsername);
+    await loginLimiter.recordSuccess(typedUsername);
 
     if (!accountUsable(user)) return refuse(403, "INACTIVE", "This account is deactivated. Ask the owner.");
 

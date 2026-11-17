@@ -29,10 +29,9 @@ export async function POST(request: NextRequest) {
 
   // Locked out: refuse before looking at the PIN, and don't count it.
   const client = pinClientKey(request.headers);
-  const waitMs = devicePinLimiter.retryAfter(client);
-  if (waitMs > 0) return tooManyPinsResponse(waitMs);
-
   try {
+    const waitMs = await devicePinLimiter.retryAfter(client);
+    if (waitMs > 0) return tooManyPinsResponse(waitMs);
     const body = await readJson(request, "Invalid request");
     if (!body.ok) return body.response;
     const parsed = approveSchema.safeParse(body.data);
@@ -46,10 +45,10 @@ export async function POST(request: NextRequest) {
 
     const role = approvalPinRole(pin);
     if (!role) {
-      devicePinLimiter.recordFailure(client);
+      await devicePinLimiter.recordFailure(client);
       return NextResponse.json({ success: false, error: "Wrong PIN" }, { status: 401 });
     }
-    devicePinLimiter.recordSuccess(client);
+    await devicePinLimiter.recordSuccess(client);
 
     const secret = newDeviceSecret();
     const now = new Date();

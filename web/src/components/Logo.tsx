@@ -1,37 +1,44 @@
-import { MustacheIcon } from "@/components/RuzzcoBrand";
+import Image from "next/image";
 
 /**
- * The shop's interim logo (slice 21, Decision 8): the mustache mark from the shop's own logo in a
- * crimson square, with the RUZZCO BARBERS wordmark in Oswald. One component for the sidebar, the
- * top bar, and the sign-in and approval screens, until a vector logo is delivered. No hooks, so it
- * renders in server and client components alike.
+ * The shop's logo (the artwork in public/ruzzco-logo.jpg), cut to fit three places. The files in
+ * public/brand are crops of that one image on its black field. No hooks, so it renders in server
+ * and client components alike.
  *
- * `stacked` puts the wordmark under a larger mark (sign-in and approval cards). `markOnly` shows
- * the mark alone and names the shop for screen readers.
+ * - default: the RUZZCO BARBERS wordmark strip (sidebar, menu, top bar).
+ * - `stacked`: the full lockup, with the poles and the arcs (sign-in and approval cards).
+ * - `markOnly`: the moustache alone, square, for the narrow top bar; it names the shop for screen readers.
  */
 export function Logo({ stacked = false, markOnly = false, className = "" }: { stacked?: boolean; markOnly?: boolean; className?: string }) {
-  const mark = (
-    <span
-      aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center bg-crimson text-on-accent ${stacked ? "h-14 w-14 rounded-xl" : "h-9 w-9 rounded-lg"}`}
-    >
-      <MustacheIcon className={stacked ? "h-4 w-10" : "h-2.5 w-6.5"} />
-    </span>
-  );
   if (markOnly) {
     return (
-      <span role="img" aria-label="Ruzzco Barbers" className={`inline-flex ${className}`}>
-        {mark}
-      </span>
+      <Image
+        src="/brand/logo-mark.png"
+        alt="Ruzzco Barbers"
+        width={96}
+        height={96}
+        className={`inline-flex h-9 w-9 shrink-0 rounded-lg ring-1 ring-seam-strong ${className}`}
+      />
+    );
+  }
+  if (stacked) {
+    return (
+      <Image
+        src="/brand/logo-lockup.png"
+        alt="Ruzzco Barbers"
+        width={680}
+        height={310}
+        className={`h-auto w-56 max-w-full rounded-lg ring-1 ring-seam-strong ${className}`}
+      />
     );
   }
   return (
-    <span className={`inline-flex ${stacked ? "flex-col items-center gap-2.5" : "items-center gap-2.5"} ${className}`}>
-      {mark}
-      <span className={`font-display uppercase leading-none text-bone ${stacked ? "text-center" : ""}`}>
-        <span className={`block font-bold tracking-[0.08em] ${stacked ? "text-2xl" : "text-lg"}`}>Ruzzco</span>
-        <span className={`block font-medium tracking-[0.24em] text-dust ${stacked ? "mt-1 text-xs" : "mt-0.5 text-[0.625rem]"}`}>Barbers</span>
-      </span>
-    </span>
+    <Image
+      src="/brand/logo-wordmark.png"
+      alt="Ruzzco Barbers"
+      width={510}
+      height={102}
+      className={`h-8 w-auto shrink-0 rounded-md ring-1 ring-seam-strong ${className}`}
+    />
   );
 }

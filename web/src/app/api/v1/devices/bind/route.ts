@@ -55,13 +55,13 @@ async function checkBarberChange(request: NextRequest, deviceKey: string, barber
 
   if (!pin) return pinRefused("PIN_REQUIRED", "Changing this phone's barber needs the owner PIN.");
   const client = pinClientKey(request.headers);
-  const waitMs = ownerPinLimiter.retryAfter(client);
+  const waitMs = await ownerPinLimiter.retryAfter(client);
   if (waitMs > 0) return tooManyPinsResponse(waitMs);
   if (!validOwnerPin(pin)) {
-    ownerPinLimiter.recordFailure(client);
+    await ownerPinLimiter.recordFailure(client);
     return pinRefused("WRONG_PIN", "Wrong PIN. Only the owner PIN can change this phone's barber.");
   }
-  ownerPinLimiter.recordSuccess(client);
+  await ownerPinLimiter.recordSuccess(client);
   console.log(`[devices] ${deviceKey} moved to another barber with the owner PIN`);
   return null;
 }

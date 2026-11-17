@@ -61,5 +61,5 @@ export const AUTHZ_MATRIX: MatrixRow[] = [
   { route: "v1/payments/qrph/check", method: "GET", access: "phone", note: "S1: only the phone that made the sale" },
   { route: "v1/payments/qrph/check", method: "POST", access: "phone", note: "S1: only the phone that made the sale; readJson" },
   { route: "v1/webhooks/paymongo", method: "POST", access: "signature", note: "PayMongo signature" },
-  { route: "v1/health", method: "GET", access: "public", note: "barber and service counts only" },
+  { route: "v1/health", method: "GET", access: "public", note: "status only, no counts or database details" },
 ];

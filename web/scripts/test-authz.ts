@@ -509,7 +509,7 @@ async function pages() {
   const staffOwner = await call("GET", "/staff", { headers: as(ownerCookie) });
   check("/staff with the owner session: the form is there", staffOwner.status === 200 && staffOwner.text.includes("New account"));
 
-  console.log("\nP3 owner access never passes /pos and /shift-log; signed-out browsers are not redirected");
+  console.log("\nP3 owner access never passes /pos and /shift-log; signed-out owner pages redirect to /login");
   const ownerOnPos = await call("POST", "/api/v1/auth/login", {
     headers: devices.headers(phoneA),
     body: JSON.stringify({ username: testOwner!.username, password: testOwner!.password, deviceKey: phoneA }),
@@ -519,10 +519,17 @@ async function pages() {
     const owner = await call("GET", path, { headers: as(ownerCookie) });
     check(`${path} with the owner session → 200, the same shell (approval is decided on the phone, never by owner access)`, owner.status === 200, `HTTP ${owner.status}`);
   }
-  for (const path of ["/", "/about", "/ledger", "/reports", "/forecast", "/staff"]) {
+  for (const path of ["/", "/about"]) {
     const none = await call("GET", path);
     check(`${path} with no credentials → 200 (the approval or sign-in screen), not redirected`, none.status === 200, `HTTP ${none.status}`);
     check(`${path} with no credentials: no dashboard, peso figure or account form`, !none.text.includes("Expected drawer cash") && !none.text.includes("Owed to barbers") && !none.text.includes("₱") && !none.text.includes("New account"));
+  }
+  // Owner pages: a visitor without credentials is sent to the generic sign-in and sees no page text.
+  for (const path of ["/sales", "/ledger", "/reconciliation", "/devices", "/payment-qr", "/reports", "/forecast", "/staff"]) {
+    const none = await call("GET", path);
+    const to = none.headers.get("location") ?? "";
+    check(`${path} with no credentials → redirect to /login?next=${path}`, [307, 308].includes(none.status) && to === `/login?next=${encodeURIComponent(path)}`, `HTTP ${none.status} ${to}`);
+    check(`${path} with no credentials: no page text in the redirect`, !none.text.includes("Owner only") && !none.text.includes("₱") && !none.text.includes("New account"));
   }
 
   console.log("\nP4 barber sign-in clears a leftover PIN cookie");

@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { OwnerPageGate } from "@/components/OwnerPageGate";
 
-// Slice 19 §7: the approval screen in front of this owner page for a browser that is neither
-// approved nor signed in as the owner. UI gating only; the page and its routes check owner access.
+// Server gate: owner access, or a redirect to /login?next=<page> before this page renders.
+// The page and its routes still check owner access themselves.
 export default function PaymentQrLayout({ children }: { children: ReactNode }) {
-  return <OwnerPageGate pathname="/payment-qr" title="Payment QR codes">{children}</OwnerPageGate>;
+  return <OwnerPageGate pathname="/payment-qr">{children}</OwnerPageGate>;
 }

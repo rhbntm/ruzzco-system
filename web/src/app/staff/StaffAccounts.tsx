@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, KeyRound, RefreshCw, Smartphone, Trash2, UserPlus, UserRound } from "lucide-react";
+import { ChevronDown, KeyRound, Smartphone, Trash2, UserPlus, UserRound } from "lucide-react";
 import { OwnerSignInPage } from "@/components/OwnerSignIn";
+import { PageContainer, PageHeader } from "@/components/PageHeader";
 
 // Staff (slice 19, Decision 15; one card per barber since the security-staff change): list, create, set or reset a password, deactivate and
 // reactivate, and delete a deactivated account (the barber record and sales stay). No password or hash ever reaches this page.
@@ -195,15 +196,14 @@ function StaffAccountsList() {
   );
 
   return (
-    <main className="flex-1">
-      <div className="rz-page max-w-3xl mx-auto px-4 sm:px-6 py-5 space-y-6">
-        <header className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <h1 className="rz-title text-3xl">Staff accounts</h1>
-            <p className="text-sm text-dust max-w-prose leading-relaxed">Sign-in accounts for each barber and the owner. Phones are managed under Phones.</p>
-          </div>
-          <button onClick={() => void load()} title="Reload" aria-label="Reload the accounts" className="rz-btn rz-btn-ghost rz-btn-icon shrink-0 pointer-coarse:min-h-11 pointer-coarse:min-w-11"><RefreshCw className={`w-4 h-4 ${busy ? "animate-spin" : ""}`} /></button>
-        </header>
+    <PageContainer>
+        <PageHeader
+          title="Staff accounts"
+          description="Sign-in accounts for each barber and the owner. Phones are managed under Phones."
+          onReload={() => void load()}
+          reloading={busy}
+          reloadLabel="Reload the accounts"
+        />
 
         <details className="rz-panel group">
           <summary className="cursor-pointer select-none px-4 min-h-11 flex items-center justify-between gap-2 text-sm font-semibold text-bone rounded-[inherit]">
@@ -330,8 +330,7 @@ function StaffAccountsList() {
             New account
           </button>
         )}
-      </div>
-    </main>
+    </PageContainer>
   );
 }
 

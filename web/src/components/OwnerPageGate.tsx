@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { ownerPageAccess } from "@/lib/owner-access";
+import { requireOwnerPage } from "@/lib/owner-access";
 import { manilaToday } from "@/lib/business-date";
-import { ApprovalGate } from "@/components/ApprovalScreen";
 import { OwnerShell } from "@/components/OwnerShell";
 
 // Business dates are YYYY-MM-DD calendar dates, so they are formatted as dates, not instants.
@@ -21,17 +20,12 @@ export function OwnerFrame({ children }: { children: ReactNode }) {
 }
 
 /**
- * Server half of the gate on owner pages (slice 19 §7, Decision 2), used by their layouts: owner
- * access is checked here, on the server; the approval state is read in the browser. With owner
- * access, the page inside the owner's menu (slice 21); without it, the approval screen with
- * "Owner sign-in" in an unapproved browser, or the page's own owner sign-in in an approved one
- * (no menu). The pages and routes keep their own checks.
+ * Server gate on owner pages, used by their layouts: owner access is checked here, on the server.
+ * With it, the page inside the owner's menu (slice 21); without it, a redirect to /login?next=<page>
+ * (the owner sign-in works from any browser, approved or not) before anything renders. The pages
+ * and routes keep their own checks.
  */
-export async function OwnerPageGate({ pathname, title, children }: { pathname: string; title: string; children: ReactNode }) {
-  const ownerAccess = await ownerPageAccess();
-  return (
-    <ApprovalGate pathname={pathname} title={title} ownerAccess={ownerAccess}>
-      {ownerAccess ? <OwnerFrame>{children}</OwnerFrame> : children}
-    </ApprovalGate>
-  );
+export async function OwnerPageGate({ pathname, children }: { pathname: string; children: ReactNode }) {
+  await requireOwnerPage(pathname);
+  return <OwnerFrame>{children}</OwnerFrame>;
 }

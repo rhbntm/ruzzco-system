@@ -11,7 +11,7 @@ import {
   QrCode,
   LockKeyhole,
 } from "lucide-react";
-import { BarberPoleIcon } from "@/components/RuzzcoBrand";
+import { PageContainer, PageHeader } from "@/components/PageHeader";
 import { OwnerSignInDialog } from "@/components/OwnerSignIn";
 import { manilaToday } from "@/lib/business-date";
 import { peso } from "@/lib/peso";
@@ -278,20 +278,14 @@ export default function ReconciliationPage() {
         />
       )}
 
-      {/* Header: the black banner */}
-      <header className="rz-banner">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2 px-4 sm:px-6 py-3">
-          <div className="flex items-center gap-2 min-w-0">
-            {/* The station light: it turns while the totals load. */}
-            <BarberPoleIcon className="w-2.5 h-6" spinning={isLoading} />
-            <h1 className="font-display font-semibold tracking-wide sm:tracking-widest text-[0.9375rem] sm:text-lg leading-none text-bone uppercase truncate">
-              End-of-Day Cash
-            </h1>
-          </div>
-        </div>
-      </header>
-
-      <div className="rz-page relative max-w-4xl mx-auto px-4 sm:px-6 py-5 space-y-5">
+      <PageContainer>
+        <PageHeader
+          title="End-of-Day Cash"
+          description="Cash the register says should be in the drawer, and the count at closing."
+          onReload={() => setRefreshKey((k) => k + 1)}
+          reloading={isLoading}
+          reloadLabel="Reload the expected totals"
+        />
         {/* Date picker */}
         <div className="rz-panel flex items-center gap-3 p-3">
           <label htmlFor="reconciliation-date" className="rz-label shrink-0">
@@ -306,15 +300,6 @@ export default function ReconciliationPage() {
             max={todayStr}
             className="rz-field flex-1 min-w-0 py-1.5 pointer-coarse:min-h-11 sm:text-sm"
           />
-          <button
-            onClick={() => setRefreshKey((k) => k + 1)}
-            disabled={isLoading}
-            title="Refresh expected totals"
-            aria-label="Refresh expected totals"
-            className="rz-btn rz-btn-secondary rz-btn-icon pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin text-crimson-ink" : ""}`} />
-          </button>
         </div>
 
         {/* Owner-only: nothing below shows until the owner signs in. */}
@@ -729,7 +714,7 @@ export default function ReconciliationPage() {
             )}
           </section>
         )}
-      </div>
+      </PageContainer>
     </div>
   );
 }

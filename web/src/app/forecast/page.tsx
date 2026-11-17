@@ -2,11 +2,12 @@ import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 import { ColumnChart } from "@/components/ColumnChart";
 import { ForecastLocked } from "@/components/ForecastPanel";
+import { PageContainer, PageHeader } from "@/components/PageHeader";
 import { latestForecast, serializeForecast, type SerializedForecast } from "@/lib/forecast";
 import { forecastChart } from "@/lib/forecast-chart";
 import { COMPARISON_ONLY, buildReportView, type ReportView } from "@/lib/forecast-comparison";
 import { forecastPageDays, forecastTakeaways } from "@/lib/forecast-page";
-import { ownerPageAccess } from "@/lib/owner-access";
+import { requireOwnerPage } from "@/lib/owner-access";
 import { manilaToday } from "@/lib/business-date";
 import { REVENUE_LABEL, revenueExample, type RevenueExample } from "@/lib/forecast-revenue";
 import { peso, pesoWhole } from "@/lib/peso";
@@ -36,7 +37,9 @@ const dashboardLink =
   "underline rounded-sm hover:text-bone inline-block pointer-coarse:py-3.5 pointer-coarse:-my-3.5";
 
 export default async function ForecastPage() {
-  const isOwner = await ownerPageAccess();
+  // A visitor without owner access is redirected to /login before this page renders anything.
+  await requireOwnerPage("/forecast");
+  const isOwner = true;
   const forecast = isOwner ? await load() : null;
   const run = forecast?.run ?? null;
   const view = run ? buildReportView(run.comparison, (iso) => formatDate(iso)) : null;
@@ -46,13 +49,11 @@ export default async function ForecastPage() {
   const takeaways = run ? forecastTakeaways(run, view) : null;
 
   return (
-    <main className="flex-1">
-      <div className="rz-page max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
-        <header className="space-y-1">
-          <h1 className="rz-title text-3xl">Forecast</h1>
-          <p className="text-sm text-dust max-w-prose">
-            Customers the model expects in the next days, how the peso estimate is worked out, and how the forecast was checked.
-          </p>
+    <PageContainer>
+        <PageHeader
+          title="Forecast"
+          description="Customers the model expects in the next days, how the peso estimate is worked out, and how the forecast was checked."
+        >
           {isOwner && run && (
             <p className="text-xs text-dust">
               Saved on {formatDate(run.createdOn)} · model {run.modelVersion}
@@ -64,7 +65,7 @@ export default async function ForecastPage() {
               <Link href="/" className={dashboardLink}>Dashboard</Link>.
             </p>
           )}
-        </header>
+        </PageHeader>
 
         {!isOwner ? (
           <ForecastLocked description="How the forecast is checked and how its revenue estimate is worked out. Owner only." />
@@ -100,8 +101,7 @@ export default async function ForecastPage() {
             </section>
           </>
         )}
-      </div>
-    </main>
+    </PageContainer>
   );
 }
 

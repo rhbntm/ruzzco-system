@@ -403,3 +403,27 @@ model SyncMismatchLog {
   @@index([transactionId])
   @@map("sync_mismatch_logs")
 }
+
+/// One wrong PIN or password, counted by the rate limiter (src/lib/rate-limit-db.ts). Stored in the
+/// database, not in memory, so the limits hold on serverless hosts (many short-lived instances).
+/// `scope` is "c:<client or username>" or "shop". Rows older than the window are deleted.
+model RateLimitEvent {
+  id      BigInt   @id @default(autoincrement())
+  limiter String   @db.VarChar(24)
+  scope   String   @db.VarChar(100)
+  at      DateTime @db.DateTime(3)
+
+  @@index([limiter, scope, at])
+  @@index([at])
+  @@map("rate_limit_events")
+}
+
+/// An active lockout for one limiter scope; ignored once `lockedUntil` has passed.
+model RateLimitLock {
+  limiter     String   @db.VarChar(24)
+  scope       String   @db.VarChar(100)
+  lockedUntil DateTime @map("locked_until") @db.DateTime(3)
+
+  @@id([limiter, scope])
+  @@map("rate_limit_locks")
+}

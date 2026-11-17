@@ -96,7 +96,7 @@ function pageFiles(dir: string): string[] {
     return name === "page.tsx" ? [full] : [];
   });
 }
-const SERVER_CHECK = /\bownerPageAccess\(|<OwnerPageGate\b/;
+const SERVER_CHECK = /\bownerPageAccess\(|\brequireOwnerPage\(|<OwnerPageGate\b/;
 const read = (file: string) => (existsSync(file) ? readFileSync(file, "utf8") : "");
 const pages = pageFiles(APP);
 check(`found the app's pages (${pages.length})`, pages.length >= 12);
@@ -114,7 +114,10 @@ for (const file of pages) {
 }
 check("the root layout has no role check (it wraps /pos and /shift-log)", !SERVER_CHECK.test(read(join(APP, "layout.tsx"))));
 const gateSource = read(join(process.cwd(), "src", "components", "OwnerPageGate.tsx"));
-check("OwnerPageGate calls ownerPageAccess", /\bownerPageAccess\(\)/.test(gateSource));
+check("OwnerPageGate calls requireOwnerPage", /\brequireOwnerPage\(/.test(gateSource));
+const accessSrc = read(join(process.cwd(), "src", "lib", "owner-access.ts"));
+const requireFn = accessSrc.slice(accessSrc.indexOf("export async function requireOwnerPage"), accessSrc.indexOf("export async function requireOwnerPage") + 250);
+check("requireOwnerPage redirects a visitor without owner access to the generic sign-in", /ownerPageAccess\(\)\)\) redirect\(ownerSignInHref\(pathname\)\)/.test(requireFn));
 const accessSource = read(join(process.cwd(), "src", "lib", "owner-access.ts"));
 const helper = accessSource.slice(accessSource.indexOf("export async function ownerPageAccess"), accessSource.indexOf("export async function ownerPageAccess") + 600);
 check("ownerPageAccess redirects a non-owner account session to BARBER_HOME", /role !== "OWNER"\) redirect\(BARBER_HOME\)/.test(helper));

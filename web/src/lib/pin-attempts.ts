@@ -9,16 +9,12 @@
 //   guesser who changes that header. It also means repeated guessing can lock Mart out for
 //   15 minutes; the per-client limit makes that take several devices or deliberate effort.
 // While a lock is on, even the correct PIN is refused, and refused attempts are not counted.
-// A correct PIN clears that client's count. Counts live in memory: a server restart clears them.
+// A correct PIN clears that client's count. The counts the routes use live in the database (rate-limit-db.ts), so a restart or a new serverless instance keeps them; createPinLimiter keeps them in memory.
 
-export type PinLimits = { perClient: number; shopWide: number; windowMs: number; lockMs: number };
+import { DEFAULT_PIN_LIMITS, type PinLimits } from "./pin-limits";
+import { createDbPinLimiter } from "./rate-limit-db";
 
-export const DEFAULT_PIN_LIMITS: PinLimits = {
-  perClient: 5,
-  shopWide: 30,
-  windowMs: 15 * 60 * 1000,
-  lockMs: 15 * 60 * 1000,
-};
+export { DEFAULT_PIN_LIMITS, type PinLimits };
 
 type ClientState = { failures: number[]; lockedUntil: number };
 
@@ -65,20 +61,17 @@ export function createPinLimiter(limits: PinLimits = DEFAULT_PIN_LIMITS, now: ()
   return { retryAfter, recordFailure, recordSuccess };
 }
 
-// One limiter per server process. Kept on globalThis so dev hot reloads don't reset it.
+// The limiters the routes use are kept in the database (rate-limit-db.ts), not in memory: on a
+// serverless host every request can land on a new instance, which would reset an in-memory count.
+// createPinLimiter above is the same rule in memory (used by the unit tests).
 // Phone approval (POST /api/v1/devices/approve) has its own counters, same limits.
 // Staff sign-in (slice 19, Decision 6) has its own counters, same limits, keyed by username
 // instead of client: 5 wrong passwords lock that username, 30 shop-wide lock every sign-in.
 // Unknown usernames count the same. Someone on the shop Wi-Fi can therefore lock a barber's
 // username for 15 minutes; offline sign-in on that barber's own phone still works.
-const globalForPin = globalThis as unknown as {
-  ownerPinLimiter?: ReturnType<typeof createPinLimiter>;
-  devicePinLimiter?: ReturnType<typeof createPinLimiter>;
-  loginLimiter?: ReturnType<typeof createPinLimiter>;
-};
-export const ownerPinLimiter = (globalForPin.ownerPinLimiter ??= createPinLimiter());
-export const devicePinLimiter = (globalForPin.devicePinLimiter ??= createPinLimiter());
-export const loginLimiter = (globalForPin.loginLimiter ??= createPinLimiter());
+export const ownerPinLimiter = createDbPinLimiter("owner-pin");
+export const devicePinLimiter = createDbPinLimiter("device-pin");
+export const loginLimiter = createDbPinLimiter("login");
 
 export function tooManyLoginsResponse(waitMs: number) {
   const minutes = Math.ceil(waitMs / 60000);

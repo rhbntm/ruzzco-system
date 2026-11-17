@@ -1,3 +1,4 @@
+import { PageContainer, PageHeader } from "@/components/PageHeader";
 import { Suspense, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, CalendarClock, CheckCircle2, CircleDashed, Smartphone, TriangleAlert } from "lucide-react";
@@ -79,16 +80,12 @@ export function Dashboard({ period }: { period: DashboardPeriod }) {
   );
 
   return (
-    <main className="flex-1">
-      <div className="rz-page mx-auto max-w-312 space-y-6 px-4 py-5 sm:px-6 sm:py-7">
-        <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-          <div className="space-y-1.5">
-            <h1 className="rz-title text-3xl sm:text-4xl">Dashboard</h1>
-            <p className="text-sm text-dust">
-              Paid sales, what is owed to the barbers and today&apos;s drawer. Figures only: payouts are recorded on Payouts and the drawer is counted on End-of-Day Cash.
-            </p>
-          </div>
-          <nav aria-label="Period for the summary cards" className="rz-seg">
+    <PageContainer width="wide">
+        <PageHeader
+          title="Dashboard"
+          description="Paid sales, what is owed to the barbers and today's drawer. Figures only: payouts are recorded on Payouts and the drawer is counted on End-of-Day Cash."
+          actions={
+            <nav aria-label="Period for the summary cards" className="rz-seg">
             {DASHBOARD_PERIODS.map((value) => (
               <Link
                 key={value}
@@ -101,7 +98,8 @@ export function Dashboard({ period }: { period: DashboardPeriod }) {
               </Link>
             ))}
           </nav>
-        </header>
+          }
+        />
 
         <section aria-labelledby="period-title" className="space-y-4">
           <SectionHead id="period-title" title={PERIOD_LABELS[period]} dates={dates} note="Paid sales only. A sale held for date review counts on no day until it is confirmed." />
@@ -175,8 +173,7 @@ export function Dashboard({ period }: { period: DashboardPeriod }) {
             </Suspense>
           </div>
         </section>
-      </div>
-    </main>
+    </PageContainer>
   );
 }
 
