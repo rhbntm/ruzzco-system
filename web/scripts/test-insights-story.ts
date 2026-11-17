@@ -11,6 +11,7 @@ import {
   plain,
   type Story,
   type StoryChart,
+  buildReportStory,
   type StoryInput,
   type StorySlide,
   type StoryTrends,
@@ -178,7 +179,15 @@ check("digital share in words", has(mix, "30% of revenue was paid by GCash and M
 check("tips in words", has(mix, "Customers tipped ₱820.00 on top, about 5% of revenue, and all of it goes to the barbers."), show(texts(mix)));
 check("three bar groups", mix.bars?.map((b) => b.title).join() === "Revenue by barber,Services sold,Payment methods");
 const forecast = slideOf(base, "forecast")!;
-check("forecast headline", headline(forecast) === "About 51 customers expected over the next 7 days, worth around ₱10,200.", headline(forecast));
+check("forecast headline", headline(forecast) === "About 51 customers predicted over the next 7 days, an estimated revenue of about ₱10,200.", headline(forecast));
+// Slice 24: the forecast's pesos are always "estimated revenue", never "expected" or "worth".
+{
+  const all = JSON.stringify(base).replace(/\*\*/g, "");
+  const loose = all.match(/₱[\d,.]+ expected|worth around|expected revenue|predicted revenue|revenue forecast/gi);
+  check("no slide calls the forecast's pesos expected, worth or predicted", loose === null, String(loose));
+  check("the forecast figure is labelled Estimated revenue", forecast.figures?.some((f) => f.label === "Estimated revenue") === true, show(forecast.figures));
+  check("the summary slide says estimated revenue for the next days", /₱10,200 estimated revenue/.test(all) && /Estimated revenue; about 51 customers predicted/.test(all), all.match(/[^"]*10,200[^"]*/g)?.join(" | ") ?? "");
+}
 check("busiest and quietest forecast day", has(forecast, "Busiest Wed, Mar 25 (about 10), quietest Fri, Mar 20 (about 5)."), show(texts(forecast)));
 check("few sales: the busiest hour is said in words", has(slideOf(buildStory(make({ trends: trendsOf(period(), { hours: HOURS.map((h) => ({ ...h, sales: h.hour === 15 ? 4 : 0 })) }) })), "hours"), "The single busiest hour was 3–4 PM, with 4 paid sales"));
 check(
@@ -187,7 +196,7 @@ check(
   show(texts(forecast))
 );
 check("lost most test weeks: a rough guide, as a warning", forecast.points.some((p) => p.tone === "warn" && p.text.endsWith("Treat it as a rough guide.")), show(forecast.points));
-check("forecast footnote explains the revenue", forecast.footnote?.startsWith("Expected revenue = expected customers × ₱200.00") === true, forecast.footnote);
+check("forecast footnote explains the revenue", forecast.footnote?.startsWith("The model predicts customers, not revenue. Estimated revenue = predicted customers × ₱200.00") === true, forecast.footnote);
 const forecastChart = chartOf(forecast, "Expected customers per day");
 check("forecast chart: recent sales as a level, busiest day tagged", forecastChart?.reference?.label === "Recent: 5.9 sales a day" && forecastChart.callout?.key === "2026-03-25" && forecastChart.callout.text === "Busiest · about 10", show([forecastChart?.reference, forecastChart?.callout]));
 const todo = slideOf(base, "todo")!;
@@ -328,6 +337,32 @@ check(
   show(emphasisRuns("Up **17%** to **₱16,400**, mostly"))
 );
 check("same figures, same words", JSON.stringify(buildStory(make())) === JSON.stringify(base));
+
+// ── Slice 27: the Reports story (history over a range; no day block, no forecast) ──
+console.log("\nReports story (slice 27)");
+{
+  const input = make();
+  const report = buildReportStory({ today: input.today, date: input.date, days: input.days, manilaHour: input.manilaHour, trends: input.trends }, "Mar 1 to Mar 14, 2026");
+  const ids = report.slides.map((s) => s.id);
+  check("slides: summary, trend, hours, mix, todo (no day block, no forecast)", ids.join() === "summary,trend,hours,mix,todo", ids.join());
+  const all = JSON.stringify(report).replace(/\*\*/g, "");
+  check("no forecast wording or slide", !/Expected customers per day|estimated revenue|Next \d+ days|forecast/i.test(all), all.match(/forecast|estimated revenue/gi)?.join() ?? "");
+  check("no drawer or payout to-do (those belong to End-of-Day Cash and Payouts)", !/Count the drawer|Pay out|Look into the drawer|\/ledger/.test(all));
+  check("no 'figures couldn't be loaded' warning when the range loaded", !/couldn't be loaded/.test(all));
+  check("the date line names the range and its length", report.dateLine === "Mar 1 to Mar 14, 2026 · 14 days", report.dateLine);
+  const summary = report.slides[0];
+  check("the summary's figures are the range's revenue, paid sales and average per sale", summary.figures.map((f) => f.label).join() === "Revenue, 14 days,Paid sales,Average per sale", summary.figures.map((f) => f.label).join());
+  check("the same trend slide as the full story for the same range", JSON.stringify(report.slides[1]) === JSON.stringify(base.slides.find((s) => s.id === "trend")));
+
+  const long = make({ date: "2026-05-29", days: 90, today: "2026-06-01", trends: trendsOf(period("2026-03-01", 90)) });
+  const longStory = buildReportStory({ today: long.today, date: long.date, days: long.days, manilaHour: long.manilaHour, trends: long.trends }, "90 days");
+  const chart = longStory.slides.find((s) => s.id === "trend")?.charts?.[0];
+  const weekly = chart?.columns ?? [];
+  check("a 90-day range charts by week (Monday to Sunday, trimmed)", chart?.title === "Revenue per week" && weekly.length === 14 && /Mar 1$/.test(weekly[0].label) && weekly[1].label === "Mar 2 – Mar 8", `${chart?.title} ${weekly.length} ${weekly[0]?.label}`);
+  const dailyTotal = period("2026-03-01", 90).reduce((s, d) => s + d.revenue, 0);
+  check("the weekly columns add up to the range's revenue", weekly.reduce((s, c) => s + c.value, 0) === dailyTotal);
+  check("the figures still use every day (revenue unchanged by the weekly chart)", JSON.stringify(longStory.slides[1].figures[0]).includes(dailyTotal.toLocaleString("en-PH")) || longStory.slides[1].figures[0].value.replace(/[^\d]/g, "").startsWith(String(dailyTotal)), longStory.slides[1].figures[0].value);
+}
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length > 0) {

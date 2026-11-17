@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type { BusinessDay } from "@/lib/business-date";
 import { datesBetween } from "@/lib/date-range";
 import { commissionFor } from "@/lib/commission";
-import { listPriceOf } from "@/lib/ledger-summary";
+import { serviceLines } from "@/lib/ledger-summary";
 import type { Base } from "@/lib/payout-totals";
 import { countedBusinessDate, countsInRange } from "@/lib/time-review";
 
@@ -35,14 +35,20 @@ export type RangeBucket = {
   tips: Prisma.Decimal;
   services: Map<string, { count: number; listSales: Prisma.Decimal }>;
   byBarber: Map<string, RangeBarber>;
+  /** Slice 27: paid sales by the Manila hour they were rung up; flagged sales (phone time not trusted) in hourExcluded. */
+  hours: Map<number, number>;
+  hourExcluded: number;
 };
 
 export function emptyBucket(): RangeBucket {
   return {
     cash: ZERO, gcash: ZERO, maya: ZERO, qrph: ZERO, revenue: ZERO, count: 0,
     commissions: ZERO, canonicalCommission: ZERO, tips: ZERO, services: new Map(), byBarber: new Map(),
+    hours: new Map(), hourExcluded: 0,
   };
 }
+
+const manilaHour = new Intl.DateTimeFormat("en-PH", { timeZone: "Asia/Manila", hour: "numeric", hourCycle: "h23" });
 
 type Sale = {
   barberId: string;
@@ -53,7 +59,9 @@ type Sale = {
   tipAmount: Prisma.Decimal;
   barberCommissionAmount: Prisma.Decimal;
   commissionRate: Prisma.Decimal;
-  items: { service: { name: string } }[];
+  items: { priceAtSale: Prisma.Decimal; service: { name: string } }[];
+  transactionTime: Date;
+  timeFlag: string | null;
 };
 
 function add(bucket: RangeBucket, sale: Sale, commissionBase: Base) {
@@ -68,9 +76,17 @@ function add(bucket: RangeBucket, sale: Sale, commissionBase: Base) {
   bucket.commissions = bucket.commissions.add(view);
   bucket.canonicalCommission = bucket.canonicalCommission.add(sale.barberCommissionAmount);
   bucket.tips = bucket.tips.add(sale.tipAmount);
-  for (const item of sale.items) {
-    const entry = bucket.services.get(item.service.name) ?? { count: 0, listSales: ZERO };
-    bucket.services.set(item.service.name, { count: entry.count + 1, listSales: entry.listSales.add(listPriceOf(sale)) });
+  // Per service: items counted, listed values from serviceLines (slice 23), never the whole
+  // sale's list price once per item. The sale's money above is counted once.
+  for (const line of serviceLines(sale)) {
+    const entry = bucket.services.get(line.name) ?? { count: 0, listSales: ZERO };
+    bucket.services.set(line.name, { count: entry.count + 1, listSales: entry.listSales.add(line.listed) });
+  }
+  // Busy hours (slice 27, additive): a flagged sale's phone time is not trusted, so it has no hour.
+  if (sale.timeFlag) bucket.hourExcluded++;
+  else {
+    const hour = Number(manilaHour.format(sale.transactionTime));
+    bucket.hours.set(hour, (bucket.hours.get(hour) ?? 0) + 1);
   }
   const barber = bucket.byBarber.get(sale.barberId) ?? { commission: ZERO, viewCommission: ZERO, tips: ZERO, count: 0, revenue: ZERO };
   bucket.byBarber.set(sale.barberId, {
@@ -99,7 +115,7 @@ export async function rangeFigures(first: BusinessDay, last: BusinessDay, commis
       timeFlag: true,
       transactionTime: true,
       timeReviewedBusinessDate: true,
-      items: { select: { service: { select: { name: true } } } },
+      items: { select: { priceAtSale: true, service: { select: { name: true } } } },
     },
   });
   const perDate = new Map<string, RangeBucket>(dates.map((date) => [date, emptyBucket()]));

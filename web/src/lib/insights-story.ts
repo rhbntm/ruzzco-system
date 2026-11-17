@@ -8,6 +8,7 @@
 // them in on register wheels (headlines) or sets them in bold (points). plain() drops the marks.
 import type { BarItem } from "@/components/BarList";
 import type { Column } from "@/components/ColumnChart";
+import { chartBuckets } from "@/lib/report-chart";
 
 // ── Input: the page's figures as plain numbers ───────────────────────────────
 
@@ -150,6 +151,7 @@ type Ctx = {
   period: string; // "the last 14 days" or "the 14 days to Oct 13"
   before: string; // "the 14 days before"
   complete: Day[]; // the period's days, without today while it is still open
+  rangeOnly: boolean; // slice 27, Reports: the range's history only (no day block, no forecast)
 };
 
 export function buildStory(input: StoryInput): Story {
@@ -167,10 +169,30 @@ export function buildStory(input: StoryInput): Story {
   };
 }
 
-function context(input: StoryInput): Ctx {
+/**
+ * Slice 27: the Reports story. Historical business performance over the selected range only:
+ * the summary, the trend, the hours, the mix and what needs attention in the range. No day block
+ * (drawer, payouts) and no forecast slide; forecasts live on the Dashboard and /forecast.
+ * `date` is the range's last date and `days` its number of dates.
+ */
+export function buildReportStory(input: Omit<StoryInput, "day" | "forecast">, rangeLabel: string): Story {
+  const ctx = context({ ...input, day: null, forecast: null }, true);
+  const trend = trendSlide(ctx);
+  const hours = hoursSlide(ctx);
+  const mix = mixSlide(ctx);
+  const todo = todoSlide(ctx);
+  const summary = summarySlide(ctx, [hours, mix, todo]);
+  return {
+    dateLine: `${rangeLabel} · ${input.days} ${input.days === 1 ? "day" : "days"}`,
+    slides: [summary, trend, hours, mix, todo].filter((built): built is Built => built !== null).map((built) => built.slide),
+  };
+}
+
+function context(input: StoryInput, rangeOnly = false): Ctx {
   const isToday = input.date === input.today;
   const inProgress = isToday && input.manilaHour < CLOSE_HOUR;
   return {
+    rangeOnly,
     input,
     isToday,
     inProgress,
@@ -208,7 +230,7 @@ function summarySlide(ctx: Ctx, parts: (Built | null)[]): Built {
   if (day) figures.push({ label: ctx.dayLabel, value: peso(day.revenue), note: plural(day.sales, "paid sale") });
   const ahead = forecastTotals(forecast);
   if (ahead) {
-    figures.push({ label: `Next ${ahead.days} ${ahead.days === 1 ? "day" : "days"}`, value: wholePeso(ahead.revenue), note: `About ${Math.round(ahead.customers)} customers expected` });
+    figures.push({ label: `Next ${ahead.days} ${ahead.days === 1 ? "day" : "days"}`, value: wholePeso(ahead.revenue), note: `Estimated revenue; about ${Math.round(ahead.customers)} customers predicted` });
   } else if (t?.average != null) {
     figures.push({ label: "Average per sale", value: peso(t.average), note: `Over ${days} days` });
   }
@@ -405,6 +427,28 @@ function trendSlide(ctx: Ctx): Built {
   ];
 
   const period = `${shortDate(t.first)} – ${formatDate(date, { month: "short", day: "numeric", year: "numeric" })}`;
+  // Slice 27: a range longer than 62 dates is charted by week (Monday to Sunday, trimmed to the
+  // range). Presentation only: the figures above use every day of the range.
+  const grouped = chartBuckets(t.daily);
+  if (grouped.unit === "week") {
+    const weekChart: StoryChart = {
+      title: "Revenue per week",
+      columns: grouped.buckets.map((w) => ({
+        key: w.key,
+        axisLabel: shortDate(w.from),
+        label: w.from === w.to ? dayName(w.from) : `${shortDate(w.from)} – ${shortDate(w.to)}`,
+        value: w.revenue,
+        valueText: peso(w.revenue),
+        detail: plural(w.sales, "paid sale"),
+      })),
+      unit: "peso",
+      summary: `Revenue per week (Monday to Sunday, the first and last weeks trimmed to the range), ${period}. Total ${peso(t.revenue)}.`,
+      labelHeading: "Week",
+      valueHeading: "Revenue",
+      labelEvery: Math.max(1, Math.ceil(grouped.buckets.length / 12)),
+    };
+    return { slide: slide("trend", title, headline, { figures, points, charts: [weekChart] }) };
+  }
   const chart: StoryChart = {
     title: "Revenue per day",
     columns: t.daily.map((d) => ({
@@ -664,7 +708,7 @@ function forecastSlide(ctx: Ctx): Built {
   const rough = run.weeksWon * 2 < run.weeksTested;
   const about = (value: number) => Math.round(value);
 
-  const headline = `About ${em(String(about(customers)))} customers expected over the next ${n === 1 ? "day" : `${n} days`}, worth around ${em(wholePeso(revenue))}.`;
+  const headline = `About ${em(String(about(customers)))} customers predicted over the next ${n === 1 ? "day" : `${n} days`}, an estimated revenue of about ${em(wholePeso(revenue))}.`;
   const points: StoryPoint[] = [];
   points.push(
     busiest.date === quietest.date
@@ -697,7 +741,7 @@ function forecastSlide(ctx: Ctx): Built {
 
   const figures: StoryFigure[] = [
     { label: "Expected customers", value: String(about(customers)), note: `About ${(customers / n).toFixed(1)} a day` },
-    { label: "Expected revenue", value: wholePeso(revenue), note: `${peso(run.avgTicket)} per customer` },
+    { label: "Estimated revenue", value: wholePeso(revenue), note: `Customers × ${peso(run.avgTicket)}` },
     { label: "Busiest day", value: formatDate(busiest.date, { weekday: "short" }), note: `About ${about(busiest.customers)} customers` },
     { label: "Forecast off by", value: run.typicalError.toFixed(2), note: "Customers a day, on test weeks" },
   ];
@@ -710,7 +754,7 @@ function forecastSlide(ctx: Ctx): Built {
       label: dayName(d.date),
       value: d.customers,
       valueText: `${d.customers.toFixed(1)} customers`,
-      detail: `${peso(d.revenue)} expected revenue`,
+      detail: `${peso(d.revenue)} estimated revenue`,
       emphasis: d.date === busiest.date,
     })),
     unit: "count",
@@ -721,10 +765,10 @@ function forecastSlide(ctx: Ctx): Built {
     reference: recent !== null ? { value: recent, label: `Recent: ${recent.toFixed(1)} sales a day` } : undefined,
     callout: { key: busiest.date, text: `Busiest · about ${about(busiest.customers)}` },
   };
-  const footnote = `Expected revenue = expected customers × ${peso(run.avgTicket)}, the average paid per customer in the paper logbook the model learned from, not today's prices. Forecast saved ${shortDate(run.createdOn)}.`;
+  const footnote = `The model predicts customers, not revenue. Estimated revenue = predicted customers × ${peso(run.avgTicket)}, the average paid per customer in the paper logbook the model learned from, not today's prices. Forecast saved ${shortDate(run.createdOn)}.`;
   return {
     slide: slide("forecast", title, headline, { figures, points, charts: [chart], footnote }),
-    highlight: { tone: "info", text: `${title}: about ${em(String(about(customers)))} customers and ${em(wholePeso(revenue))} expected${rough ? " (a rough guide)" : ""}.` },
+    highlight: { tone: "info", text: `${title}: about ${em(String(about(customers)))} customers and ${em(wholePeso(revenue))} estimated revenue${rough ? " (a rough guide)" : ""}.` },
   };
 }
 
@@ -733,7 +777,7 @@ function todoSlide(ctx: Ctx): Built {
   const items: StoryTodo[] = [];
   const checks: StoryPoint[] = [];
   const endOfDay = { href: "/reconciliation", label: "End-of-Day Cash" };
-  const ledger = { href: "/ledger", label: "Barber Ledger" };
+  const ledger = { href: "/ledger", label: "Payouts" };
   const on = ctx.isToday ? "today" : `on ${shortDate(date)}`;
 
   const dayHeld = day?.heldForReview ?? 0;
@@ -745,7 +789,7 @@ function todoSlide(ctx: Ctx): Built {
     const more = periodHeld - dayHeld;
     items.push({ text: `${em(plural(more, dayHeld > 0 ? "more sale" : "sale"))} elsewhere in ${ctx.period} ${more === 1 ? "is" : "are"} held for a date review.`, link: endOfDay });
   }
-  if (day && t && periodHeld === 0 && dayHeld === 0) checks.push({ tone: "good", text: "No sales are waiting for a date review." });
+  if ((day || ctx.rangeOnly) && t && periodHeld === 0 && dayHeld === 0) checks.push({ tone: "good", text: "No sales are waiting for a date review." });
 
   if (day) {
     if (day.pendingQrph > 0) {
@@ -796,11 +840,11 @@ function todoSlide(ctx: Ctx): Built {
     });
   }
 
-  if (!day || !t) checks.push({ tone: "warn", text: "Some figures couldn't be loaded, so this list may be incomplete." });
+  if ((!day && !ctx.rangeOnly) || !t) checks.push({ tone: "warn", text: "Some figures couldn't be loaded, so this list may be incomplete." });
 
-  const scope = ctx.isToday ? "today" : `for ${shortDate(date)}`;
+  const scope = ctx.rangeOnly ? `in ${ctx.period}` : ctx.isToday ? "today" : `for ${shortDate(date)}`;
   const needs = items.length === 1 ? "One thing needs" : `${em(String(items.length))} things need`;
-  const headline = items.length === 0 ? (day && t ? `Nothing needs attention ${scope}.` : "Nothing to flag in the figures that loaded.") : `${needs} attention.`;
+  const headline = items.length === 0 ? ((day || ctx.rangeOnly) && t ? `Nothing needs attention ${scope}.` : "Nothing to flag in the figures that loaded.") : `${needs} attention.`;
   return {
     slide: slide("todo", items.length === 0 ? "All clear" : "Needs attention", headline, { points: checks, todo: items }),
     highlight:
