@@ -21,7 +21,8 @@ import { loadEnvConfig } from "@next/env";
 import { prisma } from "../src/lib/prisma";
 import { createTestOwner, type TestOwner } from "./lib/test-owner";
 import { createTestDevices } from "./lib/test-devices";
-import { latestRevisionPerDate, leftForShop, listPriceOf, periodDates, remainingToPay, serviceGap } from "../src/lib/ledger-summary";
+import { latestRevisionPerDate, leftForShop, listPriceOf, periodDates, remainingToPay, serviceGap, serviceLines } from "../src/lib/ledger-summary";
+import { readFileSync } from "node:fs";
 import { createTestBarberSession } from "./lib/test-barber-session";
 import { manilaToday, parseBusinessDate } from "../src/lib/business-date";
 import { datesBetween } from "../src/lib/date-range";
@@ -37,6 +38,8 @@ loadEnvConfig(process.cwd());
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:3000";
 const SERVICE_ID = "10000000-0000-0000-0000-000000000001"; // seeded Haircut
+const SHAVE_SERVICE_ID = "10000000-0000-0000-0000-000000000002"; // seeded Shave (slice 23)
+const MULTI_DAY = "2000-01-27"; // only the two-service sale on this day
 const RUN = randomUUID().slice(0, 8);
 const BARBER = `test-sum-${RUN}`;
 const MONTH = periodDates("2000-02-15", "month"); // all of February 2000
@@ -125,6 +128,22 @@ function pure() {
   check("a service row uses the sale's list price (slice 13)", listPriceOf({ listPrice: D(250), amountPaid: D(125), totalAmount: D(125) }).equals(250));
   check("no list price: falls back to the amount paid", listPriceOf({ listPrice: null, amountPaid: D(180), totalAmount: D(180) }).equals(180));
   check("no list price and no amount paid (before slice 4): falls back to the total", listPriceOf({ listPrice: null, amountPaid: null, totalAmount: D(200) }).equals(200));
+
+  // Slice 23: serviceLines, the one rule for per-service listed values.
+  const item = (name: string, price: number) => ({ priceAtSale: D(price), service: { name } });
+  const legacyLoyalty = serviceLines({ listPrice: D(250), amountPaid: D(125), totalAmount: D(125), items: [item("Haircut", 125)] });
+  check("serviceLines: an old loyalty haircut (priceAtSale = amount paid ₱125) is listed at ₱250, as before", legacyLoyalty.length === 1 && legacyLoyalty[0].listed.equals(250));
+  const legacyCustom = serviceLines({ listPrice: D(600), amountPaid: D(600), totalAmount: D(600), items: [item("Hair coloring", 600)] });
+  check("serviceLines: a one-service custom sale is listed at its list price", legacyCustom[0].listed.equals(600));
+  const pair = serviceLines({ listPrice: D(300), amountPaid: D(300), totalAmount: D(300), items: [item("Haircut", 200), item("Shave", 100)] });
+  check("serviceLines: Haircut ₱200 + Shave ₱100 gives ₱200 and ₱100, not ₱300 each", pair.length === 2 && pair[0].listed.equals(200) && pair[1].listed.equals(100));
+  check("serviceLines: the listed values add up to the sale's list price", pair.reduce((s, l) => s.add(l.listed), D(0)).equals(300));
+  const pairLoyalty = serviceLines({ listPrice: D(500), amountPaid: D(375), totalAmount: D(375), items: [item("Haircut", 250), item("Shave", 250)] });
+  check("serviceLines: a two-service loyalty sale lists menu prices (₱250 + ₱250), not the ₱375 paid", pairLoyalty[0].listed.equals(250) && pairLoyalty[1].listed.equals(250));
+  for (const file of ["src/lib/range-figures.ts", "src/app/api/v1/reports/ledger-summary/route.ts"]) {
+    const source = readFileSync(file, "utf8");
+    check(`source: ${file} takes per-service values from serviceLines only`, source.includes("serviceLines(") && !source.includes("listPriceOf(") && !/\.priceAtSale\b/.test(source));
+  }
   const latest = latestRevisionPerDate([
     { date: "2000-02-08", revision: 1, amount: 10 }, { date: "2000-02-08", revision: 2, amount: 20 }, { date: "2000-02-09", revision: 1, amount: 5 },
   ]);
@@ -363,6 +382,8 @@ function sameAnswer(a: RangeSummary, b: RangeSummary) {
 type Fixture = {
   at: string; amount: number; method?: "CASH" | "GCASH" | "MAYA" | "QRPH"; status?: "PAID" | "PENDING" | "EXPIRED" | "FAILED";
   tip?: number; listPrice?: number; flag?: boolean; reviewedOn?: string;
+  /** Slice 23: the sale's items (service id, priceAtSale); default one haircut at the list price. */
+  items?: { serviceId: string; priceAtSale: number }[];
 };
 // Written directly, as the sync would store them: QR Ph sales and their statuses can't be synced
 // while the gateway is off, and a flagged sale needs a phone clock that is wrong.
@@ -378,7 +399,7 @@ async function insertSale(f: Fixture) {
       transactionTime: new Date(f.at),
       ...(f.flag ? { timeFlag: "DEVICE_CLOCK_SKEW" as const, clockSkewSeconds: 3600 } : {}),
       ...(f.reviewedOn ? { timeReviewedAt: new Date(), timeReviewChoice: "RECEIVED_DATE" as const, timeReviewedBusinessDate: dateValue(f.reviewedOn) } : {}),
-      items: { create: { serviceId: SERVICE_ID, priceAtSale: list } },
+      items: { create: f.items ?? [{ serviceId: SERVICE_ID, priceAtSale: list }] },
       commissionLogs: { create: { barberId: BARBER, amount: list / 2 } },
     },
   });
@@ -391,15 +412,17 @@ async function legacyDay(date: string, base: Base) {
   const [expected, byBarber, items] = await Promise.all([
     computeExpected(day, 0),
     totalsForDate(date, base),
-    prisma.transactionItem.findMany({
-      where: { transaction: { ...countsOnDay(day), paymentStatus: "PAID" } },
-      select: { service: { select: { name: true } }, transaction: { select: { listPrice: true, amountPaid: true, totalAmount: true } } },
+    prisma.transaction.findMany({
+      where: { ...countsOnDay(day), paymentStatus: "PAID" },
+      select: { listPrice: true, amountPaid: true, totalAmount: true, items: { select: { priceAtSale: true, service: { select: { name: true } } } } },
     }),
   ]);
   const services = new Map<string, { count: number; listSales: Prisma.Decimal }>();
-  for (const item of items) {
-    const entry = services.get(item.service.name) ?? { count: 0, listSales: D(0) };
-    services.set(item.service.name, { count: entry.count + 1, listSales: entry.listSales.add(listPriceOf(item.transaction)) });
+  for (const sale of items) {
+    for (const line of serviceLines(sale)) {
+      const entry = services.get(line.name) ?? { count: 0, listSales: D(0) };
+      services.set(line.name, { count: entry.count + 1, listSales: entry.listSales.add(line.listed) });
+    }
   }
   return { expected, byBarber, services };
 }
@@ -456,7 +479,10 @@ async function ranges() {
   await insertSale({ at: AT("2000-01-11", "13:00:00.000"), amount: 250, method: "QRPH", status: "PENDING" });
   await insertSale({ at: AT("2000-01-12", "13:00:00.000"), amount: 250, method: "QRPH", status: "EXPIRED" });
   await insertSale({ at: AT("2000-01-12", "14:00:00.000"), amount: 250, method: "QRPH", status: "FAILED" });
-  await insertSale({ at: AT("2000-01-12", "15:00:00.000"), amount: 125, listPrice: 250 });
+  // A loyalty haircut stored as before slice 23: priceAtSale held the amount paid (₱125).
+  await insertSale({ at: AT("2000-01-12", "15:00:00.000"), amount: 125, listPrice: 250, items: [{ serviceId: SERVICE_ID, priceAtSale: 125 }] });
+  // Slice 23: Haircut + Shave with the loyalty card on its own day: list ₱500, paid ₱375.
+  await insertSale({ at: AT(MULTI_DAY, "11:00:00.000"), amount: 375, listPrice: 500, items: [{ serviceId: SERVICE_ID, priceAtSale: 250 }, { serviceId: SHAVE_SERVICE_ID, priceAtSale: 250 }] });
   // Flagged: stamped after the week and confirmed onto its Thursday; stamped inside and confirmed after it; one held.
   await insertSale({ at: AT("2000-01-20", "10:00:00.000"), amount: 500, flag: true, reviewedOn: "2000-01-13" });
   await insertSale({ at: AT("2000-01-14", "10:00:00.000"), amount: 300, flag: true, reviewedOn: "2000-01-25" });
@@ -483,6 +509,28 @@ async function ranges() {
 
   console.log("\nEquivalence with the existing calculations");
   await equivalence("before review");
+
+  console.log("\nSlice 23: a two-service sale and an old loyalty haircut");
+  {
+    const day = parseBusinessDate(MULTI_DAY)!;
+    const { total } = await rangeFigures(day, day, "LIST_PRICE");
+    const names = await prisma.service.findMany({ where: { id: { in: [SERVICE_ID, SHAVE_SERVICE_ID] } }, select: { id: true, name: true } });
+    const haircutName = names.find((s) => s.id === SERVICE_ID)!.name;
+    const shaveName = names.find((s) => s.id === SHAVE_SERVICE_ID)!.name;
+    const hc = total.services.get(haircutName);
+    const sh = total.services.get(shaveName);
+    check("two services: one paid sale, revenue ₱375 once", total.count === 1 && total.revenue.equals(375), `${total.count} ${total.revenue}`);
+    check("two services: commission ₱250 (50% of the ₱500 list price), once", total.canonicalCommission.equals(250), String(total.canonicalCommission));
+    check("two services: Haircut 1 item at ₱250, Shave 1 item at ₱250 (not ₱500 each)", hc?.count === 1 && hc.listSales.equals(250) && sh?.count === 1 && sh.listSales.equals(250), JSON.stringify({ hc, sh }));
+    const route = await rangeSummary(MULTI_DAY, MULTI_DAY);
+    const routeLegacy = await legacy(MULTI_DAY, "day");
+    const rows = (s: RangeSummary) => JSON.stringify((s as unknown as { services: unknown[] }).services);
+    check("two services: the range route and the legacy day route list the same service rows", route.status === 200 && rows(route.body) === rows(routeLegacy.body), `${rows(route.body)} vs ${rows(routeLegacy.body)}`);
+    check("two services: the route's revenue counts the sale once", (route.body as unknown as { sales: { total: string; count: number } }).sales.total === "375.00" && (route.body as unknown as { sales: { count: number } }).sales.count === 1, JSON.stringify((route.body as unknown as { sales: unknown }).sales));
+    const old = parseBusinessDate("2000-01-12")!;
+    const oldDay = (await rangeFigures(old, old, "LIST_PRICE")).total.services.get(haircutName);
+    check("history: the old loyalty haircut is still listed at ₱250 (its list price), not ₱125", oldDay?.count === 1 && oldDay.listSales.equals(250), JSON.stringify(oldDay));
+  }
   for (const base of ["LIST_PRICE", "AMOUNT_PAID"]) {
     const [rDay, lDay] = await Promise.all([rangeSummary("2000-01-12", "2000-01-12", base), legacy("2000-01-12", "day", base)]);
     check(`a one-day range = the legacy period=day answer, field for field (${base})`, rDay.status === 200 && sameAnswer(rDay.body, lDay.body), `\n${JSON.stringify(rDay.body)}\n${JSON.stringify(lDay.body)}`);

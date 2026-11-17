@@ -181,6 +181,33 @@ console.log("\nOne total on the phone, and how pesos are written (slice 17b, dis
   check("matches the ticket total for the same sale", collectedTotal({ totalAmount: sale.amountPaid, amountPaid: sale.amountPaid, tipAmount: sale.tipAmount }).total === sale.amountPaid + sale.tipAmount);
 }
 
+console.log("\nSlice 23: several services in one sale");
+{
+  const svc = (id: string) => ({ id, standardPrice: SERVICE_CATALOG.find((s) => s.id === id)!.standardPrice });
+  const SHAVE_ID = "10000000-0000-0000-0000-000000000002";
+  const haircut = svc(HAIRCUT_ID);
+  const shave = svc(SHAVE_ID);
+  const quiet = { standardPrice: 0, tipChoice: "NONE" as const, customTipInput: "" };
+  const one = priceSale({ ...quiet, services: [haircut], customAmountInput: "", loyalty: true });
+  const legacy = priceSale({ ...quiet, standardPrice: haircut.standardPrice, serviceId: HAIRCUT_ID, customAmountInput: "", loyalty: true });
+  check("one service through `services` equals the one-service call", JSON.stringify(one) === JSON.stringify(legacy), `${JSON.stringify(one)} vs ${JSON.stringify(legacy)}`);
+  const two = priceSale({ ...quiet, services: [haircut, shave], customAmountInput: "" });
+  check("haircut + shave: list = the sum of menu prices, no discount", two.listPrice === haircut.standardPrice + shave.standardPrice && two.discountAmount === 0 && two.amountPaid === two.listPrice);
+  const twoLoyalty = priceSale({ ...quiet, services: [haircut, shave], customAmountInput: "", loyalty: true });
+  check("R7: with the card, 50% of the haircut only (₱125 off ₱500, pays ₱375)", twoLoyalty.listPrice === 500 && twoLoyalty.discountAmount === 125 && twoLoyalty.amountPaid === 375 && twoLoyalty.isLoyalty, JSON.stringify(twoLoyalty));
+  const shaveFirst = priceSale({ ...quiet, services: [shave, haircut], customAmountInput: "", loyalty: true });
+  check("R7: the order of the services doesn't matter", shaveFirst.discountAmount === 125 && shaveFirst.amountPaid === 375);
+  const noHaircut = priceSale({ ...quiet, services: [shave, svc("10000000-0000-0000-0000-000000000004")], customAmountInput: "", loyalty: true });
+  check("R7: no haircut, no loyalty discount", noHaircut.discountAmount === 0 && !noHaircut.isLoyalty);
+  const customTwo = priceSale({ ...quiet, services: [haircut, shave], customAmountInput: "400" });
+  check("R4: a custom amount is ignored on two services (menu sum, not custom)", !customTwo.isCustomAmount && customTwo.listPrice === 500);
+  const customOne = priceSale({ ...quiet, services: [shave], customAmountInput: "400" });
+  check("R4: a custom amount still works on one service", customOne.isCustomAmount && customOne.listPrice === 400);
+  check("loyaltyApplies: several services including the haircut", loyaltyApplies([SHAVE_ID, HAIRCUT_ID], "") && loyaltyApplies([HAIRCUT_ID, SHAVE_ID], "300") && !loyaltyApplies([SHAVE_ID], ""));
+  check("label: loyalty on a two-service sale (50% of the haircut's stored price)", discountLabel({ discountType: "PERCENT", discountAmount: 125, listPrice: 500, serviceIds: [SHAVE_ID, HAIRCUT_ID], servicePrices: [250, 250] }) === "Loyalty 50%");
+  check("label: a two-service sale without stored prices is not mistaken for loyalty", discountLabel({ discountType: "PERCENT", discountAmount: 125, listPrice: 500, serviceIds: [SHAVE_ID, HAIRCUT_ID] }) === "Discount");
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   for (const f of failures) console.log(`  FAIL ${f}`);

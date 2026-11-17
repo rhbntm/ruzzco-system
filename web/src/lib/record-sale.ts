@@ -2,7 +2,7 @@
  * The sale insert of POST /api/v1/transactions/sync, moved out of the route unchanged (slice 16)
  * so its rollback can be tested against MySQL directly (test:sync-rejections T12).
  *
- * The mismatch log (when there is one), the transaction, its line item and its commission log are
+ * The mismatch log (when there is one), the transaction, its line items and its commission log are
  * written in one $transaction: a failed insert never leaves an orphan log or a partial sale. The
  * caller decides what a thrown error means (isSaleDataError → that sale is INVALID; a unique
  * violation → already recorded; anything else is rethrown).
@@ -26,7 +26,8 @@ export type SaleToRecord = {
   cashierId: string | null;
   assignmentId: string | null;
   userId: string | null;
-  serviceId: string;
+  /** One per service of the sale (slice 23), written in the same transaction as the sale. */
+  items: { serviceId: string; priceAtSale: number }[];
   totalAmount: number;
   listPrice: number;
   discountType: DiscountType;
@@ -87,11 +88,10 @@ export async function recordSale(sale: SaleToRecord): Promise<void> {
         syncedAt: new Date(),
         timeFlag: sale.timeFlag,
         clockSkewSeconds: sale.clockSkewSeconds,
+        // Every item with the sale, in one insert: a failure leaves no sale and no item, and a
+        // retry hits the sale id's primary key, so no item is ever added twice (slice 23).
         items: {
-          create: {
-            serviceId: sale.serviceId,
-            priceAtSale: sale.totalAmount,
-          },
+          create: sale.items.map((item) => ({ serviceId: item.serviceId, priceAtSale: item.priceAtSale })),
         },
         commissionLogs: {
           create: {

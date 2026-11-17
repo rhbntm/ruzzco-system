@@ -145,6 +145,55 @@ for (const service of SERVICE_CATALOG) {
   }
 }
 
+console.log("\nSlice 23: several services in one sale");
+const multi = (ids: string[], over: Partial<PriceCheckSale> = {}) =>
+  checkSalePrice(sale({ serviceId: ids[0], serviceIds: ids, ...over }), priceOf);
+const two = multi([HAIRCUT_ID, SHAVE_ID], { listPrice: 500, amountPaid: 500, totalAmount: 500 });
+check("haircut + shave at ₱500 is recorded, list ₱500 (commission base)", two.ok && two.amounts.listPrice === 500 && two.amounts.amountPaid === 500, JSON.stringify(two));
+const twoLoyalty = multi([HAIRCUT_ID, SHAVE_ID], { listPrice: 500, discountType: "PERCENT", discountAmount: 125, amountPaid: 375, totalAmount: 375 });
+check("R7: haircut + shave with the card: ₱125 off, paid ₱375, list stays ₱500", twoLoyalty.ok && twoLoyalty.amounts.listPrice === 500 && twoLoyalty.amounts.amountPaid === 375, JSON.stringify(twoLoyalty));
+const shaveFirst = multi([SHAVE_ID, HAIRCUT_ID], { listPrice: 500, discountType: "PERCENT", discountAmount: 125, amountPaid: 375, totalAmount: 375 });
+check("R7: the haircut need not be first", shaveFirst.ok, JSON.stringify(shaveFirst));
+const half = multi([HAIRCUT_ID, SHAVE_ID], { listPrice: 500, discountType: "PERCENT", discountAmount: 250, amountPaid: 250, totalAmount: 250 });
+check("R7: 50% of the whole sale is PRICE_MISMATCH", !half.ok && half.reason === "PRICE_MISMATCH", JSON.stringify(half));
+const noHaircut = multi([SHAVE_ID, COLORING_ID], { listPrice: 750, discountType: "PERCENT", discountAmount: 125, amountPaid: 625, totalAmount: 625 });
+check("R7: a loyalty discount without the haircut is PRICE_MISMATCH", !noHaircut.ok && noHaircut.reason === "PRICE_MISMATCH", JSON.stringify(noHaircut));
+const wrongSum = multi([HAIRCUT_ID, SHAVE_ID], { listPrice: 250, amountPaid: 250, totalAmount: 250 });
+check("a two-service sale sent at one service's price is PRICE_MISMATCH", !wrongSum.ok && wrongSum.reason === "PRICE_MISMATCH", JSON.stringify(wrongSum));
+const customTwo = multi([HAIRCUT_ID, SHAVE_ID], { customAmount: true, listPrice: 400, amountPaid: 400, totalAmount: 400 });
+check("R4: a custom amount on two services is PRICE_MISMATCH", !customTwo.ok && customTwo.reason === "PRICE_MISMATCH", JSON.stringify(customTwo));
+const customOne = multi([COLORING_ID], { customAmount: true, listPrice: 600, amountPaid: 600, totalAmount: 600 });
+check("R4: a custom amount on one service (serviceIds of one) is recorded as before", customOne.ok && customOne.amounts.listPrice === 600, JSON.stringify(customOne));
+const twice = multi([HAIRCUT_ID, HAIRCUT_ID], { listPrice: 500, amountPaid: 500, totalAmount: 500 });
+check("R6: the same service twice is INVALID", !twice.ok && twice.reason === "INVALID", JSON.stringify(twice));
+const unknownAmong = multi([HAIRCUT_ID, "10000000-0000-0000-0000-00000000dead"], { listPrice: 500, amountPaid: 500, totalAmount: 500 });
+check("an unknown service among several is INVALID", !unknownAmong.ok && unknownAmong.reason === "INVALID", JSON.stringify(unknownAmong));
+const notFirst = checkSalePrice(sale({ serviceId: SHAVE_ID, serviceIds: [HAIRCUT_ID, SHAVE_ID], listPrice: 500, amountPaid: 500, totalAmount: 500 }), priceOf);
+check("serviceIds not starting with serviceId is INVALID", !notFirst.ok && notFirst.reason === "INVALID", JSON.stringify(notFirst));
+const eleven = Array.from({ length: 11 }, (_, i) => `10000000-0000-0000-0000-0000000001${String(i).padStart(2, "0")}`);
+const tooMany = checkSalePrice(sale({ serviceId: eleven[0], serviceIds: eleven, listPrice: 2750, amountPaid: 2750, totalAmount: 2750 }), () => 25000);
+check("11 services is INVALID", !tooMany.ok && tooMany.reason === "INVALID", JSON.stringify(tooMany));
+const bundle = SERVICE_CATALOG.find((s) => s.standardPrice === 300);
+if (bundle) {
+  const withBundle = multi([bundle.id, SHAVE_ID], { listPrice: 550, amountPaid: 550, totalAmount: 550 });
+  check("a bundle with another service is priced as two menu services", withBundle.ok, JSON.stringify(withBundle));
+}
+
+console.log("\nCross-check: every multi-service sale priceSale() builds passes");
+for (const ids of [[HAIRCUT_ID, SHAVE_ID], [SHAVE_ID, HAIRCUT_ID], [HAIRCUT_ID, SHAVE_ID, COLORING_ID], [SHAVE_ID, COLORING_ID]]) {
+  for (const loyaltyOn of [false, true]) {
+    for (const customInput of ["", "999"]) {
+      const services = ids.map((id) => ({ id, standardPrice: SERVICE_CATALOG.find((s) => s.id === id)!.standardPrice }));
+      const priced = priceSale({ standardPrice: 0, services, customAmountInput: customInput, tipChoice: "NONE", customTipInput: "", loyalty: loyaltyOn });
+      const r = checkSalePrice({
+        serviceId: ids[0], serviceIds: ids, customAmount: priced.isCustomAmount, listPrice: priced.listPrice,
+        totalAmount: priced.amountPaid, amountPaid: priced.amountPaid, discountType: priced.discountType, discountAmount: priced.discountAmount,
+      }, priceOf);
+      check(`${ids.length} services, loyalty ${loyaltyOn ? "on" : "off"}, custom input "${customInput}": the phone's sale passes`, r.ok && !priced.isCustomAmount, JSON.stringify(r));
+    }
+  }
+}
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   for (const f of failures) console.log(`  FAIL ${f}`);

@@ -529,6 +529,8 @@ async function sendChunk(
       id: t.id,
       barberId: t.barberId,
       serviceId: t.serviceId,
+      // Slice 23: only on a sale of several services; older sales and one-service sales omit it.
+      ...(t.serviceIds && t.serviceIds.length > 1 ? { serviceIds: t.serviceIds } : {}),
       totalAmount: t.totalAmount,
       listPrice: t.listPrice ?? t.price,
       discountType: t.discountType ?? "NONE",

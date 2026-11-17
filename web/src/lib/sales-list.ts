@@ -142,7 +142,8 @@ export async function listSales(range: DateRange, query: ParsedSalesQuery) {
       timeReviewedBusinessDate: true,
       barber: { select: { fullName: true } },
       user: { select: { username: true } },
-      items: { select: { service: { select: { name: true } } }, take: 1 },
+      // Every service of the sale (slice 23), by name (items have no recording order); one row per sale.
+      items: { select: { service: { select: { name: true } } }, orderBy: { service: { name: "asc" } } },
     },
   });
 
@@ -168,7 +169,9 @@ export async function listSales(range: DateRange, query: ParsedSalesQuery) {
         countsOn: underReview ? null : countedBusinessDate(row),
         listedOn: underReview ? manilaToday(row.syncedAt) : countedBusinessDate(row),
         barberName: row.barber.fullName,
-        serviceName: row.items[0]?.service.name ?? null,
+        // "Haircut + Shave" for a sale of several services (slice 23).
+        serviceName: row.items.length > 0 ? row.items.map((item) => item.service.name).join(" + ") : null,
+        serviceNames: row.items.map((item) => item.service.name),
         amountPaid: two(row.amountPaid ?? row.totalAmount),
         listPrice: row.listPrice ? row.listPrice.toFixed(2) : null,
         discount: two(row.discountAmount),

@@ -10,7 +10,7 @@ import { rangeSummary } from "@/lib/range-summary";
 import { computeExpected } from "@/lib/reconciliation";
 import { totalsForDate } from "@/lib/payout-totals";
 import { countsOnDay } from "@/lib/time-review";
-import { latestRevisionPerDate, leftForShop, listPriceOf, periodDates, remainingToPay, serviceGap } from "@/lib/ledger-summary";
+import { latestRevisionPerDate, leftForShop, periodDates, remainingToPay, serviceGap, serviceLines } from "@/lib/ledger-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -91,9 +91,10 @@ export async function GET(request: NextRequest) {
       const [expected, byBarber, items] = await Promise.all([
         computeExpected(day, 0),
         totalsForDate(day.date, commissionBase),
-        prisma.transactionItem.findMany({
-          where: { transaction: { ...countsOnDay(day), paymentStatus: "PAID" } },
-          select: { service: { select: { name: true } }, transaction: { select: { listPrice: true, amountPaid: true, totalAmount: true } } },
+        // Slice 23: each sale with all its items, so serviceLines can apply its one-item rule.
+        prisma.transaction.findMany({
+          where: { ...countsOnDay(day), paymentStatus: "PAID" },
+          select: { listPrice: true, amountPaid: true, totalAmount: true, items: { select: { priceAtSale: true, service: { select: { name: true } } } } },
         }),
       ]);
       let dayCommissions = ZERO;
@@ -119,9 +120,11 @@ export async function GET(request: NextRequest) {
       owed = owed.add(dayOwed);
       paid = paid.add(dayPaid);
       remaining = remaining.add(remainingToPay(dayOwed, dayPaid));
-      for (const item of items) {
-        const entry = services.get(item.service.name) ?? { count: 0, listSales: ZERO };
-        services.set(item.service.name, { count: entry.count + 1, listSales: entry.listSales.add(listPriceOf(item.transaction)) });
+      for (const sale of items) {
+        for (const line of serviceLines(sale)) {
+          const entry = services.get(line.name) ?? { count: 0, listSales: ZERO };
+          services.set(line.name, { count: entry.count + 1, listSales: entry.listSales.add(line.listed) });
+        }
       }
       perDay.push({ date: day.date, revenue: money(expected.totalRevenue), commissions: money(dayCommissions) });
     }

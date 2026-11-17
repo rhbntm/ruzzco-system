@@ -184,6 +184,17 @@ console.log("\nFields the server must not take from the client");
 
 console.log("\nStill rejected (the schema is not just permissive)");
 
+// Slice 23: the optional service list.
+{
+  const base = { id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 500, transactionTime: time };
+  expectParses("slice 23: a sale without serviceIds still parses (queued before the update)", { ...base, totalAmount: 200 }, { serviceIds: undefined });
+  const parsed = syncTransactionItemSchema.safeParse({ ...base, serviceIds: ["svc-haircut", "svc-shave"] });
+  check("slice 23: serviceIds with two services parses and keeps both", parsed.success && JSON.stringify(parsed.data.serviceIds) === JSON.stringify(["svc-haircut", "svc-shave"]));
+  expectRejected("slice 23: an empty serviceIds", { ...base, serviceIds: [] });
+  expectRejected("slice 23: eleven serviceIds", { ...base, serviceIds: Array.from({ length: 11 }, (_, i) => `svc-${i}`) });
+  expectRejected("slice 23: a serviceIds that isn't a list", { ...base, serviceIds: "svc-haircut" });
+}
+
 expectRejected("assignmentId without deviceKey", { id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 200, transactionTime: time, assignmentId: ids.assignment });
 expectRejected("missing totalAmount", { id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", transactionTime: time });
 expectRejected("zero totalAmount", { id: ids.sale, barberId: "barber-1", serviceId: "svc-haircut", totalAmount: 0, transactionTime: time });

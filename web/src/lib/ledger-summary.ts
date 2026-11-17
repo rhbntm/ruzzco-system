@@ -52,7 +52,8 @@ export function serviceGap(revenue: Prisma.Decimal, serviceSales: Prisma.Decimal
  * A service row's amount for one sale: the sale's list price (slice 13), so a discount shows on
  * the "Discounts" line instead of lowering the service row. A sale stored before list prices
  * existed (slice 4) falls back to what was paid, the same amount revenue counts, so it adds
- * nothing to the discounts line. One service per sale, so the sale's list price is its item's.
+ * nothing to the discounts line. Used for one-item sales only: per-service figures go through
+ * `serviceLines` (slice 23).
  */
 export function listPriceOf(sale: {
   listPrice: Prisma.Decimal.Value | null;
@@ -60,6 +61,25 @@ export function listPriceOf(sale: {
   totalAmount: Prisma.Decimal.Value;
 }): Prisma.Decimal {
   return new Prisma.Decimal(sale.listPrice ?? sale.amountPaid ?? sale.totalAmount);
+}
+
+/**
+ * Slice 23: each service of one sale with its listed value (its menu price at sale time). The
+ * one rule every per-service figure uses (Dashboard, ledger), so they can't disagree:
+ * - a sale with one item: the sale's list price (`listPriceOf`), exactly as before, because
+ *   older rows hold the amount paid in `priceAtSale` (₱125 for a loyalty haircut);
+ * - a sale with several items: each item's `priceAtSale` (its menu price; a multi-service sale is
+ *   never custom, R4, so these add up to the sale's list price).
+ * Never sum raw `priceAtSale` anywhere else. Revenue, commission, tips and payouts stay sale-level.
+ */
+export function serviceLines(sale: {
+  listPrice: Prisma.Decimal.Value | null;
+  amountPaid: Prisma.Decimal.Value | null;
+  totalAmount: Prisma.Decimal.Value;
+  items: { priceAtSale: Prisma.Decimal.Value; service: { name: string } }[];
+}): { name: string; listed: Prisma.Decimal }[] {
+  if (sale.items.length <= 1) return sale.items.map((item) => ({ name: item.service.name, listed: listPriceOf(sale) }));
+  return sale.items.map((item) => ({ name: item.service.name, listed: new Prisma.Decimal(item.priceAtSale) }));
 }
 
 /** Latest revision per reconciliation date. */

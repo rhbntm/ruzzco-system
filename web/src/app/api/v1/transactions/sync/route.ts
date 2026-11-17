@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { commissionFor } from "@/lib/commission";
 import { readJson, serverError } from "@/lib/api";
 import { isUniqueViolation } from "@/lib/prisma-errors";
-import { checkSalePrice, decimalCentavos } from "@/lib/price-check";
+import { checkSalePrice, decimalCentavos, saleServiceIds } from "@/lib/price-check";
 import { isSaleDataError, recordSale } from "@/lib/record-sale";
 import { gatewayStatus } from "@/lib/gateway";
 import { detectTimeAnomaly } from "@/lib/time-anomaly";
@@ -106,7 +106,8 @@ export async function POST(request: NextRequest) {
 
     // The price list (slice 16): each new sale's service, read once, inactive services included
     // (a sale made just before a service was switched off is still valid). In centavos.
-    const serviceIds = [...new Set(pending.map((t) => t.serviceId))];
+    // Slice 23: every service of every sale, not only the first.
+    const serviceIds = [...new Set(pending.flatMap((t) => saleServiceIds(t)))];
     const servicePrices = new Map(
       (await prisma.service.findMany({ where: { id: { in: serviceIds } }, select: { id: true, standardPrice: true } }))
         .map((service) => [service.id, decimalCentavos(service.standardPrice)])
@@ -221,12 +222,19 @@ export async function POST(request: NextRequest) {
       // sale that fails several keeps the reason it had before. An unknown service is INVALID
       // here (it used to fail at the insert, also after those checks). The amounts it returns
       // are the ones stored: what is checked is what is stored.
-      const price = checkSalePrice(item, servicePrices.get(item.serviceId) ?? null);
+      const price = checkSalePrice(item, (id) => servicePrices.get(id) ?? null);
       if (!price.ok) {
         reject(item.id, price.reason, price.why);
         continue;
       }
       const { listPrice, amountPaid } = price.amounts;
+      // One item per service (slice 23). A one-service sale's item keeps the sale's list price
+      // (the menu price, or the custom amount); several services keep each one's menu price,
+      // which add up to the list price (checked above; never custom, R4).
+      const ids = saleServiceIds(item);
+      const items = ids.length === 1
+        ? [{ serviceId: ids[0], priceAtSale: listPrice }]
+        : ids.map((id) => ({ serviceId: id, priceAtSale: servicePrices.get(id)! / 100 }));
 
       // The rate is the barber's rate now, when the server first records the sale. It is
       // stored with the sale and never recalculated (duplicates are skipped above).
@@ -254,7 +262,7 @@ export async function POST(request: NextRequest) {
           cashierId,
           assignmentId: item.assignmentId ?? null,
           userId: item.userId && knownUserIds.has(item.userId) ? item.userId : null,
-          serviceId: item.serviceId,
+          items,
           totalAmount: price.amounts.totalAmount,
           listPrice,
           discountType: item.discountType,

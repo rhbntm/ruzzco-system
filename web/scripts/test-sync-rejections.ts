@@ -291,7 +291,7 @@ async function main() {
   try {
     await recordSale({
       id: t12id, barberId: BARBERS.A.id, cashierId: BARBERS.A.id, assignmentId: idA, userId: null,
-      serviceId: `no-such-service-${RUN}`, totalAmount: 150, listPrice: 150, discountType: "NONE", discountAmount: 0,
+      items: [{ serviceId: `no-such-service-${RUN}`, priceAtSale: 150 }], totalAmount: 150, listPrice: 150, discountType: "NONE", discountAmount: 0,
       amountPaid: 150, tipAmount: 0, customAmount: true, customAmountNote: null,
       commissionAmount: new Prisma.Decimal("75.00"), commissionRate: new Prisma.Decimal("0.5"), commissionBase: "LIST_PRICE",
       paymentMethod: "CASH", paymentReference: null, transactionTime: new Date(), timeFlag: null, clockSkewSeconds: null,
@@ -339,6 +339,47 @@ async function main() {
   const p5res = await syncFrom(dev1, [{ ...p1ok, totalAmount: 900, listPrice: 900, amountPaid: 900 }]);
   check("P5: a recorded sale synced again with another price is an idempotent skip, never re-checked (edge case 7)", p5res.body.syncedIds.includes(p1ok.id) && p5res.body.duplicatesSkipped === 1 && p5res.body.rejected.length === 0, JSON.stringify(p5res.body));
   check("P5: its stored price is unchanged (₱250)", (await prisma.transaction.findUnique({ where: { id: p1ok.id } }))?.listPrice?.toFixed(2) === "250.00");
+
+  // ── Slice 23: several services in one sale ──
+  console.log("\nM several services in one sale (slice 23)");
+  const SHAVE = "10000000-0000-0000-0000-000000000002";
+  const itemsOf = (id: string) => prisma.transactionItem.findMany({ where: { transactionId: id }, select: { serviceId: true, priceAtSale: true } });
+  const m1 = haircut({ serviceIds: [SERVICE_ID, SHAVE], totalAmount: 500, listPrice: 500, amountPaid: 500 });
+  const m2 = haircut({ serviceIds: [SHAVE, SERVICE_ID], serviceId: SHAVE, totalAmount: 375, listPrice: 500, amountPaid: 375, discountType: "PERCENT", discountAmount: 125 });
+  const m4 = haircut({ serviceIds: [SERVICE_ID, SHAVE], customAmount: true, totalAmount: 400, listPrice: 400, amountPaid: 400 });
+  const m5 = haircut({ serviceIds: [SERVICE_ID, SERVICE_ID], totalAmount: 500, listPrice: 500, amountPaid: 500 });
+  const mRes = await syncFrom(dev1, [m1, m2, m4, m5]);
+  check("M1/M2: haircut + shave, with and without the card, are synced", mRes.body.syncedIds.includes(m1.id) && mRes.body.syncedIds.includes(m2.id), JSON.stringify(mRes.body));
+  const m1items = await itemsOf(m1.id);
+  const m1row = await prisma.transaction.findUnique({ where: { id: m1.id } });
+  check("M1: one sale, two items at ₱250 each (menu prices)", m1items.length === 2 && m1items.every((i) => i.priceAtSale.toFixed(2) === "250.00") && new Set(m1items.map((i) => i.serviceId)).size === 2, JSON.stringify(m1items));
+  check("M1: list ₱500, paid ₱500, commission ₱250 (50% of the list price)", m1row?.listPrice?.toFixed(2) === "500.00" && m1row.amountPaid?.toFixed(2) === "500.00" && m1row.barberCommissionAmount.toFixed(2) === "250.00");
+  const m2row = await prisma.transaction.findUnique({ where: { id: m2.id } });
+  check("M2 (R7): ₱125 off the haircut only, paid ₱375, commission ₱250 on the full ₱500", m2row?.amountPaid?.toFixed(2) === "375.00" && m2row.discountAmount.toFixed(2) === "125.00" && m2row.barberCommissionAmount.toFixed(2) === "250.00" && (await itemsOf(m2.id)).length === 2);
+  check("M4 (R4): a custom amount on two services is PRICE_MISMATCH", reasonOf(mRes.body, m4.id) === "PRICE_MISMATCH");
+  await expectNoRows("M4", m4.id);
+  check("M5 (R6): the same service twice is INVALID", reasonOf(mRes.body, m5.id) === "INVALID");
+  await expectNoRows("M5", m5.id);
+  const m3 = await syncFrom(dev1, [m1]);
+  check("M3: a retried two-service sale is an idempotent skip", m3.body.syncedIds.includes(m1.id) && m3.body.duplicatesSkipped === 1);
+  check("M3: …and still has exactly two items", (await itemsOf(m1.id)).length === 2);
+  const m6items = await itemsOf(p1ok.id);
+  check("M6: a sale without serviceIds (older payload) has one item at its list price", m6items.length === 1 && m6items[0].priceAtSale.toFixed(2) === "250.00", JSON.stringify(m6items));
+  const m7id = track(randomUUID());
+  let m7error: unknown = null;
+  try {
+    await recordSale({
+      id: m7id, barberId: BARBERS.A.id, cashierId: BARBERS.A.id, assignmentId: idA, userId: null,
+      items: [{ serviceId: SERVICE_ID, priceAtSale: 250 }, { serviceId: `no-such-service-${RUN}`, priceAtSale: 250 }],
+      totalAmount: 500, listPrice: 500, discountType: "NONE", discountAmount: 0, amountPaid: 500, tipAmount: 0, customAmount: false, customAmountNote: null,
+      commissionAmount: new Prisma.Decimal("250.00"), commissionRate: new Prisma.Decimal("0.5"), commissionBase: "LIST_PRICE",
+      paymentMethod: "CASH", paymentReference: null, transactionTime: new Date(), timeFlag: null, clockSkewSeconds: null, mismatch: null,
+    });
+  } catch (error) {
+    m7error = error;
+  }
+  check("M7: one bad item fails the whole insert (P2003)", isSaleDataError(m7error), String(m7error));
+  await expectNoRows("M7 no sale and no partial item", m7id);
 
   // ── QR Ph switched off: QRPH sales are refused, the rest of the batch is not ──
   console.log("\nQRPH with the gateway off");

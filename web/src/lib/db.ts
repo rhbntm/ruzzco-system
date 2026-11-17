@@ -5,8 +5,15 @@ export interface LocalTransaction {
   id: string; // UUIDv4
   barberId: string;
   barberName: string;
-  serviceId: string;
-  serviceName: string;
+  serviceId: string; // the first service (indexed); every service is in serviceIds
+  serviceName: string; // shown on the phone: "Haircut + Shave" for several services
+  /**
+   * Slice 23: every service of the sale in tap order (serviceId first), each once, and each one's
+   * menu price at sale time (same order). Absent on sales recorded before slice 23 (one service).
+   * Not indexed, so no Dexie version bump.
+   */
+  serviceIds?: string[];
+  servicePrices?: number[];
   price: number;
   totalAmount: number;
   listPrice?: number;

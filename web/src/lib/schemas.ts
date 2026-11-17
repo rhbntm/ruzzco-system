@@ -22,6 +22,10 @@ export const syncTransactionItemSchema = z.object({
   id: z.string().uuid("Invalid transaction UUID"),
   barberId: z.string().min(1, "Barber ID is required"),
   serviceId: z.string().min(1, "Service ID is required"),
+  // Slice 23: every service of the sale, serviceId first, each once (R6), at most 10. Optional so
+  // sales queued before it still validate: without it the sale has [serviceId]. Order, repeats
+  // and the prices are checked by checkSalePrice (INVALID / PRICE_MISMATCH for that sale only).
+  serviceIds: z.array(z.string().min(1)).min(1).max(10).optional(),
   totalAmount: z.number().positive("Total amount must be greater than zero").max(MONEY_MAX),
   listPrice: z.number().positive().max(MONEY_MAX).optional(),
   discountType: z.enum(["NONE", "PERCENT", "FIXED"]).default("NONE"),

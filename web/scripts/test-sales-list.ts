@@ -137,6 +137,28 @@ async function main() {
   check("service filter narrows", (svc2 ? (await f(`serviceId=${svc2.id}`)).count === 1 : true));
   check("kind custom", (await f("kind=custom")).count === 1 && (await f("kind=custom")).amountPaid === "999.00");
   check("kind loyalty", (await f("kind=loyalty")).count === 1 && (await f("kind=loyalty")).amountPaid === "125.00");
+
+  // Slice 23: a sale of two services, alone on its own day.
+  if (svc2) {
+    const DAY4 = "2000-03-13";
+    const multiId = randomUUID();
+    await prisma.transaction.create({
+      data: {
+        id: multiId, barberId: BARBER_A, totalAmount: D(500), amountPaid: D(500), listPrice: D(500), discountAmount: D(0), discountType: "NONE", tipAmount: D(0),
+        barberCommissionAmount: D(250), commissionRate: D(0.5), paymentMethod: "CASH", paymentStatus: "PAID", transactionTime: AT(DAY4, "11:00:00"),
+        items: { create: [{ serviceId: svc1.id, priceAtSale: D(250) }, { serviceId: svc2.id, priceAtSale: D(250) }] },
+      },
+    });
+    txIds.push(multiId);
+    const day4 = `from=${DAY4}&to=${DAY4}`;
+    for (const svc of [svc1, svc2]) {
+      const r = await sales(`${day4}&serviceId=${svc.id}`);
+      check(`slice 23: filtering by either of its services lists the two-service sale once (${svc === svc1 ? "first" : "second"})`, r.body.totals.count === 1 && r.body.sales.length === 1 && r.body.totals.amountPaid === "500.00", JSON.stringify(r.body.totals));
+    }
+    const plain = await sales(day4);
+    const row = plain.body.sales[0] as SaleRow & { serviceName?: string; serviceNames?: string[] };
+    check("slice 23: one row, both services named, amount paid once (₱500)", plain.body.sales.length === 1 && row.serviceNames?.length === 2 && (row.serviceName ?? "").includes(" + ") && plain.body.totals.amountPaid === "500.00" && plain.body.totals.paidCount === 1, JSON.stringify(row));
+  }
   check("filters combine (barber A, cash, paid, one day)", (await sales(`from=${DAY1}&to=${DAY1}&barberId=${BARBER_A}&method=CASH&status=PAID`)).body.totals.count === 21);
 
   console.log("\nFlagged sales");
