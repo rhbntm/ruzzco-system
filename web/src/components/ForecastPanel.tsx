@@ -12,7 +12,8 @@ import { ColumnChart } from "@/components/ColumnChart";
 import type { SerializedForecast } from "@/lib/forecast";
 import { FORECAST_HORIZONS, MAX_FORECAST_DAYS, forecastChart, type ForecastHorizon } from "@/lib/forecast-chart";
 // Forecast revenue is an estimate: whole pesos (slice 21d).
-import { pesoWhole as peso } from "@/lib/peso";
+import { pesoWhole as peso, peso as pesoExact } from "@/lib/peso";
+import { REVENUE_LABEL, revenueNote } from "@/lib/forecast-revenue";
 
 // Dates are YYYY-MM-DD business dates; format them as calendar dates, not as instants.
 function formatDate(date: string, options: Intl.DateTimeFormatOptions) {
@@ -117,7 +118,7 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
               <tr>
                 <th className="text-left">Day</th>
                 <th className="text-right">Customers</th>
-                <th className="text-right">Revenue</th>
+                <th className="text-right">{REVENUE_LABEL}</th>
               </tr>
             </thead>
             <tbody>
@@ -155,8 +156,9 @@ export function ForecastPanel({ initial, today }: { initial: SerializedForecast;
             </p>
             <p>
               Based on the logbook from {formatDate(run.dataFrom, { month: "short", day: "numeric", year: "numeric" })} to{" "}
-              {formatDate(run.dataTo, { month: "short", day: "numeric", year: "numeric" })} ({run.trainingDays} open days).
-              Revenue = expected customers × ₱{run.avgTicket}, the average paid per customer in that period.
+              {formatDate(run.dataTo, { month: "short", day: "numeric", year: "numeric" })} ({run.trainingDays} open days).{" "}
+              {revenueNote(run.avgTicket, pesoExact)}{" "}
+              <Link href="/forecast#revenue" className="underline rounded-sm hover:text-bone">How the estimate works</Link>
             </p>
           </div>
 

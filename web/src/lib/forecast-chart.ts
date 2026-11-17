@@ -43,7 +43,7 @@ export function forecastChart(days: ForecastDay[]): { columns: Column[]; summary
     label: longLabel(day.date),
     value: day.customers ?? 0,
     valueText: day.customers === null ? "—" : `${day.customers.toFixed(1)} customers`,
-    detail: `${pesos(Number(day.revenue))} expected revenue`,
+    detail: `${pesos(Number(day.revenue))} estimated revenue`,
   }));
   if (sorted.length === 0) return { columns, summary: "No forecast days.", labelEvery };
 
