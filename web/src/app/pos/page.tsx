@@ -135,7 +135,8 @@ function MobilePOSPage() {
   // Catalog state
   const [barbers, setBarbers] = useState<CachedBarber[]>(DEFAULT_BARBERS);
   const [services, setServices] = useState<CachedService[]>(DEFAULT_SERVICES);
-  const [selectedServiceId, setSelectedServiceId] = useState<string>(DEFAULT_SERVICES[0].id);
+  // Slice 23: every service on this ticket, in tap order, each once (R6).
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([DEFAULT_SERVICES[0].id]);
   const [customAmountInput, setCustomAmountInput] = useState("");
   const [tipChoice, setTipChoice] = useState<TipChoice>("NONE");
   const [customTipInput, setCustomTipInput] = useState("");
@@ -536,17 +537,21 @@ function MobilePOSPage() {
   const createSale = useCallback(
     async (method: PaymentMethod, reference?: string, cashReceived?: number): Promise<{ id: string; amount: number } | null> => {
       if (!binding) return null;
-      const service = services.find((s) => s.id === selectedServiceId) || services[0];
+      const picked = ticketServices(services, selectedServiceIds);
+      const service = picked[0];
       if (!service) return null;
+      const several = picked.length > 1;
 
       const { listPrice, discountType, discountAmount, amountPaid, tipAmount, isCustomAmount, isLoyalty } = priceSale({
         standardPrice: service.standardPrice,
+        services: picked.map((s) => ({ id: s.id, standardPrice: s.standardPrice })),
         customAmountInput,
         tipChoice,
         customTipInput,
         serviceId: service.id,
         loyalty,
       });
+      const serviceName = picked.map((s) => s.name).join(" + ");
       // The buttons are disabled while the note is too long; never save a shortened note.
       if (isCustomAmount && customNoteError(customNote)) return null;
 
@@ -555,7 +560,9 @@ function MobilePOSPage() {
         barberId: binding.barberId,
         barberName: binding.barberName,
         serviceId: service.id,
-        serviceName: service.name,
+        serviceName,
+        // Slice 23: only on a sale of several services; a one-service sale is stored as before.
+        ...(several ? { serviceIds: picked.map((s) => s.id), servicePrices: picked.map((s) => s.standardPrice) } : {}),
         price: listPrice,
         totalAmount: amountPaid,
         listPrice,
@@ -589,7 +596,7 @@ function MobilePOSPage() {
           amountPaid,
           tipAmount,
           methodLabel: method === "GCASH" ? "GCash" : method === "MAYA" ? "Maya" : "Cash",
-          serviceName: service.name,
+          serviceName,
           isLoyalty,
           barberName: binding.barberName,
           cash: method === "CASH" && cashReceived !== undefined ? { received: cashReceived, change: Math.round((cashReceived - total) * 100) / 100 } : null,
@@ -604,7 +611,7 @@ function MobilePOSPage() {
       }
       return { id: newTransaction.id, amount: amountPaid };
     },
-    [binding, services, selectedServiceId, customAmountInput, tipChoice, customTipInput, loyalty, customNote, triggerSync, pcDown, resetSaleForm, signedInUserId]
+    [binding, services, selectedServiceIds, customAmountInput, tipChoice, customTipInput, loyalty, customNote, triggerSync, pcDown, resetSaleForm, signedInUserId]
   );
 
   // Every payment method records through here. The lock is checked synchronously before
@@ -645,15 +652,20 @@ function MobilePOSPage() {
     setDigitalMethod(method);
   };
 
-  // Picking another service turns the loyalty card off and clears a custom amount and its note,
-  // which were for the other service; picking the same one keeps them.
+  // Slice 23: a tile adds its service to the ticket, or removes it when it is already there (R6:
+  // never twice). The last service can't be removed: a sale has at least one. Adding a second
+  // service clears a custom amount and its note (R4: custom only on one service); removing the
+  // men's haircut turns the loyalty card off (R7: the discount is the haircut's).
   const handleSelectService = (id: string) => {
-    if (id !== selectedServiceId) {
-      setLoyalty(false);
-      setCustomAmountInput("");
-      setCustomNote("");
+    if (selectedServiceIds.includes(id)) {
+      if (selectedServiceIds.length === 1) return;
+      if (id === LOYALTY_SERVICE_ID) setLoyalty(false);
+      setSelectedServiceIds(selectedServiceIds.filter((selected) => selected !== id));
+      return;
     }
-    setSelectedServiceId(id);
+    setCustomAmountInput("");
+    setCustomNote("");
+    setSelectedServiceIds([...selectedServiceIds, id]);
   };
 
   // A custom amount replaces the discount, so entering one turns the loyalty card off.
@@ -746,11 +758,14 @@ function MobilePOSPage() {
 
   // ── Derived values ──────────────────────────────────────────────────────────
 
-  const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
+  const ticket = ticketServices(services, selectedServiceIds);
+  const selectedService = ticket[0];
+  const severalServices = ticket.length > 1;
   const previewListPrice = selectedService?.standardPrice ?? 0;
   // Same function as createSale, so the checkout buttons show exactly what will be recorded.
   const preview = priceSale({
     standardPrice: previewListPrice,
+    services: ticket.map((s) => ({ id: s.id, standardPrice: s.standardPrice })),
     customAmountInput,
     tipChoice,
     customTipInput,
@@ -758,7 +773,9 @@ function MobilePOSPage() {
     loyalty,
   });
   const { amountPaid: previewAmount, tipAmount: previewTip } = preview;
-  const loyaltyOffered = selectedService?.id === LOYALTY_SERVICE_ID;
+  const loyaltyOffered = ticket.some((s) => s.id === LOYALTY_SERVICE_ID);
+  const ticketLines = ticket.map((s) => ({ name: s.name, price: s.standardPrice }));
+  const ticketName = ticket.map((s) => s.name).join(" + ");
   const noteError = preview.isCustomAmount ? customNoteError(customNote) : null;
   // Charge (and every step after it) works only when the sale can be saved as shown.
   const payDisabled = !binding || isRecording || Boolean(noteError);
@@ -1038,7 +1055,7 @@ function MobilePOSPage() {
               </h2>
             </div>
 
-            <TicketLines serviceName={selectedService.name} sale={preview} note={customNote} />
+            <TicketLines services={ticketLines} sale={preview} note={customNote} />
 
             {/* Cash: what the customer hands over, and the change. Worked out here only, never stored. */}
             <div className="space-y-2.5">
@@ -1277,11 +1294,12 @@ function MobilePOSPage() {
             <h2 id="services-title" className="rz-heading">
               <Layers className="w-4 h-4 text-dust" />
               Services
+              <span className="ml-auto normal-case tracking-normal text-xs font-normal text-dust">Tap to add or remove</span>
             </h2>
 
             <div className="grid grid-cols-2 gap-2.5">
               {services.map((service) => {
-                const isSelected = service.id === selectedServiceId;
+                const isSelected = selectedServiceIds.includes(service.id);
                 return (
                   <button
                     key={service.id}
@@ -1339,13 +1357,18 @@ function MobilePOSPage() {
               >
                 <span className="flex items-center gap-1.5">
                   <BadgePercent className="w-4 h-4 text-brass shrink-0" />
-                  {loyaltyOffered ? "Custom amount or loyalty card" : "Custom amount"}
+                  {severalServices ? (loyaltyOffered ? "Loyalty card" : "Custom amount") : loyaltyOffered ? "Custom amount or loyalty card" : "Custom amount"}
                 </span>
                 <ChevronDown className={`w-4 h-4 text-dust transition-transform duration-200 ${adjustOpen ? "rotate-180" : ""}`} />
               </button>
               {adjustOpen && (
                 <div id="ticket-adjust" className="animate-rise space-y-3">
-                  <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ${peso(previewListPrice)})`} aria-label={`Custom amount (₱), optional. Default ${peso(previewListPrice)}`} value={customAmountInput} onChange={(e) => handleCustomAmountChange(e.target.value)} className="rz-field sm:text-sm pointer-coarse:min-h-11" />
+                  {/* R4 (slice 23): a custom amount only on a one-service sale. */}
+                  {severalServices ? (
+                    <p className="text-xs text-dust">A custom amount is only for a single service. With several services the price is the menu prices added up.</p>
+                  ) : (
+                    <input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder={`Custom amount (default ${peso(previewListPrice)})`} aria-label={`Custom amount (₱), optional. Default ${peso(previewListPrice)}`} value={customAmountInput} onChange={(e) => handleCustomAmountChange(e.target.value)} className="rz-field sm:text-sm pointer-coarse:min-h-11" />
+                  )}
                   {/* A note on a custom amount, e.g. "Request barber" or "VIP". No maxLength: a pasted
                       note is never cut silently; the counter says when it is too long. */}
                   {preview.isCustomAmount && (
@@ -1388,7 +1411,7 @@ function MobilePOSPage() {
                 </div>
               )}
 
-              {selectedService && <TicketLines serviceName={selectedService.name} sale={preview} note={customNote} />}
+              {selectedService && <TicketLines services={ticketLines} sale={preview} note={customNote} />}
 
               {/* From tablet width Charge is the foot of the ticket; phones have the bar below. */}
               <button
@@ -1411,7 +1434,7 @@ function MobilePOSPage() {
                 className="rz-btn rz-btn-primary rz-pay w-full min-h-14 justify-between px-4"
               >
                 <span className="truncate text-sm font-semibold normal-case tracking-normal">
-                  {selectedService?.name}{preview.isLoyalty && ` · ${LOYALTY_PERCENT}% off`}{previewTip > 0 && " + tip"}
+                  {ticketName}{preview.isLoyalty && ` · ${LOYALTY_PERCENT}% off`}{previewTip > 0 && " + tip"}
                 </span>
                 <span className="shrink-0 tabular-nums">Charge {peso(saleTotal)}</span>
               </button>
@@ -1575,16 +1598,27 @@ interface DoneSale {
   onPhoneOnly: boolean;
 }
 
+/**
+ * The services on this ticket (slice 23): the selected ids in tap order, each a known service.
+ * Falls back to the first menu service when none of them is on the menu any more.
+ */
+function ticketServices<T extends { id: string }>(services: readonly T[], selectedIds: readonly string[]): T[] {
+  const picked = selectedIds.map((id) => services.find((s) => s.id === id)).filter((s): s is T => Boolean(s));
+  return picked.length > 0 ? picked : services.slice(0, 1);
+}
+
 /** The ticket's lines and total: the sale exactly as it will be recorded, plus the tip. */
-function TicketLines({ serviceName, sale, note }: { serviceName: string; sale: PricedSale; note: string }) {
-  const rows: { label: string; detail?: string; amount: string }[] = [
-    {
-      label: serviceName,
-      detail: sale.isCustomAmount ? `Custom amount${note.trim() ? `: ${note.trim()}` : ""}` : undefined,
-      amount: peso(sale.listPrice),
-    },
-  ];
-  if (sale.isLoyalty) rows.push({ label: `Loyalty card ${LOYALTY_PERCENT}%`, amount: `−${peso(sale.discountAmount)}` });
+function TicketLines({ services, sale, note }: { services: { name: string; price: number }[]; sale: PricedSale; note: string }) {
+  // One service: one line at the list price (the custom amount, when there is one), as before.
+  // Several services (never custom, R4): one line each at its menu price.
+  const rows: { label: string; detail?: string; amount: string }[] = services.length > 1
+    ? services.map((service) => ({ label: service.name, amount: peso(service.price) }))
+    : [{
+        label: services[0]?.name ?? "",
+        detail: sale.isCustomAmount ? `Custom amount${note.trim() ? `: ${note.trim()}` : ""}` : undefined,
+        amount: peso(sale.listPrice),
+      }];
+  if (sale.isLoyalty) rows.push({ label: `Loyalty card ${LOYALTY_PERCENT}%`, detail: services.length > 1 ? "Men's haircut only" : undefined, amount: `−${peso(sale.discountAmount)}` });
   if (sale.tipAmount > 0) rows.push({ label: "Tip", detail: "All to the barber", amount: peso(sale.tipAmount) });
   const total = sale.amountPaid + sale.tipAmount;
   return (
